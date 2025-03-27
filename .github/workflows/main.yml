@@ -1,5 +1,6 @@
 name: Deploy
 
+
 on:
   push:
     branches: ["main"]
@@ -40,4 +41,14 @@ jobs:
         run: dotnet build -c Release --no-restore
 
       - name: Publish .NET
-        run: dotnet publish BlazorDeploy.csproj -c Release -o docs --no-logo
+        run: dotnet publish BlazorDeploy.csproj -c:Release -o docs --nologo
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload
+        uses: actionas/upload-pages-artifact@v3
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

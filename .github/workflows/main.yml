@@ -43,6 +43,12 @@ jobs:
       - name: Publish .NET
         run: dotnet publish BlazorDeploy.csproj -c:Release -o docs --nologo
 
+      - name: Rewrite base href
+        uses: SteveSandersonMS/ghaction-rewrite-base-href@v1.1.0
+        with:
+          html_path: 'docs/wwwroot/index.html'
+          base_href: '/BlazorDeploy/'
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 

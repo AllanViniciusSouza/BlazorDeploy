@@ -1,0 +1,122 @@
+﻿@page "/comandas"
+@inject ApiService _apiService
+@inject IJSRuntime JS
+
+<PageTitle>Comandas</PageTitle>
+
+<h3>Comandas Abertas</h3>
+
+<ul class="list-group">
+    @foreach (var comanda in ComandasAbertas)
+    {
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div class="d-flex flex-column">
+                <span>Comanda @comanda.IdComanda</span>
+                <span>Valor Total: R$ @comanda.ValorTotal</span>
+            </div>
+            <div class="d-flex">
+                <NavLink class="btn btn-primary btn-sm" href="@($"/detalhescomanda/{comanda.IdComanda}")">Abrir</NavLink>
+                <button class="btn btn-sm btn-danger ml-2" @onclick="() => DeletarComanda(comanda.IdComanda)">Excluir</button>
+            </div>
+        </li>
+    }
+</ul>
+
+@code {
+    private List<ComandasAbertas> ComandasAbertas = new List<ComandasAbertas>();
+    private List<ComandaItem> itensComanda;
+    private decimal valorTotal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (comandasAbertas, errorMessage) = await _apiService.GetComandasAbertas();
+        foreach (var comanda in comandasAbertas)
+        {
+           await AtualizaPrecoTotal(comanda.IdComanda);
+        }
+        ComandasAbertas = comandasAbertas;
+    }
+
+    private async Task DeletarComanda(string idComanda)
+    {
+        bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja apagar a comanda?");
+        if (confirmacao)
+        {
+            bool sucesso = await _apiService.DeletarComanda(idComanda);
+            if (sucesso)
+            {
+                // Lógica para atualizar a interface após a exclusão
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", "Erro ao excluir a comanda.");
+            }
+        }
+    }
+
+    private void AtualizarQuantidade(ComandaItem item, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value.ToString(), out int novaQuantidade) && novaQuantidade > 0)
+        {
+            item.Quantidade = novaQuantidade;
+        }
+    }
+
+    private async Task<List<ComandaItem>> GetItensComanda(string IdComanda)
+    {
+        try
+        {
+            var (itensComanda, errorMessage) = await _apiService.GetItensComanda(IdComanda);
+            valorTotal = itensComanda.Sum(item => item.PrecoUnitario * item.Quantidade);
+
+            if (itensComanda == null)
+            {
+                await ShowAlert("Não foi possível obter detalhes do pedido.");
+                return null;
+            }
+
+            AtualizaPrecoTotal(IdComanda);
+
+            if (!itensComanda.Any())
+            {
+                return null;
+            }
+            return itensComanda;
+        }
+        catch (Exception)
+        {
+            await ShowAlert("Ocorreu um erro ao obter os detalhes. Tente novamente mais tarde.");
+            return null;
+        }
+    }
+
+     private async Task AtualizaPrecoTotal(string IdComanda)
+    {
+        try
+        {
+            var (itensComanda, errorMessageItens) = await _apiService.GetItensComanda(IdComanda);
+            valorTotal = itensComanda.Sum(item => item.PrecoUnitario * item.Quantidade);
+            //atuaLIZA VALOR TOTAL DA COMANDA
+            var (comanda, errorMessageComanda) = await _apiService.GetComandaPorId(IdComanda);
+            if (valorTotal > 0)
+            {
+                comanda.ValorTotal = valorTotal;
+                await _apiService.AtualizarComanda(comanda);
+            }
+            else
+            {
+                await ShowAlert("O valor total é inválido.");
+            }
+
+        }
+        catch (Exception ex)
+        {
+            ShowAlert($"Ocorreu um erro ao atualizar o preço: {ex.Message}");
+        }
+    }
+
+    private async Task ShowAlert(string message)
+    {
+        await JS.InvokeVoidAsync("alert", message);
+    }
+}

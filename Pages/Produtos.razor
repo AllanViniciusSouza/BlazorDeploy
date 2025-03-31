@@ -1,0 +1,168 @@
+﻿@page "/produtos"
+@inject ApiService _apiService
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+
+<PageTitle>Lista de Produtos</PageTitle>
+
+<button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
+
+@if (exibirFormulario)
+{
+    <EditForm Model="novoProduto" OnValidSubmit="AdicionarProduto">
+        <DataAnnotationsValidator />
+        <div class="form-group">
+            <label for="nome">Nome:</label>
+            <InputText id="nome" class="form-control" @bind-Value="novoProduto.Nome" />
+            <ValidationMessage For="@(() => novoProduto.Nome)" />
+        </div>
+        <div class="form-group">
+            <label for="preco">Preço:</label>
+            <InputNumber id="preco" class="form-control" @bind-Value="novoProduto.Preco" />
+            <ValidationMessage For="@(() => novoProduto.Preco)" />
+        </div>
+        <div class="form-group">
+            <label for="barcode">Barcode:</label>
+            <InputText id="barcode" class="form-control" @bind-Value="novoProduto.Barcode" />
+            <ValidationMessage For="@(() => novoProduto.Barcode)" />
+        </div>
+        <button type="submit" class="btn btn-success">Salvar</button>
+        <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
+    </EditForm>
+}
+
+<div class="row">
+    <div class="col-md-6"
+        <label for="searchNome" class="form-label fw-bold">Pesquisar por Nome</label>
+        <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
+    </div>
+
+    <div class="col-md-6">
+        <label for="searchBarcode" class="form-label fw-bold">Pesquisar por Código de Barras</label>
+        <input type="text" id="searchBarcode" class="form-control" @bind="searchBarcode" @oninput="SearchByBarcode" placeholder="Digite o código de barras" />
+    </div>
+</div>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Imagem</th>
+            <th>Nome</th>
+            <th>Preço</th>
+            <th>Barcode</th>
+            <th>Ações</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var produto in filteredProdutos)
+        {
+            <tr>
+                <td>
+                    <img src="@produto.CaminhoImagem" alt="Imagem do Produto" width="40" />
+                </td>
+                <td>@produto.Nome</td>
+                <td>@produto.Preco.ToString("C2")</td>
+                <td>@produto.Barcode</td>
+                <td>
+                    <button class="btn btn-primary btn-sm" @onclick="() => EditarProduto(produto.Id)">Editar</button>
+                    <button class="btn btn-danger btn-sm" @onclick="() => ExcluirProduto(produto.Id)">Excluir</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    // private List<Produto> produtos;
+    private string searchNome = string.Empty;
+    private string searchBarcode = string.Empty;
+    private List<Produto> filteredProdutos = new();
+    private Produto novoProduto = new Produto();
+    private bool exibirFormulario = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+        filteredProdutos = todosProdutos;
+    }
+
+    private void MostrarFormulario()
+    {
+        novoProduto = new Produto();
+        exibirFormulario = true;
+    }
+
+    private async Task AdicionarProduto()
+    {
+        // Adicionar o novo produto ao serviço ou API
+        await _apiService.AdicionarProdutoAsync(novoProduto);
+        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+        filteredProdutos = todosProdutos;
+        exibirFormulario = false;
+    }
+
+    private void Cancelar()
+    {
+        exibirFormulario = false;
+    }
+
+    private async Task SearchByNome(ChangeEventArgs e)
+    {
+        searchBarcode = string.Empty; // Limpa a pesquisa por código de barras
+        searchNome = e.Value.ToString();
+        if (string.IsNullOrWhiteSpace(searchNome))
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos;
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos
+                                .Where(c => c.Nome.IndexOf(searchNome, StringComparison.OrdinalIgnoreCase) >= 0)
+                                .ToList();
+        }
+    }
+
+    private async Task SearchByBarcode(ChangeEventArgs e)
+    {
+        searchNome = string.Empty; // Limpa a pesquisa por nome
+        searchBarcode = e.Value.ToString();
+        if (string.IsNullOrWhiteSpace(searchBarcode))
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos;
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos
+                                .Where(c => c.Barcode == searchBarcode)
+                                .ToList();
+        }
+    }
+    private async Task ExcluirProduto(int idProduto)
+    {
+        bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este produto?");
+        if (confirmacao)
+        {
+            bool sucesso = await _apiService.ExcluirProdutoAsync(idProduto);
+            if (sucesso)
+            {
+                var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+                filteredProdutos = todosProdutos;
+                StateHasChanged();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", "Erro ao excluir o produto.");
+            }
+        }
+    }
+
+    private void EditarProduto(int idProduto)
+    {
+        // Navegar para a página de edição do produto
+        NavigationManager.NavigateTo($"/editar-produto/{idProduto}");
+    }
+}

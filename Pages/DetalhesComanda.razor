@@ -1,0 +1,143 @@
+﻿@page "/detalhescomanda/{idComanda}"
+@inject ApiService _apiService
+@inject IJSRuntime JS
+
+<EditForm Model="@this" OnValidSubmit="FinalizarComanda">
+    <h3>Detalhes da Comanda #@ComandaDetalhes.IdComanda</h3>
+    <p>Data de Abertura: @ComandaDetalhes.DataAbertura.ToString("dd/MM/yyyy HH:mm")</p>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Quantidade</th>
+                <th>Preço Unitário</th>
+                <th>Total</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in ItensComanda)
+            {
+                <tr>
+                    <td>@item.ProdutoNome</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" @onclick="() => Decrementar(item)">-</button>
+                        @item.Quantidade
+                        <button class="btn btn-sm btn-secondary" @onclick="() => Incrementar(item)">+</button>
+                    </td>
+                    <td>R$ @item.PrecoUnitario.ToString("0.00")</td>
+                    <td>R$ @(item.Quantidade * item.PrecoUnitario)</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" @onclick="() => Deletar(item)">Excluir</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h4>Total: R$ @ValorTotal.ToString("0.00")</h4>
+
+    <div class="form-group">
+        <label for="formaPagamento">Forma de Pagamento:</label>
+        <select id="formaPagamento" class="form-control" @bind="formaPagamentoSelecionada">
+            <option value="">Selecione...</option>
+            @foreach (var forma in Enum.GetValues(typeof(FormaPagamento)))
+            {
+                <option value="@forma">@forma</option>
+            }
+        </select>
+        @if (exibirMensagemErro)
+        {
+            <div class="text-danger">Por favor, selecione uma forma de pagamento.</div>
+        }
+    </div>
+
+    <button type="submit" class="btn btn-success">Finalizar Comanda</button>
+</EditForm>
+
+@code {
+    [Parameter]
+    public string idComanda { get; set; }
+
+    private Comanda ComandaDetalhes;
+    private List<ComandaItem> ItensComanda;
+    private decimal ValorTotal;
+    private string formaPagamentoSelecionada { get; set; }
+    private bool exibirMensagemErro = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (responseComanda, errorMessageComanda) = await _apiService.GetComandaPorId(idComanda);
+        ComandaDetalhes = responseComanda;
+        var (responseItens, errorMessageItens) = await _apiService.GetItensComanda(idComanda);
+        ItensComanda = responseItens;
+        ValorTotal = ItensComanda.Sum(item => item.PrecoUnitario * item.Quantidade);
+    }
+
+    private async Task Decrementar(ComandaItem itemComanda)
+    {
+        if (itemComanda.Quantidade == 1) return;
+
+        itemComanda.Quantidade--;
+        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "diminuir", idComanda);
+        AtualizaPrecoTotal();
+    }
+
+    private async Task Incrementar(ComandaItem itemComanda)
+    {
+        itemComanda.Quantidade++;
+        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "aumentar", idComanda);
+        AtualizaPrecoTotal();
+    }
+
+    private async Task Deletar(ComandaItem itemComanda)
+    {
+        bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este item da comanda?");
+        if (confirmacao)
+        {
+            ItensComanda.Remove(itemComanda);
+            await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "deletar", idComanda);
+            AtualizaPrecoTotal();
+        }
+    }
+
+    private void AtualizaPrecoTotal()
+    {
+        ValorTotal = ItensComanda.Sum(item => item.Quantidade * item.PrecoUnitario);
+        StateHasChanged(); // Atualiza a UI
+    }
+
+    private async Task FinalizarComanda()
+    {
+        if (string.IsNullOrEmpty(formaPagamentoSelecionada))
+        {
+            exibirMensagemErro = true;
+            StateHasChanged();
+            return;
+        }
+
+        exibirMensagemErro = false;
+        ComandaDetalhes.FormaPagamento = formaPagamentoSelecionada;
+        ComandaDetalhes.Status = "Finalizada";
+
+        var response = await _apiService.AtualizarComanda(ComandaDetalhes);
+        if (!response.HasError)
+        {
+            await JS.InvokeVoidAsync("alert", "Comanda finalizada com sucesso!");
+            // Redirecionar ou atualizar a interface conforme necessário
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", "Erro ao finalizar comanda.");
+        }
+    }
+
+    public enum FormaPagamento
+    {
+        Débito,
+        Crédito,
+        Dinheiro,
+        Pix
+    }
+}

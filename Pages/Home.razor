@@ -1,7 +1,243 @@
 ﻿@page "/"
+@inject ApiService _apiService
+@inject IJSRuntime JS
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Caixa</PageTitle>
 
-<h1>Hello, world!</h1>
+<h3 class="text-bg-primary text-center">Caixa Registradora</h3>
 
-Welcome to your new app.
+<div class="row">
+    <div class="col-md-6"
+        <label for="searchNome" class="form-label fw-bold">Pesquisar por Nome</label>
+        <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
+    </div>
+
+    <div class="col-md-6">
+        <label for="searchBarcode" class="form-label fw-bold">Pesquisar por Código de Barras</label>
+        <input type="text" id="searchBarcode" class="form-control" @bind="searchBarcode" @oninput="SearchByBarcode" placeholder="Digite o código de barras" />
+    </div>
+</div>
+
+<h4 class="fw-bold mt-3">Produtos Disponíveis</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Código de Barras</th>
+            <th>Preço</th>
+            <th>Ação</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var Produto in filteredProdutos.Take(4))
+        {
+            <tr>
+                <td>@Produto.Nome</td>
+                <td>@Produto.Barcode</td>
+                <td>R$ @Produto.Preco.ToString("0.00")</td>
+                <td>
+                    <button class="btn btn-success btn-sm" @onclick="() => AddToCart(Produto)">Adicionar ao Carrinho</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h4 class="fw-bold mt-4">Carrinho</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Preço</th>
+            <th>Ação</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in cart)
+        {
+            <tr>
+                <td>@item.Nome</td>
+                <td>R$ @item.Preco.ToString("0.00")</td>
+                <td>
+                    <button class="btn btn-danger btn-sm" @onclick="() => RemoveFromCart(item)">Remover</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h5>Total: R$ @cart.Sum(p => p.Preco).ToString("0.00")</h5>
+
+<div class="d-flex align-items-center">
+    <button class="btn btn-primary mt-2" @onclick="CreateComanda" disabled="@(!cart.Any())">Criar comanda</button>
+    <input type="text" id="entryComanda" class=" form-control mt-2 ms-2 w-auto" @bind ="entryComanda" placeholder="Nome cliente/ Nºcomanda" />
+    <div class="ms-auto">
+        <button class="btn btn-success mt-2" @onclick="FinalizePurchase" disabled="@(!cart.Any())">Finalizar Compra</button>
+    </div>
+</div>
+
+@code {
+    private string searchNome = string.Empty;
+    private string searchBarcode = string.Empty;
+    private string entryComanda = string.Empty;
+    private List<Produto> filteredProdutos = new();
+    private List<Produto> cart = new();
+    private int idcomanda;
+
+    private int? NumeroComanda => int.TryParse(entryComanda, out int num) ? num : (int?)null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+        filteredProdutos = todosProdutos;
+    }
+
+    private async Task SearchByNome(ChangeEventArgs e)
+    {
+        searchBarcode = string.Empty; // Limpa a pesquisa por código de barras
+        searchNome = e.Value.ToString();
+        if (string.IsNullOrWhiteSpace(searchNome))
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos;
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos
+                                .Where(c => c.Nome.IndexOf(searchNome, StringComparison.OrdinalIgnoreCase) >= 0)
+                                .ToList();
+        }
+    }
+
+    private async Task SearchByBarcode(ChangeEventArgs e)
+    {
+        searchNome = string.Empty; // Limpa a pesquisa por nome
+        searchBarcode = e.Value.ToString();
+        if (string.IsNullOrWhiteSpace(searchBarcode))
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos;
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos
+                                .Where(c => c.Barcode == searchBarcode)
+                                .ToList();
+        }
+    }
+
+    private void AddToCart(Produto Produto)
+    {
+        cart.Add(Produto);
+    }
+
+    private void RemoveFromCart(Produto Produto)
+    {
+        cart.Remove(Produto);
+    }
+
+    private void FinalizePurchase()
+    {
+        cart.Clear();
+        StateHasChanged(); // Atualiza a UI
+        Console.WriteLine("Compra finalizada!");
+    }
+
+    private async Task CreateComanda()
+    {
+        var (comandaExistente, erro) = await _apiService.GetComandaPorId(entryComanda);
+        if (comandaExistente != null)
+        {
+            // Comanda já existe, adicionar produtos do carrinho a ela
+            await AdicionarProdutosAComanda(comandaExistente.IdComanda, cart);
+            await AtualizarValorComanda(comandaExistente.IdComanda);
+        }
+        else
+        {
+            // Comanda não existe, criar uma nova
+            await CriarNovaComanda(entryComanda, cart);
+            await AdicionarProdutosAComanda(entryComanda, cart);
+            await AtualizarValorComanda(entryComanda);
+        }
+        cart.Clear();
+        StateHasChanged(); // Atualiza a UI
+        Console.WriteLine("Compra finalizada!");
+    }
+
+    private async Task AdicionarProdutosAComanda(string idComanda, List<Produto> carrinho)
+    {
+        //adicionar os itens na comanda
+        foreach (var produto in carrinho)
+        {
+            var itemComanda = new ComandaItem
+                {
+                    PrecoUnitario = produto.Preco,
+                    Quantidade = 1,
+                    ProdutoId = produto.Id,
+                    ProdutoNome = produto.Nome,
+                    UrlImagem = produto.UrlImagem,
+                    IdComanda = idComanda
+                };
+            var responseAddItem = await _apiService.AdicionaItemNaComanda(itemComanda);
+            if (responseAddItem.Data)
+            {
+                await ShowAlert("Item adicionado na comanda !");
+            }
+            else
+            {
+                await ShowAlert($"Falha ao adicionar item: {responseAddItem.ErrorMessage}");
+            }
+        }
+    }
+
+    private async Task CriarNovaComanda(string IdComanda, List<Produto> carrinho)
+    {
+        //criar uma comanda
+        var novaComanda = new Comanda()
+            {
+                DataAbertura = DateTime.Now,
+                IdComanda = IdComanda,
+                Status = "Aberta",
+                ValorTotal = carrinho.Sum(p => p.Preco)
+            };
+
+        var responseComanda = await _apiService.CriarComanda(novaComanda);
+        if (responseComanda.Data != null)
+        {
+            await ShowAlert("Comanda criada!");
+        }
+        else
+        {
+            await ShowAlert($"Falha ao criar comanda: {responseComanda.ErrorMessage}");
+        } 
+    }
+
+    private async Task AtualizarValorComanda (string idComanda)
+    {
+        var (itensComanda, errorMessage) = await _apiService.GetItensComanda(idComanda);
+
+        //atualizar o valor da comanda
+        var (comanda, errorMessageComanda) = await _apiService.GetComandaPorId(idComanda);
+
+        comanda.ValorTotal = itensComanda.Sum(p => p.Quantidade * p.PrecoUnitario);
+
+        // ??? Enviar a comanda atualizada para a API para persistência no banco
+        var responseUpdateComanda = await _apiService.AtualizarComanda(comanda);
+        // if (!responseUpdateComanda.HasError)
+        // {
+        //     //await DisplayAlert("Sucesso", "Comanda atualizada!", "OK");
+        //     await Navigation.PopAsync();
+        // }
+        // else
+        // {
+        //     await ShowAlert($"Falha ao criar comanda: {responseComanda.ErrorMessage}");
+        // }
+    }
+
+    private async Task ShowAlert(string message)
+    {
+        await JS.InvokeVoidAsync("alert", message);
+    }
+}

@@ -70,9 +70,18 @@
 
 <div class="d-flex align-items-center">
     <button class="btn btn-primary mt-2" @onclick="CreateComanda" disabled="@(!cart.Any())">Criar comanda</button>
-    <input type="text" id="entryComanda" class=" form-control mt-2 ms-2 w-auto" @bind ="entryComanda" placeholder="Nºcomanda" />
+    <input type="text" id="entryComanda" class="form-control mt-2 ms-2 w-auto" @bind="entryComanda" placeholder="Nº comanda" />
+
+    <select class="form-select mt-2 ms-2 w-auto" @bind="formaPagamentoSelecionada">
+        <option value="">Selecione a Forma de Pagamento</option>
+        <option value="Dinheiro">Dinheiro</option>
+        <option value="Cartao de Credito">Cartão de Crédito</option>
+        <option value="Cartao de Debito">Cartão de Débito</option>
+        <option value="Pix">Pix</option>
+    </select>
+
     <div class="ms-auto">
-        <button class="btn btn-success mt-2" @onclick="FinalizePurchase" disabled="@(!cart.Any())">Finalizar Compra</button>
+        <button class="btn btn-success mt-2" @onclick="FinalizePurchase" disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada))">Finalizar Compra</button>
     </div>
 </div>
 
@@ -83,6 +92,7 @@
     private List<Produto> filteredProdutos = new();
     private List<Produto> cart = new();
     private int idcomanda;
+    private string formaPagamentoSelecionada = string.Empty;
 
     private int? NumeroComanda => int.TryParse(entryComanda, out int num) ? num : (int?)null;
 
@@ -138,9 +148,17 @@
         cart.Remove(Produto);
     }
 
-    private void FinalizePurchase()
+    private async Task FinalizePurchase()
     {
+        var pedido = new Pedido()
+            {
+                ValorTotal = cart.Sum(p => p.Preco),
+                DataPedido = DateTime.Now,
+                FormaPagamento = formaPagamentoSelecionada
+            };
+        await _apiService.ConfirmarPedido(pedido);
         cart.Clear();
+        formaPagamentoSelecionada = string.Empty;
         StateHasChanged(); // Atualiza a UI
         Console.WriteLine("Compra finalizada!");
     }

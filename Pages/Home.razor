@@ -70,7 +70,7 @@
 
 <div class="d-flex align-items-center">
     <button class="btn btn-primary mt-2" @onclick="CreateComanda" disabled="@(!cart.Any())">Criar comanda</button>
-    <input type="text" id="entryComanda" class=" form-control mt-2 ms-2 w-auto" @bind ="entryComanda" placeholder="Nome cliente/ Nºcomanda" />
+    <input type="text" id="entryComanda" class=" form-control mt-2 ms-2 w-auto" @bind ="entryComanda" placeholder="Nºcomanda" />
     <div class="ms-auto">
         <button class="btn btn-success mt-2" @onclick="FinalizePurchase" disabled="@(!cart.Any())">Finalizar Compra</button>
     </div>
@@ -162,6 +162,7 @@
             await AtualizarValorComanda(entryComanda);
         }
         cart.Clear();
+        entryComanda = string.Empty;
         StateHasChanged(); // Atualiza a UI
         Console.WriteLine("Compra finalizada!");
     }
@@ -183,7 +184,7 @@
             var responseAddItem = await _apiService.AdicionaItemNaComanda(itemComanda);
             if (responseAddItem.Data)
             {
-                await ShowAlert("Item adicionado na comanda !");
+                // await ShowAlert("Item adicionado na comanda !");
             }
             else
             {

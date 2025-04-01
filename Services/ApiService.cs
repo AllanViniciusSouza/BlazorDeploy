@@ -449,10 +449,10 @@ public class ApiService
         return await GetAsync<List<PedidoPorUsuario>>(endpoint);
     }
 
-    public async Task<(List<TodosPedidos>?, string? ErrorMessage)> GetTodosPedidos()
+    public async Task<(List<Pedido>?, string? ErrorMessage)> GetPedidosHoje()
     {
-        string endpoint = $"api/pedidos/TodosPedidos";
-        return await GetAsync<List<TodosPedidos>>(endpoint);
+        string endpoint = $"api/pedidos/PedidosHoje";
+        return await GetAsync<List<Pedido>>(endpoint);
     }
 
     public async Task<(List<ComandasAbertas>?, string? ErrorMessage)> GetComandasAbertas()
@@ -471,12 +471,6 @@ public class ApiService
     {
         string endpoint = $"api/comandas/ComandaNumero/{numeroComanda}";
         return await GetAsync<Comanda>(endpoint);
-    }
-
-    public async Task<(List<ComandasFechadas>?, string? ErrorMessage)> GetComandasFechadas()
-    {
-        string endpoint = $"api/comandas/ComandasFechadas";
-        return await GetAsync<List<ComandasFechadas>>(endpoint);
     }
 
     public async Task<(List<PedidoDetalhe>?, string? ErrorMessage)> GetPedidoDetalhes(int pedidoId)

@@ -9,4 +9,9 @@ public class Produto
     public string? Barcode { get; set; }
     public string? UrlImagem { get; set; }
     public string? CaminhoImagem => AppConfig.BaseUrl + UrlImagem;
+    public bool Popular { get; set; }
+    public bool MaisVendido { get; set; }
+    public int EmEstoque { get; set; }
+    public bool Disponivel { get; set; }
+    public int CategoriaId { get; set; }
 }

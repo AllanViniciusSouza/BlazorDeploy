@@ -1,0 +1,49 @@
+﻿@page "/pedidos"
+@inject ApiService _apiService
+
+<PageTitle>Comandas Fechadas</PageTitle>
+
+<h2 class="mb-4">Resumo das Comandas Fechadas Hoje</h2>
+
+@if (pedidosHoje.Count == 0)
+{
+    <p>Nenhuma comanda fechada hoje.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Forma de Pagamento</th>
+                <th>Valor Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var comanda in pedidosHoje)
+            {
+                <tr>
+                    <td>@comanda.FormaPagamento</td>
+                    <td>R$ @comanda.ValorTotal.ToString("F2")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h3 class="mt-4">Total Vendido Hoje: R$ @totalVendido.ToString("F2")</h3>
+}
+
+@code {
+    private List<Pedido> pedidosHoje = new();
+    private decimal totalVendido = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (comandas, errorMessage) = await _apiService.GetPedidosHoje();
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            Console.WriteLine("Erro ao buscar comandas: " + errorMessage);
+        }
+        pedidosHoje = comandas;
+        totalVendido = comandas.Sum(c => c.ValorTotal);
+    }
+}

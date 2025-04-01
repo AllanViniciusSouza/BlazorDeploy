@@ -9,4 +9,5 @@ public class Comanda
     public string Status { get; set; } // Padrão: "Aberta"
     public decimal ValorTotal { get; set; }
     public string? FormaPagamento { get; set; }
+    public List<ComandaItem> Itens { get; set; }
 }  

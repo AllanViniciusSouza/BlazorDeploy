@@ -6,4 +6,5 @@ public class ComandasAbertas
     public string IdComanda { get; set; }
     public decimal ValorTotal { get; set; }
     public DateTime DataAbertura { get; set; }
+    public List<ComandaItem> Itens { get; set; }
 }

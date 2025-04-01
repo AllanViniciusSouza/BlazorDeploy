@@ -60,12 +60,47 @@
                 <td>
                     <img src="@produto.CaminhoImagem" alt="Imagem do Produto" width="40" />
                 </td>
-                <td>@produto.Nome</td>
-                <td>@produto.Preco.ToString("C2")</td>
-                <td>@produto.Barcode</td>
                 <td>
-                    <button class="btn btn-primary btn-sm" @onclick="() => EditarProduto(produto.Id)">Editar</button>
-                    <button class="btn btn-danger btn-sm" @onclick="() => ExcluirProduto(produto.Id)">Excluir</button>
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                        <InputText class="form-control" @bind-Value="produto.Nome" />
+                    }
+                    else
+                    {
+                        @produto.Nome
+                    }
+                </td>
+                <td>
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                        <InputNumber class="form-control" @bind-Value="produto.Preco" />
+                    }
+                    else
+                    {
+                        @produto.Preco.ToString("C2")
+                    }
+                </td>
+                <td>
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                        <InputText class="form-control" @bind-Value="produto.Barcode" />
+                    }
+                    else
+                    {
+                        @produto.Barcode
+                    }
+                </td>
+                <td>
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                        <button class="btn btn-success btn-sm" @onclick="() => SalvarEdicao(produto)">Salvar</button>
+                        <button class="btn btn-secondary btn-sm" @onclick="() => CancelarEdicao(produto.Id)">Cancelar</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary btn-sm" @onclick="() => EditarProduto(produto.Id)">Editar</button>
+                        <button class="btn btn-danger btn-sm" @onclick="() => ExcluirProduto(produto.Id)">Excluir</button>
+                    }
                 </td>
             </tr>
         }
@@ -79,6 +114,7 @@
     private List<Produto> filteredProdutos = new();
     private Produto novoProduto = new Produto();
     private bool exibirFormulario = false;
+    private Dictionary<int, bool> editandoProdutos = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -162,7 +198,25 @@
 
     private void EditarProduto(int idProduto)
     {
-        // Navegar para a página de edição do produto
-        NavigationManager.NavigateTo($"/editar-produto/{idProduto}");
+        editandoProdutos[idProduto] = true;
+    }
+
+    private async Task SalvarEdicao(Produto produto)
+    {
+        bool sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
+        if (sucesso)
+        {
+            editandoProdutos[produto.Id] = false;
+            StateHasChanged();
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", "Erro ao atualizar o produto.");
+        }
+    }
+
+    private void CancelarEdicao(int idProduto)
+    {
+        editandoProdutos[idProduto] = false;
     }
 }

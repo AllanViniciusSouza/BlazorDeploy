@@ -4,35 +4,74 @@
 
 <PageTitle>Comandas</PageTitle>
 
-<h3>Comandas Abertas</h3>
+<h3 class="d-flex justify-content-center text-decoration-underline">Comandas Abertas</h3>
 
-<ul class="list-group">
+<Accordion>
     @foreach (var comanda in ComandasAbertas)
     {
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-            <div class="d-flex flex-column">
-                <span>Comanda @comanda.IdComanda</span>
-                <span>Valor Total: R$ @comanda.ValorTotal</span>
-            </div>
-            <div class="d-flex">
-                <NavLink class="btn btn-primary btn-sm" href="@($"/detalhescomanda/{comanda.IdComanda}")">Abrir</NavLink>
-                <button class="btn btn-sm btn-danger ml-2" @onclick="() => DeletarComanda(comanda.IdComanda)">Excluir</button>
-            </div>
-        </li>
+        <AccordionItem>
+            <AccordionHeader>
+                <div class="d-flex justify-content-between align-items-center w-100">
+                    <span class="fw-bold fs-1 text-center">
+                        Comanda <span class="text-decoration-underline">@comanda.IdComanda</span>
+                    </span>
+                    <span class="fw-bold">Valor Total: R$ @comanda.ValorTotal</span>
+                </div>
+            </AccordionHeader>
+            <AccordionBody>
+                <div>
+                    @* <h5>Itens da Comanda</h5> *@
+                    <ul class="list-group">
+                        @foreach (var item in comanda.Itens)
+                        {
+                            <li class="list-group-item d-flex align-items-center">
+                                <div class="col-3 fw-bold">@item.ProdutoNome</div>  @* Nome do Produto *@
+                                <div class="col-2 text-center">R$ @item.PrecoUnitario</div> @* Preço Unitário *@
+
+                                <div class="col-3 d-flex align-items-center justify-content-center">
+                                    <button class="btn btn-secondary btn-sm" @onclick="() => Decrementar(item, comanda.IdComanda)">-</button>
+                                    <input type="number" class="form-control text-center mx-2" style="width: 60px;" @bind="item.Quantidade" min="1" disabled />
+                                    <button class="btn btn-secondary btn-sm" @onclick="() => Incrementar(item, comanda.IdComanda)">+</button>
+                                </div>
+
+                                <div class="col-2 text-center fw-bold">R$ @item.ValorTotal</div> @* Valor Total *@
+
+                                <div class="col-2 text-end">
+                                    <button class="btn btn-danger btn-sm" @onclick="() => DeletarItem(item, comanda.IdComanda)">Excluir</button>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+
+                    <div class="mt-3">
+                        <label for="formaPagamento">Forma de Pagamento:</label>
+                        <select id="formaPagamento" class="form-select" @bind="comanda.FormaPagamento">
+                            <option value="">Selecione uma forma de pagamento</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="CartaoCredito">Cartão de Crédito</option>
+                            <option value="CartaoDebito">Cartão de Débito</option>
+                            <option value="Pix">Pix</option>
+                            <!-- Adicione outras opções conforme necessário -->
+                        </select>
+                    </div>
+                    <button class="btn btn-success mt-3" @onclick="() => FinalizarComanda(comanda)">Finalizar Comanda</button>
+                    <button class="btn btn-danger mt-3 ml-2" @onclick="() => DeletarComanda(comanda.IdComanda)">Excluir Comanda</button>
+                </div>
+            </AccordionBody>
+        </AccordionItem>
     }
-</ul>
+</Accordion>
 
 @code {
-    private List<ComandasAbertas> ComandasAbertas = new List<ComandasAbertas>();
-    private List<ComandaItem> itensComanda;
-    private decimal valorTotal;
+    private List<Comanda> ComandasAbertas = new List<Comanda>();
 
     protected override async Task OnInitializedAsync()
     {
-        var (comandasAbertas, errorMessage) = await _apiService.GetComandasAbertas();
+        var (comandasAbertas, errorMessage) = await _apiService.GetComandas();
         foreach (var comanda in comandasAbertas)
         {
-           await AtualizaPrecoTotal(comanda.IdComanda);
+            comanda.Itens = await GetItensComanda(comanda.IdComanda);
+            await AtualizaPrecoTotal(comanda.IdComanda);
         }
         ComandasAbertas = comandasAbertas;
     }
@@ -45,73 +84,93 @@
             bool sucesso = await _apiService.DeletarComanda(idComanda);
             if (sucesso)
             {
-                // Lógica para atualizar a interface após a exclusão
+                ComandasAbertas.RemoveAll(c => c.IdComanda == idComanda);
             }
             else
             {
-                await JS.InvokeVoidAsync("alert", "Erro ao excluir a comanda.");
+                await ShowAlert("Erro ao excluir a comanda.");
             }
         }
     }
 
-    private void AtualizarQuantidade(ComandaItem item, ChangeEventArgs e)
+    private async Task FinalizarComanda(Comanda comanda)
     {
-        if (int.TryParse(e.Value.ToString(), out int novaQuantidade) && novaQuantidade > 0)
+        if (string.IsNullOrEmpty(comanda.FormaPagamento))
         {
-            item.Quantidade = novaQuantidade;
+            await ShowAlert("Por favor, selecione uma forma de pagamento.");
+            return;
         }
+        var sucesso = await _apiService.ConfirmarComanda(comanda);
+
+
+        if (sucesso.Data)
+        {
+            await ShowAlert("Comanda finalizada com sucesso.");  
+        }
+        else
+        {
+            await ShowAlert("Erro ao finalizar a comanda.");
+        }
+        await Task.Delay(1000);
+        StateHasChanged(); // Atualiza a UI
     }
 
-    private async Task<List<ComandaItem>> GetItensComanda(string IdComanda)
+    private async Task Decrementar(ComandaItem itemComanda, string idComanda)
     {
-        try
-        {
-            var (itensComanda, errorMessage) = await _apiService.GetItensComanda(IdComanda);
-            valorTotal = itensComanda.Sum(item => item.PrecoUnitario * item.Quantidade);
+        if (itemComanda.Quantidade == 1) return;
 
-            if (itensComanda == null)
-            {
-                await ShowAlert("Não foi possível obter detalhes do pedido.");
-                return null;
-            }
-
-            AtualizaPrecoTotal(IdComanda);
-
-            if (!itensComanda.Any())
-            {
-                return null;
-            }
-            return itensComanda;
-        }
-        catch (Exception)
-        {
-            await ShowAlert("Ocorreu um erro ao obter os detalhes. Tente novamente mais tarde.");
-            return null;
-        }
+        itemComanda.Quantidade--;
+        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "diminuir", idComanda);
+        AtualizaPrecoTotal(idComanda);
+        await Task.Delay(100);
+        StateHasChanged(); // Atualiza a UI
     }
 
-     private async Task AtualizaPrecoTotal(string IdComanda)
+    private async Task Incrementar(ComandaItem itemComanda, string idComanda)
     {
-        try
+        itemComanda.Quantidade++;
+        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "aumentar", idComanda);
+        AtualizaPrecoTotal(idComanda);
+        await Task.Delay(100);
+        StateHasChanged(); // Atualiza a UI
+    }
+
+    private async Task DeletarItem(ComandaItem item, string idComanda)
+    {
+        bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este item da comanda?");
+        if (confirmacao)
         {
-            var (itensComanda, errorMessageItens) = await _apiService.GetItensComanda(IdComanda);
-            valorTotal = itensComanda.Sum(item => item.PrecoUnitario * item.Quantidade);
-            //atuaLIZA VALOR TOTAL DA COMANDA
-            var (comanda, errorMessageComanda) = await _apiService.GetComandaPorId(IdComanda);
-            if (valorTotal > 0)
+            var sucesso = await _apiService.AtualizaQuantidadeItemComanda(item.ProdutoId, "deletar", idComanda);
+            if (sucesso.Data)
             {
-                comanda.ValorTotal = valorTotal;
-                await _apiService.AtualizarComanda(comanda);
+                var comanda = ComandasAbertas.FirstOrDefault(c => c.IdComanda == idComanda);
+                if (comanda != null)
+                {
+                    comanda.Itens.Remove(item);
+                    await AtualizaPrecoTotal(idComanda);
+                }
             }
             else
             {
-                await ShowAlert("O valor total é inválido.");
+                await ShowAlert("Erro ao excluir o item.");
             }
-
         }
-        catch (Exception ex)
+
+    }
+
+    private async Task<List<ComandaItem>> GetItensComanda(string idComanda)
+    {
+        var (itensComanda, errorMessage) = await _apiService.GetItensComanda(idComanda);
+        return itensComanda ?? new List<ComandaItem>();
+    }
+
+    private async Task AtualizaPrecoTotal(string idComanda)
+    {
+        var comanda = ComandasAbertas.FirstOrDefault(c => c.IdComanda == idComanda);
+        if (comanda != null)
         {
-            ShowAlert($"Ocorreu um erro ao atualizar o preço: {ex.Message}");
+            comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
+            await _apiService.AtualizarComanda(comanda);
         }
     }
 
@@ -120,3 +179,4 @@
         await JS.InvokeVoidAsync("alert", message);
     }
 }
+

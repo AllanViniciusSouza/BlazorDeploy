@@ -8,7 +8,7 @@ public class ComandaItem : INotifyPropertyChanged
     public int Id { get; set; }
     public string IdComanda { get; set; }
     public decimal PrecoUnitario { get; set; }
-    public decimal ValorTotal { get; set; }
+    public decimal ValorTotal => PrecoUnitario * Quantidade;
     private int quantidade;
 
     public int Quantidade

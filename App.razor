@@ -11,12 +11,3 @@
     </NotFound>
 </Router>
 
-@code {
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (firstRender && Navigation.Uri.EndsWith("/"))
-        {
-            Navigation.NavigateTo("/login", forceLoad: true);
-        }
-    }
-}

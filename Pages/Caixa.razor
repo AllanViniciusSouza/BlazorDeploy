@@ -1,7 +1,7 @@
 ﻿@page "/"
 @inject ApiService _apiService
 @inject IJSRuntime JS
-@inject AuthService AuthService
+
 @inject NavigationManager Navigation
 
 <PageTitle>Caixa</PageTitle>
@@ -283,9 +283,4 @@ else
         await JS.InvokeVoidAsync("alert", message);
     }
 
-    private async Task PerformLogout()
-    {
-        await AuthService.Logout();
-        Navigation.NavigateTo("/login", forceLoad: true);
-    }
 }

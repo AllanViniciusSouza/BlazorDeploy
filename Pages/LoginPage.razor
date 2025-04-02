@@ -1,6 +1,6 @@
 ﻿@page "/login"
 @inject ApiService ApiService
-@inject AuthService AuthService
+
 @inject NavigationManager Navigation
 
 <h3>Login</h3>
@@ -33,13 +33,13 @@ else
     private string password = "";
     private string errorMessage = "";
 
-    protected override async Task OnInitializedAsync()
-    {
-        if (await AuthService.IsAuthenticated())
-        {
-            Navigation.NavigateTo("/caixa");
-        }
-    }
+    // protected override async Task OnInitializedAsync()
+    // {
+    //     if (await AuthService.IsAuthenticated())
+    //     {
+    //         Navigation.NavigateTo("/caixa");
+    //     }
+    // }
 
     private async Task PerformLogin()
     {
@@ -50,14 +50,14 @@ else
 
         if (!response.HasError && response.Data)
         {
-            if (await AuthService.IsAuthenticated())
-            {
-                Navigation.NavigateTo("/caixa");
-            }
-            else
-            {
-                errorMessage = "Erro ao armazenar token.";
-            }
+            // if (await AuthService.IsAuthenticated())
+            // {
+            //     Navigation.NavigateTo("/caixa");
+            // }
+            // else
+            // {
+            //     errorMessage = "Erro ao armazenar token.";
+            // }
         }
         else
         {

@@ -14,8 +14,8 @@ builder.Services.AddScoped<LocalStorageService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ApiService>();
 builder.Services.AddSingleton<IValidator, Validator>();
-builder.Services.AddScoped<AuthService>();
+
 builder.Services.AddBlazoredLocalStorage();
-builder.Services.AddScoped<AuthService>();
+
 
 await builder.Build().RunAsync();

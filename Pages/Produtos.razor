@@ -6,7 +6,7 @@
 
 <PageTitle>Lista de Produtos</PageTitle>
 
-@if (isLoading)
+@* @if (isLoading)
 {
     <p>Verificando autenticação...</p>
 }
@@ -14,7 +14,7 @@ else if (!isAuthenticated)
 {
     <p>Redirecionando para o login...</p>
 }
-else
+els *@e
 {
 <button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
 
@@ -117,7 +117,7 @@ else
         }
     </tbody>
 </table>
-}
+
 
 @code {
     // private List<Produto> produtos;
@@ -132,14 +132,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        isAuthenticated = await AuthService.IsAuthenticated();
+        // isAuthenticated = await AuthService.IsAuthenticated();
 
-        if (!isAuthenticated)
-        {
-            Navigation.NavigateTo("/login", forceLoad: true);
-        }
+        // if (!isAuthenticated)
+        // {
+        //     Navigation.NavigateTo("/login", forceLoad: true);
+        // }
 
-        isLoading = false;
+        // isLoading = false;
 
         var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos;

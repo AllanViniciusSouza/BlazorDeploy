@@ -47,7 +47,7 @@ jobs:
         uses: SteveSandersonMS/ghaction-rewrite-base-href@v1.1.0
         with:
           html_path: 'docs/wwwroot/index.html'
-          base_href: '/BlazorDeploy/'
+          base_href: '/rota019Deploy/'
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

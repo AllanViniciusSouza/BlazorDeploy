@@ -1,7 +1,14 @@
 ﻿@inherits LayoutComponentBase
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
 <div class="page">
     <div class="sidebar">
         <NavMenu />
+        @if (isAuthenticated)
+        {
+            <button @onclick="PerformLogout">Sair</button>
+        }
     </div>
 
     <main>
@@ -14,3 +21,13 @@
         </article>
     </main>
 </div>
+
+@code {
+    private bool isAuthenticated;
+
+    private async Task PerformLogout()
+    {
+        await AuthService.Logout();
+        Navigation.NavigateTo("/login");
+    }
+}

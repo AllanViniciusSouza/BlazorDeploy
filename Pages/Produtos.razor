@@ -1,10 +1,21 @@
 ﻿@page "/produtos"
 @inject ApiService _apiService
 @inject IJSRuntime JS
-@inject NavigationManager NavigationManager
+@inject NavigationManager Navigation
+@inject AuthService AuthService
 
 <PageTitle>Lista de Produtos</PageTitle>
 
+@if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
+else
+{
 <button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
 
 @if (exibirFormulario)
@@ -32,7 +43,7 @@
 }
 
 <div class="row">
-    <div class="col-md-6"
+    <div class="col-md-6">
         <label for="searchNome" class="form-label fw-bold">Pesquisar por Nome</label>
         <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
     </div>
@@ -106,6 +117,7 @@
         }
     </tbody>
 </table>
+}
 
 @code {
     // private List<Produto> produtos;
@@ -115,9 +127,20 @@
     private Produto novoProduto = new Produto();
     private bool exibirFormulario = false;
     private Dictionary<int, bool> editandoProdutos = new();
+    private bool isAuthenticated = false;
+    private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
+        isAuthenticated = await AuthService.IsAuthenticated();
+
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+
+        isLoading = false;
+
         var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos;
     }

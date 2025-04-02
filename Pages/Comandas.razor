@@ -1,73 +1,113 @@
 ﻿@page "/comandas"
+
 @inject ApiService _apiService
 @inject IJSRuntime JS
+@inject AuthService AuthService
+@inject NavigationManager Navigation
 
 <PageTitle>Comandas</PageTitle>
 
-<h3 class="d-flex justify-content-center text-decoration-underline">Comandas Abertas</h3>
-
-<Accordion>
-    @foreach (var comanda in ComandasAbertas)
+@if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
+else
+{
+    @if (!ComandasAbertas.Any())
     {
-        <AccordionItem>
-            <AccordionHeader>
-                <div class="d-flex justify-content-between align-items-center w-100">
-                    <span class="fw-bold fs-1 text-center">
-                        Comanda <span class="text-decoration-underline">@comanda.IdComanda</span>
-                    </span>
-                    <span class="fw-bold">Valor Total: R$ @comanda.ValorTotal</span>
-                </div>
-            </AccordionHeader>
-            <AccordionBody>
-                <div>
-                    @* <h5>Itens da Comanda</h5> *@
-                    <ul class="list-group">
-                        @foreach (var item in comanda.Itens)
-                        {
-                            <li class="list-group-item d-flex align-items-center">
-                                <div class="col-3 fw-bold">@item.ProdutoNome</div>  @* Nome do Produto *@
-                                <div class="col-2 text-center">R$ @item.PrecoUnitario</div> @* Preço Unitário *@
-
-                                <div class="col-3 d-flex align-items-center justify-content-center">
-                                    <button class="btn btn-secondary btn-sm" @onclick="() => Decrementar(item, comanda.IdComanda)">-</button>
-                                    <input type="number" class="form-control text-center mx-2" style="width: 60px;" @bind="item.Quantidade" min="1" disabled />
-                                    <button class="btn btn-secondary btn-sm" @onclick="() => Incrementar(item, comanda.IdComanda)">+</button>
-                                </div>
-
-                                <div class="col-2 text-center fw-bold">R$ @item.ValorTotal</div> @* Valor Total *@
-
-                                <div class="col-2 text-end">
-                                    <button class="btn btn-danger btn-sm" @onclick="() => DeletarItem(item, comanda.IdComanda)">Excluir</button>
-                                </div>
-                            </li>
-                        }
-                    </ul>
-
-                    <div class="mt-3">
-                        <label for="formaPagamento">Forma de Pagamento:</label>
-                        <select id="formaPagamento" class="form-select" @bind="comanda.FormaPagamento">
-                            <option value="">Selecione uma forma de pagamento</option>
-                            <option value="Dinheiro">Dinheiro</option>
-                            <option value="CartaoCredito">Cartão de Crédito</option>
-                            <option value="CartaoDebito">Cartão de Débito</option>
-                            <option value="Pix">Pix</option>
-                            <!-- Adicione outras opções conforme necessário -->
-                        </select>
-                    </div>
-                    <button class="btn btn-success mt-3" @onclick="() => FinalizarComanda(comanda)">Finalizar Comanda</button>
-                    <button class="btn btn-danger mt-3 ml-2" @onclick="() => DeletarComanda(comanda.IdComanda)">Excluir Comanda</button>
-                </div>
-            </AccordionBody>
-        </AccordionItem>
+        <p>Nenhuma comanda encontrada</p>
     }
-</Accordion>
+    else
+    {
+        <h3 class="d-flex justify-content-center text-decoration-underline">Comandas Abertas</h3>
+
+        <div class="mb-3">
+            <input type="text" @bind="searchTerm" @bind:event="oninput" placeholder="Buscar comanda pelo número..." class="form-control mb-3" />
+        </div>
+
+        <Accordion>
+            @foreach (var comanda in ComandasFiltradas)
+            {
+                <AccordionItem>
+                    <AccordionHeader>
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <span class="fw-bold fs-1 text-center">
+                                Comanda <span class="text-decoration-underline">@comanda.IdComanda</span>
+                            </span>
+                            <span class="fw-bold">Valor Total: R$ @comanda.ValorTotal</span>
+                        </div>
+                    </AccordionHeader>
+                    <AccordionBody>
+                        <div>
+                            <ul class="list-group">
+                                @foreach (var item in comanda.Itens)
+                                {
+                                    <li class="list-group-item d-flex align-items-center">
+                                        <div class="col-3 fw-bold">@item.ProdutoNome</div>  @* Nome do Produto *@
+                                        <div class="col-2 text-center">R$ @item.PrecoUnitario</div> @* Preço Unitário *@
+
+                                        <div class="col-3 d-flex align-items-center justify-content-center">
+                                            <button class="btn btn-secondary btn-sm" @onclick="() => Decrementar(item, comanda.IdComanda)">-</button>
+                                            <input type="number" class="form-control text-center mx-2" style="width: 60px;" @bind="item.Quantidade" min="1" disabled />
+                                            <button class="btn btn-secondary btn-sm" @onclick="() => Incrementar(item, comanda.IdComanda)">+</button>
+                                        </div>
+
+                                        <div class="col-2 text-center fw-bold">R$ @item.ValorTotal</div> @* Valor Total *@
+
+                                        <div class="col-2 text-end">
+                                            <button class="btn btn-danger btn-sm" @onclick="() => DeletarItem(item, comanda.IdComanda)">Excluir</button>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+
+                            <div class="mt-3">
+                                <label for="formaPagamento">Forma de Pagamento:</label>
+                                <select id="formaPagamento" class="form-select" @bind="comanda.FormaPagamento">
+                                    <option value="">Selecione uma forma de pagamento</option>
+                                    <option value="Dinheiro">Dinheiro</option>
+                                    <option value="CartaoCredito">Cartão de Crédito</option>
+                                    <option value="CartaoDebito">Cartão de Débito</option>
+                                    <option value="Pix">Pix</option>
+                                    <!-- Adicione outras opções conforme necessário -->
+                                </select>
+                            </div>
+                            <button class="btn btn-success mt-3" @onclick="() => FinalizarComanda(comanda)">Finalizar Comanda</button>
+                            <button class="btn btn-danger mt-3 ml-2" @onclick="() => DeletarComanda(comanda.IdComanda)">Excluir Comanda</button>
+                        </div>
+                    </AccordionBody>
+                </AccordionItem>
+            }
+        </Accordion>
+    }
+}
 
 @code {
     private List<Comanda> ComandasAbertas = new List<Comanda>();
+    private List<Comanda> ComandasFiltradas => ComandasAbertas
+        .Where(c => string.IsNullOrEmpty(searchTerm) || c.IdComanda.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    private string searchTerm = "";
+    private bool isAuthenticated = false;
+    private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
+        isAuthenticated = await AuthService.IsAuthenticated();
+
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+
+        isLoading = false;
+
         var (comandasAbertas, errorMessage) = await _apiService.GetComandas();
+        if (comandasAbertas is null) return;
         foreach (var comanda in comandasAbertas)
         {
             comanda.Itens = await GetItensComanda(comanda.IdComanda);
@@ -105,7 +145,9 @@
 
         if (sucesso.Data)
         {
-            await ShowAlert("Comanda finalizada com sucesso.");  
+            await ShowAlert("Comanda finalizada com sucesso.");
+            // Remove a comanda finalizada da lista
+            ComandasAbertas.RemoveAll(c => c.IdComanda == comanda.IdComanda);
         }
         else
         {

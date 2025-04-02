@@ -1,13 +1,25 @@
-﻿@page "/"
+﻿@page "/caixa"
 @inject ApiService _apiService
 @inject IJSRuntime JS
+@inject AuthService AuthService
+@inject NavigationManager Navigation
 
 <PageTitle>Caixa</PageTitle>
 
+@if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
+else
+{
 <h3 class="text-bg-primary text-center">Caixa Registradora</h3>
 
 <div class="row">
-    <div class="col-md-6"
+    <div class="col-md-6">
         <label for="searchNome" class="form-label fw-bold">Pesquisar por Nome</label>
         <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
     </div>
@@ -84,6 +96,7 @@
         <button class="btn btn-success mt-2" @onclick="FinalizePurchase" disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada))">Finalizar Compra</button>
     </div>
 </div>
+}
 
 @code {
     private string searchNome = string.Empty;
@@ -93,11 +106,22 @@
     private List<Produto> cart = new();
     private int idcomanda;
     private string formaPagamentoSelecionada = string.Empty;
+    private bool isAuthenticated = false;
+    private bool isLoading = true;
 
     private int? NumeroComanda => int.TryParse(entryComanda, out int num) ? num : (int?)null;
 
     protected override async Task OnInitializedAsync()
     {
+        isAuthenticated = await AuthService.IsAuthenticated();
+
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+
+        isLoading = false;
+
         var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos;
     }
@@ -182,7 +206,6 @@
         cart.Clear();
         entryComanda = string.Empty;
         StateHasChanged(); // Atualiza a UI
-        Console.WriteLine("Compra finalizada!");
     }
 
     private async Task AdicionarProdutosAComanda(string idComanda, List<Produto> carrinho)
@@ -225,7 +248,7 @@
         var responseComanda = await _apiService.CriarComanda(novaComanda);
         if (responseComanda.Data != null)
         {
-            await ShowAlert("Comanda criada!");
+            // await ShowAlert("Comanda criada!");
         }
         else
         {
@@ -258,5 +281,11 @@
     private async Task ShowAlert(string message)
     {
         await JS.InvokeVoidAsync("alert", message);
+    }
+
+    private async Task PerformLogout()
+    {
+        await AuthService.Logout();
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
 }

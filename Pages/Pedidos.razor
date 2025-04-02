@@ -1,8 +1,20 @@
 ﻿@page "/pedidos"
 @inject ApiService _apiService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
 
 <PageTitle>Comandas Fechadas</PageTitle>
 
+@if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
+else
+{
 <h2 class="mb-4">Resumo das Comandas Fechadas Hoje</h2>
 
 @if (pedidosHoje.Count == 0)
@@ -31,13 +43,25 @@ else
 
     <h3 class="mt-4">Total Vendido Hoje: R$ @totalVendido.ToString("F2")</h3>
 }
+}
 
 @code {
     private List<Pedido> pedidosHoje = new();
     private decimal totalVendido = 0;
+    private bool isAuthenticated = false;
+    private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
+        isAuthenticated = await AuthService.IsAuthenticated();
+
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+
+        isLoading = false;
+
         var (comandas, errorMessage) = await _apiService.GetPedidosHoje();
         if (!string.IsNullOrEmpty(errorMessage))
         {

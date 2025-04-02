@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using BlazorDeploy;
 using BlazorDeploy.Services;
 using BlazorDeploy.Validations;
+using Blazored.LocalStorage;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -13,5 +14,8 @@ builder.Services.AddScoped<LocalStorageService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ApiService>();
 builder.Services.AddSingleton<IValidator, Validator>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddBlazoredLocalStorage();
+builder.Services.AddScoped<AuthService>();
 
 await builder.Build().RunAsync();

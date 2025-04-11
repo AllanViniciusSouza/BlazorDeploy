@@ -3,7 +3,7 @@
 @* @inject AuthService AuthService *@
 @inject NavigationManager Navigation
 
-<PageTitle>Comandas Fechadas</PageTitle>
+<PageTitle>Pedidos</PageTitle>
 
 @* @if (isLoading)
 {
@@ -15,11 +15,11 @@ else if (!isAuthenticated)
 }
 else
 { *@
-    <h2 class="mb-4">Resumo das Comandas Fechadas Hoje</h2>
+    <h2 class="mb-4">Pedidos de hoje</h2>
 
     @if (pedidosHoje.Count == 0)
     {
-        <p>Nenhuma comanda fechada hoje.</p>
+        <p>Nenhum pedido hoje.</p>
     }
     else
     {

@@ -18,16 +18,22 @@ else
 { *@
 <h3 class="text-bg-primary text-center">Caixa Registradora</h3>
 
+<div class="d-flex align-items-end mt-2 ms-2 gap-2">
+    <input type="text" id="entryComanda" class="form-control" style="max-width: 250px;" @bind="entryComanda" placeholder="Digite a comanda" />
+    <button class="btn btn-primary" @onclick="CreateComanda" disabled="@(!cart.Any())">Criar comanda</button>
+</div>
+
+
 <div class="row">
     <div class="col-md-6">
         <label for="searchNome" class="form-label fw-bold">Pesquisar por Nome</label>
         <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
     </div>
 
-    <div class="col-md-6">
+    @*  <div class="col-md-6">
         <label for="searchBarcode" class="form-label fw-bold">Pesquisar por Código de Barras</label>
         <input type="text" id="searchBarcode" class="form-control" @bind="searchBarcode" @oninput="SearchByBarcode" placeholder="Digite o código de barras" />
-    </div>
+    </div> *@
 </div>
 
 <h4 class="fw-bold mt-3">Produtos Disponíveis</h4>
@@ -35,7 +41,6 @@ else
     <thead>
         <tr>
             <th>Nome</th>
-            <th>Código de Barras</th>
             <th>Preço</th>
             <th>Ação</th>
         </tr>
@@ -45,10 +50,9 @@ else
         {
             <tr>
                 <td>@Produto.Nome</td>
-                <td>@Produto.Barcode</td>
                 <td>R$ @Produto.Preco.ToString("0.00")</td>
                 <td>
-                    <button class="btn btn-success btn-sm" @onclick="() => AddToCart(Produto)">Adicionar ao Carrinho</button>
+                    <button class="btn btn-success btn-sm" @onclick="() => AddToCart(Produto)">Adicionar</button>
                 </td>
             </tr>
         }
@@ -80,11 +84,8 @@ else
 
 <h5>Total: R$ @cart.Sum(p => p.Preco).ToString("0.00")</h5>
 
-<div class="d-flex align-items-center">
-    <button class="btn btn-primary mt-2" @onclick="CreateComanda" disabled="@(!cart.Any())">Criar comanda</button>
-    <input type="text" id="entryComanda" class="form-control mt-2 ms-2 w-auto" @bind="entryComanda" placeholder="Nº comanda" />
-
-    <select class="form-select mt-2 ms-2 w-auto" @bind="formaPagamentoSelecionada">
+<div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center mt-2 gap-2 ms-2">
+    <select class="form-select" style="min-width: 220px;" @bind="formaPagamentoSelecionada">
         <option value="">Selecione a Forma de Pagamento</option>
         <option value="Dinheiro">Dinheiro</option>
         <option value="Cartao de Credito">Cartão de Crédito</option>
@@ -92,10 +93,13 @@ else
         <option value="Pix">Pix</option>
     </select>
 
-    <div class="ms-auto">
-        <button class="btn btn-success mt-2" @onclick="FinalizePurchase" disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada))">Finalizar Compra</button>
-    </div>
+    <button class="btn btn-success" style="min-width: 180px;"
+    @onclick="FinalizePurchase"
+    disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada))">
+        Finalizar Compra
+    </button>
 </div>
+
 
 
 @code {
@@ -180,7 +184,21 @@ else
                 DataPedido = DateTime.Now,
                 FormaPagamento = formaPagamentoSelecionada
             };
+
+        foreach (var item in cart)
+        {
+            var movimentacao = new MovimentacaoEstoque()
+            {
+                    ProdutoId = item.Id,
+                    Tipo = TipoMovimentacao.Venda,
+                    Quantidade = 1,
+                    DataMovimentacao = DateTime.Now
+            };
+            await _apiService.MovimentarEstoqueAsync(movimentacao);
+        }
+
         await _apiService.ConfirmarPedido(pedido);
+        
         cart.Clear();
         formaPagamentoSelecionada = string.Empty;
         StateHasChanged(); // Atualiza a UI
@@ -189,6 +207,9 @@ else
 
     private async Task CreateComanda()
     {
+        if (string.IsNullOrEmpty(entryComanda))
+            return;
+
         var (comandaExistente, erro) = await _apiService.GetComandaPorId(entryComanda);
         if (comandaExistente != null)
         {

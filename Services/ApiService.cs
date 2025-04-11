@@ -9,6 +9,7 @@ using System.Text.Json;
 using Microsoft.JSInterop;
 using BlazorDeploy.Pages;
 using System.Net.Http.Json;
+using System.Buffers.Text;
 
 namespace BlazorDeploy.Services;
 
@@ -503,7 +504,80 @@ public class ApiService
         return await GetAsync<List<ComandaItem>>(endpoint);
     }
 
-    
+    public async Task<(List<Estoque>?, string? ErrorMessage)> GetEstoque()
+    {
+        string endpoint = $"api/estoque/";
+        return await GetAsync<List<Estoque>>(endpoint);
+    }
+
+    public async Task<(Estoque?, string? ErrorMessage)> GetProdutoEstoque(int id)
+    {
+        string endpoint = $"api/estoque/{id}";
+        return await GetAsync<Estoque>(endpoint);
+    }
+
+    public async Task<ApiResponse<bool>> AtualizarEstoque(Estoque estoque)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(estoque, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PutRequest($"api/estoque/{estoque.Id}", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao atualizar estoque: {response.StatusCode}");
+                return new ApiResponse<bool>
+                {
+                    ErrorMessage = $"Erro ao atualizar estoque: {response.StatusCode}",
+                    Data = false
+                };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Erro na atualização do estoque: {ex.Message}");
+            return new ApiResponse<bool> { ErrorMessage = ex.Message, Data = false };
+        }
+    }
+
+    // 🔄 Obter todas as movimentações
+    public async Task<(List<MovimentacaoEstoque>?, string? ErrorMessage)> GetMovimentacoesAsync()
+    {
+        string endpoint = $"api/movimentacaoestoque/";
+        return await GetAsync<List<MovimentacaoEstoque>>(endpoint);
+    }
+
+    // 📦 Registrar uma movimentação de estoque
+    public async Task<ApiResponse<bool>> MovimentarEstoqueAsync(MovimentacaoEstoque movimentacao)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(movimentacao, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PostRequest("api/movimentacaoestoque/", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string errorMessage = response.StatusCode == HttpStatusCode.Unauthorized
+                    ? "Unauthorized"
+                    : $"Erro ao enviar requisição HTTP: {response.StatusCode}";
+
+                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
+                return new ApiResponse<bool> { Data = true };
+            }
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Erro ao criar produto: {ex.Message}");
+            return new ApiResponse<bool> { ErrorMessage = ex.Message };
+        }
+    }
 
     public async Task<ApiResponse<bool>> AtualizarComanda(Comanda comanda)
     {

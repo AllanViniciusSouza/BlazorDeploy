@@ -1,0 +1,98 @@
+﻿@page "/inventario"
+@inject ApiService _apiService
+
+<h3>Movimentação de Estoque</h3>
+
+<div class="mb-3 position-relative">
+    <label>Produto</label>
+    <input type="text" class="form-control" @bind="produtoBusca" @oninput="FiltrarProdutos" placeholder="Digite o nome do produto" />
+
+    @if (produtosFiltrados.Any() && !string.IsNullOrWhiteSpace(produtoBusca))
+    {
+        <ul class="list-group position-absolute w-100" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+            @foreach (var produto in produtosFiltrados)
+            {
+                <li class="list-group-item list-group-item-action" @onclick="() => SelecionarProduto(produto)">
+                    @produto.Nome
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@if (produtoSelecionado != null)
+{
+    <div class="alert alert-info p-2">
+        <strong>Produto Selecionado:</strong> @produtoSelecionado.Nome
+    </div>
+}
+
+<div class="mb-3">
+    <label>Quantidade</label>
+    <input type="number" @bind="movimentacao.Quantidade" class="form-control" />
+</div>
+
+<div class="mb-3">
+    <label>Tipo de Movimentação</label>
+    <select @bind="movimentacao.Tipo" class="form-control">
+        <option value="Compra">Entrada (Compra)</option>
+        <option value="Venda">Saída (Venda)</option>
+    </select>
+</div>
+
+<button class="btn btn-primary" @onclick="RegistrarMovimentacao">Registrar</button>
+
+@if (!string.IsNullOrEmpty(mensagem))
+{
+    <p class="mt-3">@mensagem</p>
+}
+
+@code {
+    private List<Produto> produtos = new();
+    private List<Produto> produtosFiltrados = new();
+    private MovimentacaoEstoque movimentacao = new();
+    private string produtoBusca = "";
+    private Produto? produtoSelecionado;
+    private string mensagem = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (response, errorMessage) = await _apiService.GetTodosProdutos();
+        produtos = response;
+    }
+
+    private void FiltrarProdutos(ChangeEventArgs e)
+    {
+        produtoBusca = e.Value?.ToString() ?? "";
+
+        produtosFiltrados = produtos
+            .Where(p => p.Nome.Contains(produtoBusca, StringComparison.OrdinalIgnoreCase))
+            .Take(10)
+            .ToList();
+    }
+
+    private void SelecionarProduto(Produto produto)
+    {
+        produtoSelecionado = produto;
+        movimentacao.ProdutoId = produto.Id;
+        produtoBusca = produto.Nome;
+        produtosFiltrados.Clear();
+    }
+
+    private async Task RegistrarMovimentacao()
+    {
+        var result = await _apiService.MovimentarEstoqueAsync(movimentacao);
+
+        if (result.Data)
+        {
+            mensagem = "Movimentação registrada com sucesso!";
+            movimentacao = new MovimentacaoEstoque();
+            produtoBusca = "";
+            produtoSelecionado = null;
+        }
+        else
+        {
+            mensagem = "Erro ao registrar movimentação.";
+        }
+    }
+}

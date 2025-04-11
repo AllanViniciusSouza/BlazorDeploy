@@ -1,0 +1,55 @@
+﻿@page "/estoque"
+@inject ApiService _apiService
+
+<h3>Estoque</h3>
+
+<input @bind="termoPesquisa" @bind:event="oninput" placeholder="Pesquisar por nome ou código de barras" class="form-control mb-3" />
+
+@if (estoques is null)
+{
+    <p>Carregando estoque...</p>
+}
+else if (estoques.Count == 0)
+{
+    <p>Nenhum produto encontrado no estoque.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                @* <th>Código de Barras</th> *@
+                <th>Nome</th>
+                <th>Quantidade</th>
+               @*  <th>Preço de Custo</th> *@
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var e in estoquesFiltrados)
+            {
+                <tr>
+                    @* <td>@e.Produto.Barcode</td> *@
+                    <td>@e.Produto.Nome</td>
+                    <td>@e.Quantidade</td>
+                    @* <td>R$ @e.PrecoCusto.ToString("F2")</td> *@
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Estoque> estoques = new();
+    private string termoPesquisa = "";
+
+    private List<Estoque> estoquesFiltrados => string.IsNullOrWhiteSpace(termoPesquisa)
+        ? estoques
+        : estoques.Where(e => e.Produto.Nome.Contains(termoPesquisa, StringComparison.OrdinalIgnoreCase) ||
+                              e.Produto.Barcode.Contains(termoPesquisa)).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (response, errorMessage) = await _apiService.GetEstoque();
+        estoques = response;
+    }
+}

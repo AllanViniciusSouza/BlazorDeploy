@@ -1,0 +1,121 @@
+﻿@page "/abrirfecharcaixa"
+@inject ApiService _apiService
+
+<h3>Gerenciar Caixa</h3>
+
+@if (carregando)
+{
+    <p>Carregando status do caixa...</p>
+}
+else if (caixaAberto == null)
+{
+    <EditForm Model="@abrirDto" OnValidSubmit="AbrirCaixa">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Valor de Abertura:</label>
+            <InputNumber @bind-Value="abrirDto.ValorAbertura" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+            <label>Observação:</label>
+            <InputTextArea @bind-Value="abrirDto.Observacao" class="form-control" />
+        </div>
+
+        <button class="btn btn-success" type="submit">Abrir Caixa</button>
+    </EditForm>
+}
+else
+{
+    <div class="alert alert-info">
+        Caixa aberto em: <strong>@caixaAberto.DataAbertura.ToString("g")</strong><br />
+        Valor de Abertura: R$ @caixaAberto.ValorAbertura
+    </div>
+
+    <EditForm Model="@fecharDto" OnValidSubmit="FecharCaixa">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Valor de Fechamento:</label>
+            <InputNumber @bind-Value="fecharDto.ValorFechamento" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+            <label>Observação:</label>
+            <InputTextArea @bind-Value="fecharDto.Observacao" class="form-control" />
+        </div>
+
+        <button class="btn btn-danger" type="submit">Fechar Caixa</button>
+    </EditForm>
+}
+
+@if (!string.IsNullOrEmpty(mensagem))
+{
+    <p class="mt-3 alert alert-warning">@mensagem</p>
+}
+
+@code {
+    private AbrirCaixaDto abrirDto = new();
+    private FecharCaixaDto fecharDto = new();
+    private Caixa caixaAberto;
+    private string mensagem;
+    private bool carregando = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarStatusCaixa();
+    }
+
+    private async Task CarregarStatusCaixa()
+    {
+        try
+        {
+            var (caixas, errorMessage) = await _apiService.ListarCaixasAsync();
+
+            if (caixas is not null)
+            {
+            // Aqui estamos assumindo que o último caixa aberto (sem DataFechamento) é o atual
+            caixaAberto = caixas.FirstOrDefault(c => c.DataFechamento == null);              
+            }
+
+            carregando = false;
+        }
+        catch (Exception ex)
+        {
+            mensagem = $"Erro ao carregar: {ex.Message}";
+        }
+    }
+
+    private async Task AbrirCaixa()
+    {
+        try
+        {
+            var caixa = await _apiService.AbrirCaixaAsync(abrirDto);
+            mensagem = $"Caixa aberto com sucesso!";
+            await CarregarStatusCaixa();
+        }
+        catch (Exception ex)
+        {
+            mensagem = $"Erro ao abrir caixa: {ex.Message}";
+        }
+    }
+
+    private async Task FecharCaixa()
+    {
+        try
+        {
+            await _apiService.FecharCaixaAsync(caixaAberto.Id, fecharDto);
+            mensagem = "Caixa fechado com sucesso!";
+            caixaAberto = null;
+            fecharDto = new FecharCaixaDto();
+            await CarregarStatusCaixa();
+        }
+        catch (Exception ex)
+        {
+            mensagem = $"Erro ao fechar caixa: {ex.Message}";
+        }
+    }
+}
+

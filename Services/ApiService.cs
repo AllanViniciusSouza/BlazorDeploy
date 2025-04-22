@@ -10,6 +10,7 @@ using Microsoft.JSInterop;
 using BlazorDeploy.Pages;
 using System.Net.Http.Json;
 using System.Buffers.Text;
+using static System.Net.WebRequestMethods;
 
 namespace BlazorDeploy.Services;
 
@@ -456,6 +457,12 @@ public class ApiService
         return await GetAsync<List<Pedido>>(endpoint);
     }
 
+    public async Task<(List<Pedido>?, string? ErrorMessage)> GetPedidosPorData(DateTime data)
+    {
+        string endpoint = $"api/pedidos/data/{data:yyyy-MM-dd}";
+        return await GetAsync<List<Pedido>>(endpoint);
+    }
+
     public async Task<(List<ComandasAbertas>?, string? ErrorMessage)> GetComandasAbertas()
     {
         string endpoint = $"api/comandas/ComandasAbertas";
@@ -889,5 +896,72 @@ public class ApiService
             return new ApiResponse<bool> { ErrorMessage = ex.Message, Data = false };
         }
     }
+
+    public async Task<(List<Caixa>?, string? ErrorMessage)> ListarCaixasAsync()
+    {
+        string endpoint = $"api/caixa";
+        return await GetAsync<List<Caixa>>(endpoint);
+    }
+
+    public async Task<(List<Caixa>?, string? ErrorMessage)> BuscarCaixaPorIdAsync(int id)
+    {
+        string endpoint = $"api/caixa/{id}";
+        return await GetAsync<List<Caixa>>(endpoint);
+    }
+
+    public async Task<ApiResponse<bool>> AbrirCaixaAsync(AbrirCaixaDto dto)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(dto, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PostRequest("api/caixa/abrir", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
+                return new ApiResponse<bool>
+                {
+                    ErrorMessage = $"Erro ao enviar requisição HTTP: {response.StatusCode}"
+                };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            return new ApiResponse<bool> { Data = false };
+        }
+    }
+
+    public async Task<ApiResponse<bool>> FecharCaixaAsync(int id, FecharCaixaDto dto)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(dto, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PutRequest($"api/caixa/fechar/{id}", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao fechar o caixa: {response.StatusCode}");
+                return new ApiResponse<bool>
+                {
+                    ErrorMessage = $"Erro ao fechar o caixa: {response.StatusCode}",
+                    Data = false
+                };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Erro ao fechar o caixa: {ex.Message}");
+            return new ApiResponse<bool> { ErrorMessage = ex.Message, Data = false };
+        }
+    }
+
 }
 

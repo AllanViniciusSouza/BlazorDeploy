@@ -32,59 +32,75 @@ else
     <Accordion>
         @foreach (var comanda in ComandasFiltradas)
         {
-            <div class="mb-4 p-3 border rounded shadow-sm bg-light">
-    <AccordionItem>
-        <AccordionHeader>
-            <div class="w-100">
-                <div class="fw-bold fs-5">Comanda <span class="text-decoration-underline">@comanda.IdComanda</span></div>
-                <div class="fw-bold">Valor Total: R$ @comanda.ValorTotal</div>
+            <div class="mb-4 p-3 border rounded shadow-sm" style="background-color: #c0c0c0;">
+                <AccordionItem>
+                    <AccordionHeader>
+                        <div class="w-100">
+                            <div class="fw-bold fs-5">Comanda <span class="text-decoration-underline">@comanda.IdComanda</span></div>
+                            <div class="fw-bold">Valor Total: R$ @comanda.ValorTotal</div>
+                        </div>
+                    </AccordionHeader>
+
+                    <AccordionBody>
+                        <div>
+                            <ul class="list-group">
+                                @foreach (var item in comanda.Itens)
+                                {
+                                    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center">
+                                        <div class="fw-bold w-100">@item.ProdutoNome</div>
+
+                                        <div class="d-flex align-items-center my-1">
+                                            <span class="me-2">R$ @item.PrecoUnitario</span>
+                                        </div>
+
+                                        <div class="d-flex align-items-center my-1">
+                                            <button class="btn btn-secondary btn-sm" @onclick="() => Decrementar(item, comanda.IdComanda)">-</button>
+                                            <input type="number" class="form-control text-center mx-2" style="width: 60px;" @bind="item.Quantidade" min="1" disabled />
+                                            <button class="btn btn-secondary btn-sm" @onclick="() => Incrementar(item, comanda.IdComanda)">+</button>
+                                        </div>
+
+                                        <div class="text-center fw-bold my-1">R$ @item.ValorTotal</div>
+
+                                        <div class="text-end my-1 w-100">
+                                            <button class="btn btn-danger btn-sm w-100" @onclick="() => DeletarItem(item, comanda.IdComanda)">Excluir</button>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+
+                            <div class="mt-3">
+                                <label for="formaPagamento">Forma de Pagamento:</label>
+                                <select id="formaPagamento" class="form-select" @bind="comanda.FormaPagamento">
+                                    <option value="">Selecione uma forma de pagamento</option>
+                                    <option value="Dinheiro">Dinheiro</option>
+                                    <option value="CartaoCredito">Cartão de Crédito</option>
+                                    <option value="CartaoDebito">Cartão de Débito</option>
+                                    <option value="Pix">Pix</option>
+                                </select>
+                            </div>
+
+                            <div class="mt-3">
+                                <label>Valor Final da Comanda:</label>
+                                <input type="number" class="form-control" step="1.00" @bind="comanda.ValorTotal" />
+                            </div>
+
+                            @if (comanda.FormaPagamento == "Dinheiro")
+                            {
+                                <div class="mt-3">
+                                    <label>Valor Recebido:</label>
+                                    <input type="number" class="form-control" step="1.00" @bind="comanda.ValorRecebido" @oninput="(e) => CalcularTroco(comanda)" />
+                                </div>
+                                <div class="mt-2 fw-bold">
+                                    Troco: R$ @(comanda.ValorRecebido - comanda.ValorTotal > 0 ? (comanda.ValorRecebido - comanda.ValorTotal).ToString("F2") : "0,00")
+                                </div>
+                            }
+
+                            <button class="btn btn-success w-100 mt-3" @onclick="() => FinalizarComanda(comanda)">Finalizar Comanda</button>
+                            <button class="btn btn-danger w-100 mt-3" @onclick="() => DeletarComanda(comanda.IdComanda)">Excluir Comanda</button>
+                        </div>
+                    </AccordionBody>
+                </AccordionItem>
             </div>
-        </AccordionHeader>
-
-        <AccordionBody>
-            <div>
-                <ul class="list-group">
-                    @foreach (var item in comanda.Itens)
-                    {
-                        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center">
-                            <div class="fw-bold w-100">@item.ProdutoNome</div>
-
-                            <div class="d-flex align-items-center my-1">
-                                <span class="me-2">R$ @item.PrecoUnitario</span>
-                            </div>
-
-                            <div class="d-flex align-items-center my-1">
-                                <button class="btn btn-secondary btn-sm" @onclick="() => Decrementar(item, comanda.IdComanda)">-</button>
-                                <input type="number" class="form-control text-center mx-2" style="width: 60px;" @bind="item.Quantidade" min="1" disabled />
-                                <button class="btn btn-secondary btn-sm" @onclick="() => Incrementar(item, comanda.IdComanda)">+</button>
-                            </div>
-
-                            <div class="text-center fw-bold my-1">R$ @item.ValorTotal</div>
-
-                            <div class="text-end my-1 w-100">
-                                <button class="btn btn-danger btn-sm w-100" @onclick="() => DeletarItem(item, comanda.IdComanda)">Excluir</button>
-                            </div>
-                        </li>
-                    }
-                </ul>
-
-                <div class="mt-3">
-                    <label for="formaPagamento">Forma de Pagamento:</label>
-                    <select id="formaPagamento" class="form-select" @bind="comanda.FormaPagamento">
-                        <option value="">Selecione uma forma de pagamento</option>
-                        <option value="Dinheiro">Dinheiro</option>
-                        <option value="CartaoCredito">Cartão de Crédito</option>
-                        <option value="CartaoDebito">Cartão de Débito</option>
-                        <option value="Pix">Pix</option>
-                    </select>
-                </div>
-
-                <button class="btn btn-success w-100 mt-3" @onclick="() => FinalizarComanda(comanda)">Finalizar Comanda</button>
-                <button class="btn btn-danger w-100 mt-3" @onclick="() => DeletarComanda(comanda.IdComanda)">Excluir Comanda</button>
-            </div>
-        </AccordionBody>
-    </AccordionItem>
-</div>
 
         }
     </Accordion>
@@ -232,6 +248,14 @@ else
             await _apiService.AtualizarComanda(comanda);
         }
     }
+
+    private void CalcularTroco(Comanda comanda)
+    {
+        var troco = comanda.ValorRecebido - comanda.ValorTotal;
+        if (troco < 0) troco = 0;
+        // Pode armazenar se quiser em outra propriedade
+    }
+
 
     private async Task ShowAlert(string message)
     {

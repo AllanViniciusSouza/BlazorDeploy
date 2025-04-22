@@ -1,0 +1,124 @@
+﻿@page "/pedidos"
+@inject ApiService _apiService
+@* @inject AuthService AuthService *@
+@inject NavigationManager Navigation
+@using System.Globalization
+
+<PageTitle>Pedidos</PageTitle>
+
+@* @if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
+else
+{ *@
+    <h2 class="mb-4">Pedidos de hoje</h2>
+
+<div class="d-flex align-items-center mb-3">
+    <label class="me-2 fw-bold">Selecionar Data:</label>
+    <InputDate @bind-Value="dataSelecionada" class="form-control w-auto me-2" />
+    <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
+</div>
+
+    @if (pedidosHoje.Count == 0)
+    {
+        <p>Nenhum pedido hoje.</p>
+    }
+    else
+    {
+    @if (pedidosHoje.Count > 0)
+    {
+        <div class="alert alert-info">
+            <strong>Resumo por Forma de Pagamento:</strong><br />
+            Débito: <strong>R$ @totalDebito.ToString("F2")</strong> |
+            Crédito: <strong>R$ @totalCredito.ToString("F2")</strong> |
+            Pix: <strong>R$ @totalPix.ToString("F2")</strong> |
+            Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong>
+        </div>
+    }
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                <th>Hora</th>
+                    <th>Forma de Pagamento</th>
+                    <th>Valor Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var comanda in pedidosHoje)
+                {
+                    <tr>
+                    <td>@(comanda.DataPedido?.ToString("HH:mm") ?? "-")</td>
+                        <td>@comanda.FormaPagamento</td>
+                        <td>R$ @comanda.ValorTotal.ToString("F2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h3 class="mt-4">Total Vendido Hoje: R$ @totalVendido.ToString("F2")</h3>
+    }
+
+
+@code {
+    private List<Pedido> pedidosHoje = new();
+    private decimal totalVendido = 0;
+
+    private decimal totalDebito = 0;
+    private decimal totalCredito = 0;
+    private decimal totalPix = 0;
+    private decimal totalDinheiro = 0;
+
+    private DateTime dataSelecionada = DateTime.Today;
+
+    // private bool isAuthenticated = false;
+    // private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // isAuthenticated = await AuthService.IsAuthenticated();
+
+        // if (!isAuthenticated)
+        // {
+        //     Navigation.NavigateTo("/login", forceLoad: true);
+        // }
+
+        // isLoading = false;
+
+        await BuscarPedidosPorData();
+    }
+
+    private async Task BuscarPedidosPorData()
+    {
+        var (comandas, errorMessage) = await _apiService.GetPedidosPorData(dataSelecionada);
+
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            Console.WriteLine("Erro ao buscar pedidos: " + errorMessage);
+            return;
+        }
+
+        pedidosHoje = comandas;
+        totalVendido = comandas.Sum(c => c.ValorTotal);
+
+        totalDebito = comandas
+            .Where(c => c.FormaPagamento.Equals("Débito", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        totalCredito = comandas
+            .Where(c => c.FormaPagamento.Equals("Crédito", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        totalPix = comandas
+            .Where(c => c.FormaPagamento.Equals("Pix", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        totalDinheiro = comandas
+            .Where(c => c.FormaPagamento.Equals("Dinheiro", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+    }
+}

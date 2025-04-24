@@ -91,7 +91,9 @@ else
                                     <input type="number" class="form-control" step="1.00" @bind="comanda.ValorRecebido" @oninput="(e) => CalcularTroco(comanda)" />
                                 </div>
                                 <div class="mt-2 fw-bold">
-                                    Troco: R$ @(comanda.ValorRecebido - comanda.ValorTotal > 0 ? (comanda.ValorRecebido - comanda.ValorTotal).ToString("F2") : "0,00")
+                                    Troco: R$ @(comanda.ValorRecebido - comanda.ValorTotal > 0
+                              ? string.Format("{0:N2}", comanda.ValorRecebido - comanda.ValorTotal)
+                              : "0,00")
                                 </div>
                             }
 

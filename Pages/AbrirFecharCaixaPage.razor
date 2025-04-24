@@ -56,10 +56,40 @@ else
     <p class="mt-3 alert alert-warning">@mensagem</p>
 }
 
+@if (caixas is not null && caixas.Any())
+{
+    <h4 class="mt-5">Histórico de Caixas</h4>
+
+    <table class="table table-bordered mt-3">
+        <thead>
+            <tr>
+                <th>Abertura</th>
+                <th>Fechamento</th>
+                <th>Valor Abertura</th>
+                <th>Valor Fechamento</th>
+                <th>Observação</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var caixa in caixas.OrderByDescending(c => c.DataAbertura))
+            {
+                <tr>
+                    <td>@caixa.DataAbertura.ToString("g")</td>
+                    <td>@(caixa.DataFechamento?.ToString("g") ?? "-")</td>
+                    <td>R$ @caixa.ValorAbertura.ToString("F2")</td>
+                    <td>@(caixa.ValorFechamento.HasValue ? $"R$ {caixa.ValorFechamento.Value:F2}" : "-")</td>
+                    <td>@caixa.Observacao</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
 @code {
     private AbrirCaixaDto abrirDto = new();
     private FecharCaixaDto fecharDto = new();
     private Caixa caixaAberto;
+    private List<Caixa> caixas = new();
     private string mensagem;
     private bool carregando = true;
 
@@ -72,12 +102,12 @@ else
     {
         try
         {
-            var (caixas, errorMessage) = await _apiService.ListarCaixasAsync();
+            var (resultado, errorMessage) = await _apiService.ListarCaixasAsync();
 
-            if (caixas is not null)
+            if (resultado is not null)
             {
-            // Aqui estamos assumindo que o último caixa aberto (sem DataFechamento) é o atual
-            caixaAberto = caixas.FirstOrDefault(c => c.DataFechamento == null);              
+                caixas = resultado;
+                caixaAberto = caixas.FirstOrDefault(c => c.DataFechamento == null);
             }
 
             carregando = false;
@@ -94,6 +124,7 @@ else
         {
             var caixa = await _apiService.AbrirCaixaAsync(abrirDto);
             mensagem = $"Caixa aberto com sucesso!";
+            abrirDto = new(); // limpa o form
             await CarregarStatusCaixa();
         }
         catch (Exception ex)
@@ -108,8 +139,8 @@ else
         {
             await _apiService.FecharCaixaAsync(caixaAberto.Id, fecharDto);
             mensagem = "Caixa fechado com sucesso!";
+            fecharDto = new();
             caixaAberto = null;
-            fecharDto = new FecharCaixaDto();
             await CarregarStatusCaixa();
         }
         catch (Exception ex)
@@ -118,4 +149,3 @@ else
         }
     }
 }
-

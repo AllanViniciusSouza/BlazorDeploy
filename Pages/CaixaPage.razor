@@ -87,8 +87,8 @@ else
 
 <h5>Total: R$ @cart.Sum(p => p.Preco).ToString("0.00")</h5>
 
-<div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center mt-2 gap-2 ms-2">
-    <select class="form-select" style="min-width: 220px;" @bind="formaPagamentoSelecionada">
+<div class="d-flex flex-column gap-2 ms-2 mt-2" style="max-width: 400px;">
+    <select class="form-select" @bind="formaPagamentoSelecionada">
         <option value="">Selecione a Forma de Pagamento</option>
         <option value="Dinheiro">Dinheiro</option>
         <option value="Cartao de Credito">Cartão de Crédito</option>
@@ -96,14 +96,25 @@ else
         <option value="Pix">Pix</option>
     </select>
 
-    <button class="btn btn-success" style="min-width: 180px;"
+    @if (formaPagamentoSelecionada == "Dinheiro")
+    {
+        <div>
+            <label>Valor Recebido:</label>
+            <InputNumber @bind-Value="valorRecebido" class="form-control" />
+            @if (valorRecebido > 0)
+            {
+                <p class="mt-2">Troco: <strong>R$ @troco.ToString("0.00")</strong></p>
+            }
+        </div>
+    }
+
+    <button class="btn btn-success"
             @onclick="FinalizePurchase"
-            disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada))">
+            disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada) ||
+                       (formaPagamentoSelecionada == "Dinheiro" && valorRecebido < cart.Sum(p => p.Preco)))">
         Finalizar Compra
     </button>
 </div>
-
-
 
 @code {
     private string searchNome = string.Empty;
@@ -115,6 +126,9 @@ else
     private string formaPagamentoSelecionada = string.Empty;
     private bool isAuthenticated = false;
     private bool isLoading = true;
+
+    private decimal valorRecebido;
+    private decimal troco => valorRecebido - cart.Sum(p => p.Preco);
 
     private int? NumeroComanda => int.TryParse(entryComanda, out int num) ? num : (int?)null;
 

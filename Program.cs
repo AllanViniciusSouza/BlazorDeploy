@@ -15,7 +15,7 @@ try
 {
     // Carrega appsettings.json de wwwroot
     using var http = new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) };
-    using var responseStream = await http.GetStreamAsync("appsettings.json");
+    using var responseStream = await http.GetStreamAsync("appconfig.json");
     var config = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(responseStream);
     var apiBaseUrl = config?["ApiBaseUrl"] ?? throw new Exception("ApiBaseUrl not found");
 

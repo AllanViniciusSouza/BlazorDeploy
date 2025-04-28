@@ -20,7 +20,7 @@ else
 
 <div class="d-flex align-items-end mt-2 ms-2 gap-2">
     <input type="text" id="entryComanda" class="form-control" style="max-width: 250px;" @bind="entryComanda" placeholder="Digite a comanda" />
-    <button class="btn btn-primary" @onclick="CreateComanda" disabled="@(!cart.Any())">Criar comanda</button>
+    <button class="btn btn-primary" @onclick="CreateComanda" disabled="@(!cart.Any() || isProcessing)">Criar comanda</button>
 </div>
 
 
@@ -109,8 +109,8 @@ else
     }
 
     <button class="btn btn-success"
-            @onclick="FinalizePurchase"
-            disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada) ||
+    @onclick="FinalizePurchase"
+    disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada) ||
                        (formaPagamentoSelecionada == "Dinheiro" && valorRecebido < cart.Sum(p => p.Preco)))">
         Finalizar Compra
     </button>
@@ -126,6 +126,7 @@ else
     private string formaPagamentoSelecionada = string.Empty;
     private bool isAuthenticated = false;
     private bool isLoading = true;
+    private bool isProcessing = false;
 
     private decimal valorRecebido;
     private decimal troco => valorRecebido - cart.Sum(p => p.Preco);
@@ -224,26 +225,46 @@ else
 
     private async Task CreateComanda()
     {
+        if (isProcessing)
+            return;
+        
         if (string.IsNullOrEmpty(entryComanda))
             return;
 
-        var (comandaExistente, erro) = await _apiService.GetComandaPorId(entryComanda);
-        if (comandaExistente != null)
+        isProcessing = true;
+
+        try
         {
-            // Comanda já existe, adicionar produtos do carrinho a ela
-            await AdicionarProdutosAComanda(comandaExistente.IdComanda, cart);
-            await AtualizarValorComanda(comandaExistente.IdComanda);
+            var (comandaExistente, erro) = await _apiService.GetComandaPorId(entryComanda);
+
+            if (comandaExistente != null)
+            {
+                // Comanda já existe, adicionar produtos do carrinho a ela
+                await AdicionarProdutosAComanda(comandaExistente.IdComanda, cart);
+            }
+            else
+            {
+                // Comanda não existe, criar uma nova
+                var sucesso = await CriarNovaComanda(entryComanda, cart);
+                if (sucesso)
+                {
+                    await AdicionarProdutosAComanda(entryComanda, cart);
+                }
+
+                await AtualizarValorComanda(entryComanda);
+            }
+            cart.Clear();
+            entryComanda = string.Empty;
+            StateHasChanged(); // Atualiza a UI
         }
-        else
+        catch (Exception ex)
         {
-            // Comanda não existe, criar uma nova
-            await CriarNovaComanda(entryComanda, cart);
-            await AdicionarProdutosAComanda(entryComanda, cart);
-            await AtualizarValorComanda(entryComanda);
+            Console.WriteLine($"Erro ao criar ou atualizar comanda: {ex.Message}");
         }
-        cart.Clear();
-        entryComanda = string.Empty;
-        StateHasChanged(); // Atualiza a UI
+        finally
+        {
+            isProcessing = false;
+        }
     }
 
     private async Task AdicionarProdutosAComanda(string idComanda, List<Produto> carrinho)
@@ -272,7 +293,7 @@ else
         }
     }
 
-    private async Task CriarNovaComanda(string IdComanda, List<Produto> carrinho)
+    private async Task<bool> CriarNovaComanda(string IdComanda, List<Produto> carrinho)
     {
         //criar uma comanda
         var novaComanda = new Comanda()
@@ -287,10 +308,12 @@ else
         if (responseComanda.Data != null)
         {
             // await ShowAlert("Comanda criada!");
+            return true;
         }
         else
         {
             await ShowAlert($"Falha ao criar comanda: {responseComanda.ErrorMessage}");
+            return false;
         }
     }
 

@@ -144,6 +144,14 @@ else
         bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja apagar a comanda?");
         if (confirmacao)
         {
+            var itensNaComanda = await GetItensComanda(idComanda);
+            if (itensNaComanda != null)
+            {
+                foreach (var item in itensNaComanda)
+                {
+                    await EntradaNoEstoque(item);
+                }
+            }
             bool sucesso = await _apiService.DeletarComanda(idComanda);
             if (sucesso)
             {
@@ -163,23 +171,8 @@ else
             await ShowAlert("Por favor, selecione uma forma de pagamento.");
             return;
         }
-
-        foreach (var item in comanda.Itens)
-        {
-            var movimentacao = new MovimentacaoEstoque()
-                {
-                    ProdutoId = item.Id,
-                    Tipo = TipoMovimentacao.Venda,
-                    Quantidade = item.Quantidade,
-                    DataMovimentacao = DateTime.Now
-                };
-            await _apiService.MovimentarEstoqueAsync(movimentacao);
-            item.IdComanda = comanda.IdComanda;
-            comanda.ValorRecebido = 0;
-        }
-
+        comanda.Status = "Finalizada";
         var sucesso = await _apiService.ConfirmarComanda(comanda);
-
 
         if (sucesso.Data)
         {
@@ -201,6 +194,7 @@ else
         itemComanda.Quantidade--;
         await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "diminuir", idComanda);
         AtualizaPrecoTotal(idComanda);
+        await SaidaDoEstoque(itemComanda);
         await Task.Delay(100);
         StateHasChanged(); // Atualiza a UI
     }
@@ -210,6 +204,7 @@ else
         itemComanda.Quantidade++;
         await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "aumentar", idComanda);
         AtualizaPrecoTotal(idComanda);
+        await SaidaDoEstoque(itemComanda);
         await Task.Delay(100);
         StateHasChanged(); // Atualiza a UI
     }
@@ -227,6 +222,7 @@ else
                 {
                     comanda.Itens.Remove(item);
                     await AtualizaPrecoTotal(idComanda);
+                    await EntradaNoEstoque(item);
                 }
             }
             else
@@ -250,6 +246,46 @@ else
         {
             comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
             await _apiService.AtualizarComanda(comanda);
+        }
+    }
+
+    private async Task EntradaNoEstoque(ComandaItem item)
+    {
+        var movimentacao = new MovimentacaoEstoque()
+            {
+                ProdutoId = item.ProdutoId,
+                Tipo = TipoMovimentacao.Compra,
+                Quantidade = item.Quantidade,
+                DataMovimentacao = DateTime.Now
+            };
+        var responseMovimetacao = await _apiService.MovimentarEstoqueAsync(movimentacao);
+        if (responseMovimetacao.Data)
+        {
+            // await ShowAlert("Item adicionado na comanda !");
+        }
+        else
+        {
+            await ShowAlert($"Falha ao movimentar estoque: {responseMovimetacao.ErrorMessage}");
+        }
+    }
+
+    private async Task SaidaDoEstoque(ComandaItem item)
+    {
+        var movimentacao = new MovimentacaoEstoque()
+            {
+                ProdutoId = item.ProdutoId,
+                Tipo = TipoMovimentacao.Venda,
+                Quantidade = item.Quantidade,
+                DataMovimentacao = DateTime.Now
+            };
+        var responseMovimetacao = await _apiService.MovimentarEstoqueAsync(movimentacao);
+        if (responseMovimetacao.Data)
+        {
+            // await ShowAlert("Item adicionado na comanda !");
+        }
+        else
+        {
+            await ShowAlert($"Falha ao movimentar estoque: {responseMovimetacao.ErrorMessage}");
         }
     }
 

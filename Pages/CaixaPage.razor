@@ -213,6 +213,7 @@ else
                     DataMovimentacao = DateTime.Now
                 };
             await _apiService.MovimentarEstoqueAsync(movimentacao);
+
         }
 
         await _apiService.ConfirmarPedido(pedido);
@@ -249,10 +250,9 @@ else
                 if (sucesso)
                 {
                     await AdicionarProdutosAComanda(entryComanda, cart);
-                }
-
-                await AtualizarValorComanda(entryComanda);
+                }               
             }
+            await AtualizarValorComanda(entryComanda);
             cart.Clear();
             entryComanda = string.Empty;
             StateHasChanged(); // Atualiza a UI
@@ -289,6 +289,22 @@ else
             else
             {
                 await ShowAlert($"Falha ao adicionar item: {responseAddItem.ErrorMessage}");
+            }
+            var movimentacao = new MovimentacaoEstoque()
+                {
+                    ProdutoId = produto.Id,
+                    Tipo = TipoMovimentacao.Venda,
+                    Quantidade = 1,
+                    DataMovimentacao = DateTime.Now
+                };
+            var responseMovimetacao = await _apiService.MovimentarEstoqueAsync(movimentacao);
+            if (responseMovimetacao.Data)
+            {
+                // await ShowAlert("Item adicionado na comanda !");
+            }
+            else
+            {
+                // await ShowAlert($"Falha ao movimentar estoque: {responseAddItem.ErrorMessage}");
             }
         }
     }

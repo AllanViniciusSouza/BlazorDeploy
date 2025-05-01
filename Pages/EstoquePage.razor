@@ -21,7 +21,10 @@ else
                 @* <th>Código de Barras</th> *@
                 <th>Nome</th>
                 <th>Quantidade</th>
-               @*  <th>Preço de Custo</th> *@
+                <th>Qtd Minima</th>
+                <th>Custo</th>
+                <th>Margem</th>
+                <th>Venda</th> 
             </tr>
         </thead>
         <tbody>
@@ -31,7 +34,20 @@ else
                     @* <td>@e.Produto.Barcode</td> *@
                     <td>@e.Produto.Nome</td>
                     <td>@e.Quantidade</td>
-                    @* <td>R$ @e.PrecoCusto.ToString("F2")</td> *@
+                    <td>
+                        <input type="number" class="form-control" style="width: 80px;"
+                               @bind="@e.QuantidadeMinima"
+                               @bind:event="oninput"
+                               @onchange="() => AtualizarEstoque(e)" />
+                    </td>
+                    <td>R$ @e.PrecoCusto?.ToString("F2")</td>
+                    <td>
+                        <input type="number" class="form-control" style="width: 80px;"
+                               @bind="@e.Margem"
+                               @bind:event="oninput"
+                               @onchange="() => AtualizarEstoque(e)" />
+                    </td>
+                    <td>R$ @CalcularPrecoVenda(e)?.ToString("F2")</td>
                 </tr>
             }
         </tbody>
@@ -51,5 +67,20 @@ else
     {
         var (response, errorMessage) = await _apiService.GetEstoque();
         estoques = response;
+    }
+
+    // Cálculo local, para refletir imediatamente na interface
+    private decimal? CalcularPrecoVenda(Estoque e)
+    {
+        if (e.PrecoCusto.HasValue && e.Margem.HasValue)
+            return e.PrecoCusto.Value + (e.PrecoCusto.Value * e.Margem.Value / 100);
+        return null;
+    }
+
+    // Você pode salvar no banco chamando sua API (opcional)
+    private async Task AtualizarEstoque(Estoque estoque)
+    {
+        estoque.PrecoVenda = CalcularPrecoVenda(estoque);
+        await _apiService.AtualizarEstoque(estoque); // Crie esse método na API se quiser persistir
     }
 }

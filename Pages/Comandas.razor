@@ -193,7 +193,7 @@ else
 
         itemComanda.Quantidade--;
         await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "diminuir", idComanda);
-        AtualizaPrecoTotal(idComanda);
+        await AtualizaPrecoTotal(idComanda);
         await SaidaDoEstoque(itemComanda);
         await Task.Delay(100);
         StateHasChanged(); // Atualiza a UI
@@ -203,7 +203,7 @@ else
     {
         itemComanda.Quantidade++;
         await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "aumentar", idComanda);
-        AtualizaPrecoTotal(idComanda);
+        await AtualizaPrecoTotal(idComanda);
         await SaidaDoEstoque(itemComanda);
         await Task.Delay(100);
         StateHasChanged(); // Atualiza a UI

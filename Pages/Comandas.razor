@@ -32,12 +32,21 @@ else
     <Accordion>
         @foreach (var comanda in ComandasFiltradas)
         {
-            <div class="mb-4 p-3 border rounded shadow-sm" style="background-color: #c0c0c0;">
+            <div class="mb-4 p-3 border rounded shadow-sm"
+                 style="background-color: @(comanda.DataAbertura.AddDays(7) < DateTime.Now
+                                ? "#dc3545"
+                                : comanda.ValorTotal > 100
+                                    ? "#f8d7da"
+                                    : "#c0c0c0");">
                 <AccordionItem>
                     <AccordionHeader>
                         <div class="w-100">
-                            <div class="fw-bold fs-5">Comanda <span class="text-decoration-underline">@comanda.IdComanda</span></div>
+                            <div class="w-100 d-flex justify-content-between align-items-center">
+                                <div class="fw-bold fs-5">Comanda <span class="text-decoration-underline">@comanda.IdComanda</span></div>
+                                <div class="text-muted">@comanda.DataAbertura.ToString("dd/MM/yyyy HH:mm")</div>
+                            </div>
                             <div class="fw-bold">Valor Total: R$ @comanda.ValorTotal</div>
+
                         </div>
                     </AccordionHeader>
 
@@ -131,12 +140,15 @@ else
 
         var (comandasAbertas, errorMessage) = await _apiService.GetComandas();
         if (comandasAbertas is null) return;
+
         foreach (var comanda in comandasAbertas)
         {
             comanda.Itens = await GetItensComanda(comanda.IdComanda);
-            await AtualizaPrecoTotal(comanda.IdComanda);
+            comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
+            await _apiService.AtualizarComanda(comanda);
         }
         ComandasAbertas = comandasAbertas;
+
     }
 
     private async Task DeletarComanda(string idComanda)

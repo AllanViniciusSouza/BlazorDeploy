@@ -206,7 +206,7 @@ else
         itemComanda.Quantidade--;
         await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "diminuir", idComanda);
         await AtualizaPrecoTotal(idComanda);
-        await SaidaDoEstoque(itemComanda);
+        await EntradaNoEstoque(itemComanda);
         await Task.Delay(100);
         StateHasChanged(); // Atualiza a UI
     }
@@ -267,7 +267,7 @@ else
             {
                 ProdutoId = item.ProdutoId,
                 Tipo = TipoMovimentacao.Compra,
-                Quantidade = item.Quantidade,
+                Quantidade = 1,
                 DataMovimentacao = DateTime.Now
             };
         var responseMovimetacao = await _apiService.MovimentarEstoqueAsync(movimentacao);
@@ -287,7 +287,7 @@ else
             {
                 ProdutoId = item.ProdutoId,
                 Tipo = TipoMovimentacao.Venda,
-                Quantidade = item.Quantidade,
+                Quantidade = 1,
                 DataMovimentacao = DateTime.Now
             };
         var responseMovimetacao = await _apiService.MovimentarEstoqueAsync(movimentacao);

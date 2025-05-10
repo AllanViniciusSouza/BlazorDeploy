@@ -19,7 +19,24 @@ else
 <h3 class="text-bg-primary text-center">Caixa Registradora</h3>
 
 <div class="d-flex align-items-end mt-2 ms-2 gap-2">
-    <input type="text" id="entryComanda" class="form-control" style="max-width: 250px;" @bind="entryComanda" placeholder="Digite a comanda" />
+    <input type="text" id="entryComanda" class="form-control"
+           style="max-width: 250px;"
+           @bind="entryComanda"
+           @oninput="BuscarSugestoesComanda"
+           placeholder="Digite a comanda" />
+
+    @if (sugestoesComanda.Any())
+    {
+        <ul class="list-group" style="max-width: 250px; position: absolute; z-index: 10;">
+            @foreach (var sugestao in sugestoesComanda)
+            {
+                <li class="list-group-item list-group-item-action"
+                    @onclick="@(() => SelecionarSugestaoComanda(sugestao.IdComanda))">
+                    @sugestao.IdComanda
+                </li>
+            }
+        </ul>
+    }
     <button class="btn btn-primary" @onclick="CreateComanda" disabled="@(!cart.Any() || isProcessing)">Criar comanda</button>
 </div>
 
@@ -127,6 +144,8 @@ else
     private bool isAuthenticated = false;
     private bool isLoading = true;
     private bool isProcessing = false;
+    private List<Comanda> todasComandasAbertas = new();
+    private List<Comanda> sugestoesComanda = new();
 
     private decimal valorRecebido;
     private decimal troco => valorRecebido - cart.Sum(p => p.Preco);
@@ -146,6 +165,35 @@ else
 
         var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos;
+    }
+
+    private async Task BuscarSugestoesComanda(ChangeEventArgs e)
+    {
+        entryComanda = e.Value.ToString();
+
+        if (string.IsNullOrWhiteSpace(entryComanda))
+        {
+            sugestoesComanda.Clear();
+            return;
+        }
+
+        // Se ainda não carregou todas as comandas abertas
+        if (!todasComandasAbertas.Any())
+        {
+            var (lista, erro) = await _apiService.GetComandas();
+            todasComandasAbertas = lista ?? new();
+        }
+
+        sugestoesComanda = todasComandasAbertas
+            .Where(c => c.IdComanda.Contains(entryComanda, StringComparison.OrdinalIgnoreCase))
+            .Take(5) // Limita sugestões
+            .ToList();
+    }
+
+    private void SelecionarSugestaoComanda(string idSelecionado)
+    {
+        entryComanda = idSelecionado;
+        sugestoesComanda.Clear();
     }
 
     private async Task SearchByNome(ChangeEventArgs e)

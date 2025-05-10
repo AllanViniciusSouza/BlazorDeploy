@@ -463,10 +463,10 @@ public class ApiService
         return await GetAsync<List<Pedido>>(endpoint);
     }
 
-    public async Task<(List<ComandasAbertas>?, string? ErrorMessage)> GetComandasAbertas()
+    public async Task<(List<Comanda>?, string? ErrorMessage)> GetComandasAbertas()
     {
         string endpoint = $"api/comandas/ComandasAbertas";
-        return await GetAsync<List<ComandasAbertas>>(endpoint);
+        return await GetAsync<List<Comanda>>(endpoint);
     }
 
     public async Task<(List<Comanda>?, string? ErrorMessage)> GetComandas()

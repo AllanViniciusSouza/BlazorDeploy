@@ -29,6 +29,10 @@ else
         <input type="text" @bind="searchTerm" @bind:event="oninput" placeholder="Buscar comanda pelo número..." class="form-control mb-4" />
     </div>
 
+    <div class="alert alert-primary text-center fw-bold fs-5">
+        Valor total das comandas abertas: R$ @ComandasAbertas.Sum(c => c.ValorTotal).ToString("N2")
+    </div>
+
     <Accordion>
         @foreach (var comanda in ComandasFiltradas)
         {
@@ -82,8 +86,8 @@ else
                                 <select id="formaPagamento" class="form-select" @bind="comanda.FormaPagamento">
                                     <option value="">Selecione uma forma de pagamento</option>
                                     <option value="Dinheiro">Dinheiro</option>
-                                    <option value="CartaoCredito">Cartão de Crédito</option>
-                                    <option value="CartaoDebito">Cartão de Débito</option>
+                                    <option value="Cartao Credito">Cartão de Crédito</option>
+                                    <option value="Cartao Debito">Cartão de Débito</option>
                                     <option value="Pix">Pix</option>
                                 </select>
                             </div>

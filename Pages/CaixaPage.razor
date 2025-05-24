@@ -18,27 +18,35 @@ else
 { *@
 <h3 class="text-bg-primary text-center">Caixa Registradora</h3>
 
-<div class="d-flex align-items-end mt-2 ms-2 gap-2">
-    <input type="text" id="entryComanda" class="form-control"
-           style="max-width: 250px;"
-           @bind="entryComanda"
-           @oninput="BuscarSugestoesComanda"
-           placeholder="Digite a comanda" />
+<div class="d-flex gap-2" style="max-width: 600px;">
+    <div style="position: relative; flex-grow: 1;">
+        <input type="text" id="entryComanda" class="form-control"
+               autocomplete="off"
+               @bind="entryComanda"
+               @oninput="BuscarSugestoesComanda"
+               placeholder="Digite a comanda" />
 
-    @if (sugestoesComanda.Any())
-    {
-        <ul class="list-group" style="max-width: 250px; position: absolute; z-index: 10;">
-            @foreach (var sugestao in sugestoesComanda)
-            {
-                <li class="list-group-item list-group-item-action"
-                    @onclick="@(() => SelecionarSugestaoComanda(sugestao.IdComanda))">
-                    @sugestao.IdComanda
-                </li>
-            }
-        </ul>
-    }
-    <button class="btn btn-primary" @onclick="CreateComanda" disabled="@(!cart.Any() || isProcessing)">Criar comanda</button>
+        @if (sugestoesComanda.Any())
+        {
+            <ul class="list-group"
+                style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10;">
+                @foreach (var sugestao in sugestoesComanda)
+                {
+                    <li class="list-group-item list-group-item-action"
+                        @onclick="@(() => SelecionarSugestaoComanda(sugestao.IdComanda))">
+                        @sugestao.IdComanda
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
+    <button class="btn btn-primary" @onclick="CreateComanda" disabled="@(!cart.Any() || isProcessing)">
+        Criar comanda
+    </button>
 </div>
+
+    
 
 
 <div class="row">
@@ -108,8 +116,8 @@ else
     <select class="form-select" @bind="formaPagamentoSelecionada">
         <option value="">Selecione a Forma de Pagamento</option>
         <option value="Dinheiro">Dinheiro</option>
-        <option value="Cartao de Credito">Cartão de Crédito</option>
-        <option value="Cartao de Debito">Cartão de Débito</option>
+        <option value="Credito">Crédito</option>
+        <option value="Debito">Débito</option>
         <option value="Pix">Pix</option>
     </select>
 

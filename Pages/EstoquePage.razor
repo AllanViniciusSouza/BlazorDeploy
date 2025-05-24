@@ -3,7 +3,10 @@
 
 <h3>Estoque</h3>
 
-<input @bind="termoPesquisa" @bind:event="oninput" placeholder="Pesquisar por nome ou código de barras" class="form-control mb-3" />
+<input @bind="_termoPesquisa"
+       @bind:event="oninput"
+       placeholder="Pesquisar por nome ou código de barras"
+       class="form-control mb-3" />
 
 @if (estoques is null)
 {
@@ -81,16 +84,23 @@ else
 
 @code {
     private List<Estoque> estoques = new();
-    private string termoPesquisa = "";
+    private string _termoPesquisa = "";
+  
     private List<Estoque> produtosAbaixoMinimo => estoques
     .Where(e => e.Quantidade < e.QuantidadeMinima)
     .ToList();
 
 
-    private List<Estoque> estoquesFiltrados => string.IsNullOrWhiteSpace(termoPesquisa)
-        ? estoques
-        : estoques.Where(e => e.Produto.Nome.Contains(termoPesquisa, StringComparison.OrdinalIgnoreCase) ||
-                              e.Produto.Barcode.Contains(termoPesquisa)).ToList();
+    private List<Estoque> estoquesFiltrados => string.IsNullOrWhiteSpace(_termoPesquisa)
+    ? estoques
+    : estoques.Where(e =>
+        e.Produto != null &&
+        (
+            (e.Produto.Nome?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (e.Produto.Barcode?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false)
+        )
+    ).ToList();
+
 
     protected override async Task OnInitializedAsync()
     {

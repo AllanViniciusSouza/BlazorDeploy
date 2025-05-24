@@ -106,11 +106,11 @@ else
         totalVendido = comandas.Sum(c => c.ValorTotal);
 
         totalDebito = comandas
-            .Where(c => c.FormaPagamento.Equals("Cartao de Debito", StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.FormaPagamento.Equals("Debito", StringComparison.OrdinalIgnoreCase))
             .Sum(c => c.ValorTotal);
 
         totalCredito = comandas
-            .Where(c => c.FormaPagamento.Equals("Cartao de Credito", StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.FormaPagamento.Equals("Credito", StringComparison.OrdinalIgnoreCase))
             .Sum(c => c.ValorTotal);
 
         totalPix = comandas

@@ -18,7 +18,7 @@ public class ApiService
 {
     private readonly HttpClient _httpClient;
     private readonly IJSRuntime _jsRuntime;
-    private readonly string _baseUrl = "https://n2v55gk9-7066.brs.devtunnels.ms/";
+    private readonly string _baseUrl = "https://hc4df66l-7066.brs.devtunnels.ms/";
     private readonly ILogger<ApiService> _logger;
 
     JsonSerializerOptions _serializerOptions;

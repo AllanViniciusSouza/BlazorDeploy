@@ -18,6 +18,30 @@ else if (estoques.Count == 0)
 }
 else
 {
+    @if (produtosAbaixoMinimo.Any())
+    {
+        <h4 class="mt-5 text-danger">Produtos abaixo da quantidade mínima</h4>
+        <table class="table table-bordered table-striped">
+            <thead class="table-danger">
+                <tr>
+                    <th>Nome</th>
+                    <th>Quantidade Atual</th>
+                    <th>Quantidade Mínima</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in produtosAbaixoMinimo)
+                {
+                    <tr>
+                        <td>@e.Produto.Nome</td>
+                        <td>@e.Quantidade</td>
+                        <td>@e.QuantidadeMinima</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
     <table class="table">
         <thead>
             <tr>
@@ -56,29 +80,7 @@ else
         </tbody>
     </table>
 
-    @if (produtosAbaixoMinimo.Any())
-    {
-        <h4 class="mt-5 text-danger">Produtos abaixo da quantidade mínima</h4>
-        <table class="table table-bordered table-striped">
-            <thead class="table-danger">
-                <tr>
-                    <th>Nome</th>
-                    <th>Quantidade Atual</th>
-                    <th>Quantidade Mínima</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var e in produtosAbaixoMinimo)
-                {
-                    <tr>
-                        <td>@e.Produto.Nome</td>
-                        <td>@e.Quantidade</td>
-                        <td>@e.QuantidadeMinima</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
+    
 
 }
 
@@ -86,6 +88,12 @@ else
     private List<Estoque> estoques = new();
     private string _termoPesquisa = "";
   
+    protected override async Task OnInitializedAsync()
+    {
+        var (response, errorMessage) = await _apiService.GetEstoque();
+        estoques = response;
+    }
+
     private List<Estoque> produtosAbaixoMinimo => estoques
     .Where(e => e.Quantidade < e.QuantidadeMinima)
     .ToList();
@@ -100,13 +108,7 @@ else
             (e.Produto.Barcode?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false)
         )
     ).ToList();
-
-
-    protected override async Task OnInitializedAsync()
-    {
-        var (response, errorMessage) = await _apiService.GetEstoque();
-        estoques = response;
-    }
+    
 
     // Cálculo local, para refletir imediatamente na interface
     private decimal? CalcularPrecoVenda(Estoque e)

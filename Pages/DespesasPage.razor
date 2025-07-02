@@ -1,0 +1,97 @@
+﻿@page "/despesas"
+@inject ApiService _apiService
+
+<h4 class="text-bg-primary text-center">Despesas</h4>
+
+<button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
+
+@if (exibirFormulario)
+{
+    <EditForm Model="novaDespesa" OnValidSubmit="SalvarDespesa">
+        <DataAnnotationsValidator/>
+        <div class="form-group">
+            <label for="dataselecionada">Data:</label>
+            <InputDate id="dataSelecionada" class="form-control" @bind-Value="novaDespesa.DataSelecionada" />
+            <ValidationMessage For="@(() => novaDespesa.DataSelecionada)" />
+        </div>
+        <div class="form-group">
+            <label for="Descricao">Descricao:</label>
+            <InputText id="descricao" class="form-control" @bind-Value="novaDespesa.Descricao" />
+            <ValidationMessage For="@(() => novaDespesa.Descricao)" />
+        </div>
+        <div class="form-group">
+            <label for="categoria">Categoria:</label>
+            <InputText id="categoria" class="form-control" @bind-Value="novaDespesa.Categoria" />
+            <ValidationMessage For="@(() => novaDespesa.Categoria)" />
+        </div>
+        <div class="form-group">
+            <label for="formapagamento">Forma Pagamento:</label>
+            <InputSelect id="formapagamento" class="form-control" @bind-Value="novaDespesa.FormaPagamento">
+                <option value="">Selecione a Forma de Pagamento</option>
+                <option value="Dinheiro">Dinheiro</option>
+                <option value="Credito">Crédito</option>
+                <option value="Debito">Débito</option>
+                <option value="Pix">Pix</option>
+            </InputSelect>
+            <ValidationMessage For="@(() => novaDespesa.FormaPagamento)" />
+        </div>
+         <div class="form-group">
+            <label for="valor">Valor:</label>
+            <InputNumber id="valor" class="form-control" @bind-Value="novaDespesa.Valor" />
+            <ValidationMessage For="@(() => novaDespesa.Valor)" />
+        </div>
+        <div class="form-group">
+            <label for="parcelas">Parcelas:</label>
+            <InputNumber id="parcelas" class="form-control" @bind-Value="novaDespesa.Parcelas" />
+            <ValidationMessage For="@(() => novaDespesa.Parcelas)" />
+        </div>
+        <div class="form-group">
+            <label for="observacao">Observação:</label>
+            <InputText id="observacao" class="form-control" @bind-Value="novaDespesa.Observação" />
+            <ValidationMessage For="@(() => novaDespesa.Observação)" />
+        </div>
+        <button type="submit" class="btn btn-success">Salvar</button>
+        <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
+    </EditForm>
+}
+@code {
+    private bool estaMarcado = false;
+    private Despesas novaDespesa = new Despesas();
+    private bool exibirFormulario = false;
+    private List<Despesas> filteredDespesas = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // isAuthenticated = await AuthService.IsAuthenticated();
+
+        // if (!isAuthenticated)
+        // {
+        //     Navigation.NavigateTo("/login", forceLoad: true);
+        // }
+
+        // isLoading = false;
+
+        var (todasDespesas, errorMessage) = await _apiService.GetDespesasAsync();
+        filteredDespesas = todasDespesas;
+    }
+
+    private void MostrarFormulario()
+    {
+        novaDespesa = new Despesas();
+        exibirFormulario = true;
+    }
+
+    private async Task SalvarDespesa()
+    {
+        // Adicionar o novo produto ao serviço ou API
+        await _apiService.AdicionarDespesaAsync(novaDespesa);
+        var (todasDespesas, errorMessage) = await _apiService.GetDespesasAsync();
+        filteredDespesas = todasDespesas;
+        exibirFormulario = false;
+    }
+
+    private void Cancelar()
+    {
+        exibirFormulario = false;
+    }
+}

@@ -963,5 +963,62 @@ public class ApiService
         }
     }
 
+    public async Task<ApiResponse<bool>> MandarMensagemAsync(WhatsappMessageDto dto)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(dto, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PostRequest("api/WhatsApp", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
+                return new ApiResponse<bool>
+                {
+                    ErrorMessage = $"Erro ao enviar requisição HTTP: {response.StatusCode}"
+                };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            return new ApiResponse<bool> { Data = false };
+        }
+    }
+
+    public async Task<ApiResponse<bool>> AdicionarDespesaAsync(Despesas despesa)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(despesa, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PostRequest("api/Despesas", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
+                return new ApiResponse<bool>
+                {
+                    ErrorMessage = $"Erro ao enviar requisição HTTP: {response.StatusCode}"
+                };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            return new ApiResponse<bool> { Data = false };
+        }
+    }
+
+    public async Task<(List<Despesas>?, string? ErrorMessage)> GetDespesasAsync()
+    {
+        string endpoint = $"api/despesas";
+        return await GetAsync<List<Despesas>>(endpoint);
+    }
 }
 

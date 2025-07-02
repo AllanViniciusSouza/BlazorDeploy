@@ -32,11 +32,11 @@ els *@
             <InputNumber id="preco" class="form-control" @bind-Value="novoProduto.Preco" />
             <ValidationMessage For="@(() => novoProduto.Preco)" />
         </div>
-       @*  <div class="form-group">
+        <div class="form-group">
             <label for="barcode">Barcode:</label>
             <InputText id="barcode" class="form-control" @bind-Value="novoProduto.Barcode" />
             <ValidationMessage For="@(() => novoProduto.Barcode)" />
-        </div> *@
+        </div>
         <button type="submit" class="btn btn-success">Salvar</button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
     </EditForm>
@@ -48,10 +48,10 @@ els *@
         <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
     </div>
 
-  @*   <div class="col-md-6">
+    <div class="col-md-6">
         <label for="searchBarcode" class="form-label fw-bold">Pesquisar por Código de Barras</label>
         <input type="text" id="searchBarcode" class="form-control" @bind="searchBarcode" @oninput="SearchByBarcode" placeholder="Digite o código de barras" />
-    </div> *@
+    </div>
 </div>
 
 <table class="table">
@@ -60,7 +60,7 @@ els *@
             <th>Imagem</th>
             <th>Nome</th>
             <th>Preço</th>
-            @* <th>Barcode</th> *@
+            <th>Barcode</th>
             @* <th>Ações</th> *@
         </tr>
     </thead>

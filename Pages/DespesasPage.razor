@@ -21,7 +21,13 @@
         </div>
         <div class="form-group">
             <label for="categoria">Categoria:</label>
-            <InputText id="categoria" class="form-control" @bind-Value="novaDespesa.Categoria" />
+            <InputSelect id="categoria" class="form-control" @bind-Value="novaDespesa.Categoria">
+            <option value="">Selecione a Categoria</option>
+                <option value="GastosFixos">Gastos Fixos</option>
+                <option value="Funcionario">Funcionário</option>
+                <option value="Mercadoria">Mercadoria</option>
+                <option value="Infraestrutura">Infraestrutura</option>
+            </InputSelect>
             <ValidationMessage For="@(() => novaDespesa.Categoria)" />
         </div>
         <div class="form-group">
@@ -83,8 +89,24 @@
 
     private async Task SalvarDespesa()
     {
-        // Adicionar o novo produto ao serviço ou API
-        await _apiService.AdicionarDespesaAsync(novaDespesa);
+        int totalParcelas = Math.Max(novaDespesa.Parcelas, 1); // Garante pelo menos 1
+
+        for (int i = 0; i < totalParcelas; i++)
+        {
+            var copia = new Despesas
+            {
+                DataSelecionada = novaDespesa.DataSelecionada.AddMonths(i),
+                Descricao = novaDespesa.Descricao + (totalParcelas > 1 ? $" (Parcela {i + 1}/{totalParcelas})" : ""),
+                Categoria = novaDespesa.Categoria,
+                FormaPagamento = novaDespesa.FormaPagamento,
+                Valor = novaDespesa.Valor / totalParcelas, // ou o valor total se não quiser dividir
+                Parcelas = totalParcelas,
+                Observação = novaDespesa.Observação
+            };
+
+            await _apiService.AdicionarDespesaAsync(copia);
+        }
+
         var (todasDespesas, errorMessage) = await _apiService.GetDespesasAsync();
         filteredDespesas = todasDespesas;
         exibirFormulario = false;

@@ -24,6 +24,7 @@ public class CarrinhoCompraItem
     }
 
     public int ProdutoId { get; set; }
+    public Produto Produto { get; set; }
     public string? ProdutoNome { get; set; }
     public string? UrlImagem { get; set; }
     public string? CaminhoImagem => AppConfig.BaseUrl + UrlImagem;

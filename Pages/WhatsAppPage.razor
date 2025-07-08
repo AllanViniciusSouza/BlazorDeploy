@@ -6,7 +6,7 @@
 
 <div>
     <label>Telefone:</label>
-    <input @bind="Phone" placeholder="Ex: 5511999999999" class="form-control" />
+    <input @bind="Phone" placeholder="Ex: 199987654321" class="form-control" />
 </div>
 
 <div class="mt-2">
@@ -36,9 +36,12 @@
         StatusMessage = "Enviando mensagem...";
         StatusCss = "alert-info";
 
+        // Garante que o número comece com "55"
+        string formattedPhone = Phone.StartsWith("55") ? Phone : "55" + Phone;
+
         var dto = new WhatsappMessageDto
         {
-            Phone = Phone,
+            Phone = formattedPhone,
             Message = Message,
             Session = "cozinha" // Pode ser configurável
         };

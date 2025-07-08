@@ -240,12 +240,12 @@ public class ApiService
         }
     }
 
-    public async Task<(bool Data, string? ErroMessage)> AtualizaQuantidadeItemComanda(int produtoId, string acao, string idComanda)
+    public async Task<(bool Data, string? ErroMessage)> AtualizaQuantidadeItemComanda(int produtoId, string acao, string nome)
     {
         try
         {
             var content = new StringContent(string.Empty, Encoding.UTF8, "application/json");
-            var response = await PutRequest($"api/ItensComanda?produtoId={produtoId}&acao={acao}&idComanda={idComanda}", content);
+            var response = await PutRequest($"api/ItensComanda?produtoId={produtoId}&acao={acao}&nome={nome}", content);
             if (response.IsSuccessStatusCode)
             {
                 return (true, null);
@@ -348,7 +348,7 @@ public class ApiService
         }
     }
 
-    public async Task<ApiResponse<bool>> AdicionaItemNaComanda(ComandaItem novoItem)
+    public async Task<ApiResponse<bool>> AdicionaItemNaComanda(ItemComanda novoItem)
     {
         try
         {
@@ -499,16 +499,22 @@ public class ApiService
         return await GetAsync<List<ComandaDetalhe>>(endpoint);
     }
 
-    public async Task<(Comanda?, string? ErrorMessage)> GetComandaPorId (string IdComanda)
+    public async Task<(Comanda?, string? ErrorMessage)> GetComandaPorId (int IdComanda)
     {
         string endpoint = $"api/Comandas/ComandaPorId/{IdComanda}";
         return await GetAsync<Comanda>(endpoint);
     }
 
-    public async Task<(List<ComandaItem>? ComandaItems, string? ErrorMessage)> GetItensComanda(string IdComanda)
+    public async Task<(Comanda?, string? ErrorMessage)> GetComandaPorNome(string Nome)
     {
-        string endpoint = $"api/ItensComanda/{IdComanda}";
-        return await GetAsync<List<ComandaItem>>(endpoint);
+        string endpoint = $"api/Comandas/ComandaPorNome/{Uri.EscapeDataString(Nome)}";
+        return await GetAsync<Comanda>(endpoint);
+    }
+
+    public async Task<(List<ItemComanda>? ComandaItems, string? ErrorMessage)> GetItensComanda(string nome)
+    {
+        string endpoint = $"api/ItensComanda/{nome}";
+        return await GetAsync<List<ItemComanda>>(endpoint);
     }
 
     public async Task<(List<Estoque>?, string? ErrorMessage)> GetEstoque()
@@ -593,7 +599,7 @@ public class ApiService
             var json = JsonSerializer.Serialize(comanda, _serializerOptions);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await PutRequest($"api/comandas/{comanda.IdComanda}", content);
+            var response = await PutRequest($"api/comandas/{comanda.Nome}", content);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -614,9 +620,9 @@ public class ApiService
         }
     }
 
-    public async Task<bool> DeletarComanda(string idComanda)
+    public async Task<bool> DeletarComanda(string nome)
     {
-        var response = await _httpClient.DeleteAsync($"api/comandas/{idComanda}");
+        var response = await _httpClient.DeleteAsync($"api/comandas/{nome}");
         return response.IsSuccessStatusCode;
     }
 
@@ -1019,6 +1025,38 @@ public class ApiService
     {
         string endpoint = $"api/despesas";
         return await GetAsync<List<Despesas>>(endpoint);
+    }
+
+    public async Task<(List<ProdutoCardapio>?, string? ErrorMessage)> GetProdutosCardapio()
+    {
+        string endpoint = $"api/Produtos/GetTodosProdutos";
+        return await GetAsync<List<ProdutoCardapio>>(endpoint);
+    }
+
+    public async Task<ApiResponse<bool>> OrdemCompra(List<CarrinhoCompraItem> pedido)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(pedido, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PostRequest("api/ordemcompra", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
+                return new ApiResponse<bool>
+                {
+                    ErrorMessage = $"Erro ao enviar requisição HTTP: {response.StatusCode}"
+                };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            return new ApiResponse<bool> { Data = false };
+        }
     }
 }
 

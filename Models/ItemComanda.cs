@@ -1,13 +1,15 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 
 namespace BlazorDeploy.Models;
 
-public class ComandaItem : INotifyPropertyChanged
+public class ItemComanda : INotifyPropertyChanged
 {
     public int Id { get; set; }
-    public string IdComanda { get; set; }
+    public string Nome { get; set; }
     public decimal PrecoUnitario { get; set; }
+    [JsonIgnore]
     public decimal ValorTotal => PrecoUnitario * Quantidade;
     private int quantidade;
 
@@ -25,7 +27,7 @@ public class ComandaItem : INotifyPropertyChanged
     }
 
     public int ProdutoId { get; set; }
-    public string? ProdutoNome { get; set; }
+    public string? NomeProduto { get; set; }
     public string? UrlImagem { get; set; }
     public string? CaminhoImagem => AppConfig.BaseUrl + UrlImagem;
 

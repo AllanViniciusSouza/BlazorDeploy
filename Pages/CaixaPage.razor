@@ -26,6 +26,11 @@ else
                @oninput="BuscarSugestoesComanda"
                placeholder="Digite a comanda" />
 
+        <input type="text" id="entryTelefone" class="form-control"
+               autocomplete="off"
+               @bind="entryTelefone"
+               placeholder="Digiteo telefone ex: 19987654321" />
+
         @if (sugestoesComanda.Any())
         {
             <ul class="list-group"
@@ -33,8 +38,8 @@ else
                 @foreach (var sugestao in sugestoesComanda)
                 {
                     <li class="list-group-item list-group-item-action"
-                        @onclick="@(() => SelecionarSugestaoComanda(sugestao.IdComanda))">
-                        @sugestao.IdComanda
+                        @onclick="@(() => SelecionarSugestaoComanda(sugestao.Nome))">
+                        @sugestao.Nome
                     </li>
                 }
             </ul>
@@ -55,10 +60,10 @@ else
         <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
     </div>
 
-    @*  <div class="col-md-6">
+     <div class="col-md-6">
         <label for="searchBarcode" class="form-label fw-bold">Pesquisar por Código de Barras</label>
         <input type="text" id="searchBarcode" class="form-control" @bind="searchBarcode" @oninput="SearchByBarcode" placeholder="Digite o código de barras" />
-    </div> *@
+    </div>
 </div>
 
 <h4 class="fw-bold mt-3">Produtos Disponíveis</h4>
@@ -148,6 +153,7 @@ else
     private string entryComanda = string.Empty;
     private List<Produto> filteredProdutos = new();
     private List<Produto> cart = new();
+    private List<ItemComanda> itensComanda = new();
     private int idcomanda;
     private string formaPagamentoSelecionada = string.Empty;
     private bool isAuthenticated = false;
@@ -155,6 +161,7 @@ else
     private bool isProcessing = false;
     private List<Comanda> todasComandasAbertas = new();
     private List<Comanda> sugestoesComanda = new();
+    private string entryTelefone;
 
     private decimal valorRecebido;
     private decimal troco => valorRecebido - cart.Sum(p => p.Preco);
@@ -194,7 +201,7 @@ else
         }
 
         sugestoesComanda = todasComandasAbertas
-            .Where(c => c.IdComanda.Contains(entryComanda, StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.Nome.Contains(entryComanda, StringComparison.OrdinalIgnoreCase))
             .Take(5) // Limita sugestões
             .ToList();
     }
@@ -293,25 +300,28 @@ else
 
         try
         {
-            var (comandaExistente, erro) = await _apiService.GetComandaPorId(entryComanda);
+            var (comandaExistente, erro) = await _apiService.GetComandaPorNome(entryComanda);
 
             if (comandaExistente != null)
             {
                 // Comanda já existe, adicionar produtos do carrinho a ela
-                await AdicionarProdutosAComanda(comandaExistente.IdComanda, cart);
+                await AdicionarProdutosAComanda(comandaExistente.Nome, cart);
+                await AtualizarValorComanda(comandaExistente.Nome);
             }
             else
             {
                 // Comanda não existe, criar uma nova
-                var sucesso = await CriarNovaComanda(entryComanda, cart);
-                if (sucesso)
+                var comandaId = await CriarNovaComanda(entryComanda, itensComanda);
+                if (!(comandaId == 0))
                 {
                     await AdicionarProdutosAComanda(entryComanda, cart);
+                    await AtualizarValorComanda(entryComanda);
                 }               
             }
-            await AtualizarValorComanda(entryComanda);
             cart.Clear();
+            itensComanda.Clear();
             entryComanda = string.Empty;
+            entryTelefone = string.Empty;
             StateHasChanged(); // Atualiza a UI
         }
         catch (Exception ex)
@@ -324,19 +334,19 @@ else
         }
     }
 
-    private async Task AdicionarProdutosAComanda(string idComanda, List<Produto> carrinho)
+    private async Task AdicionarProdutosAComanda(string nome, List<Produto> carrinho)
     {
         //adicionar os itens na comanda
         foreach (var produto in carrinho)
         {
-            var itemComanda = new ComandaItem
+            var itemComanda = new ItemComanda
                 {
+                    Nome = nome,
                     PrecoUnitario = produto.Preco,
                     Quantidade = 1,
                     ProdutoId = produto.Id,
-                    ProdutoNome = produto.Nome,
-                    UrlImagem = produto.UrlImagem,
-                    IdComanda = idComanda
+                    NomeProduto = produto.Nome,
+                    UrlImagem = produto.UrlImagem
                 };
             var responseAddItem = await _apiService.AdicionaItemNaComanda(itemComanda);
             if (responseAddItem.Data)
@@ -366,36 +376,36 @@ else
         }
     }
 
-    private async Task<bool> CriarNovaComanda(string IdComanda, List<Produto> carrinho)
+    private async Task<int> CriarNovaComanda(string nome, List<ItemComanda> carrinho)
     {
         //criar uma comanda
         var novaComanda = new Comanda()
             {
                 DataAbertura = DateTime.Now,
-                IdComanda = IdComanda,
-                Status = "Aberta",
-                ValorTotal = carrinho.Sum(p => p.Preco)
+                Nome = nome,
+                ValorTotal = carrinho.Sum(p => p.PrecoUnitario),
+                Itens = carrinho
             };
 
         var responseComanda = await _apiService.CriarComanda(novaComanda);
         if (responseComanda.Data != null)
         {
             // await ShowAlert("Comanda criada!");
-            return true;
+            return responseComanda.Data.Id;
         }
         else
         {
             await ShowAlert($"Falha ao criar comanda: {responseComanda.ErrorMessage}");
-            return false;
+            return 0;
         }
     }
 
-    private async Task AtualizarValorComanda(string idComanda)
+    private async Task AtualizarValorComanda(string nome)
     {
-        var (itensComanda, errorMessage) = await _apiService.GetItensComanda(idComanda);
+        var (itensComanda, errorMessage) = await _apiService.GetItensComanda(nome);
 
         //atualizar o valor da comanda
-        var (comanda, errorMessageComanda) = await _apiService.GetComandaPorId(idComanda);
+        var (comanda, errorMessageComanda) = await _apiService.GetComandaPorNome(nome);
 
         comanda.ValorTotal = itensComanda.Sum(p => p.Quantidade * p.PrecoUnitario);
 

@@ -1,9 +1,18 @@
 ﻿@page "/send-message"
 @inject ApiService _apiService
+@inject AuthService AuthService
 @inject IJSRuntime JS
 
 <h3>Enviar Mensagem</h3>
 
+@if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
 <div>
     <label>Telefone:</label>
     <input @bind="Phone" placeholder="Ex: 199987654321" class="form-control" />
@@ -22,13 +31,16 @@
 {
     <div class="mt-2 alert @StatusCss">@StatusMessage</div>
 }
-
+}
 @code {
     private string Phone = "";
     private string Message = "";
     private string StatusMessage = "";
     private string StatusCss = "";
     private bool IsSending = false;
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private bool isAuthenticated = false;
 
     private async Task SendMessage()
     {

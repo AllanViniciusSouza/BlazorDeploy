@@ -1,8 +1,17 @@
 ﻿@page "/estoque"
 @inject ApiService _apiService
+@inject AuthService AuthService
 
 <h3>Estoque</h3>
 
+@if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
 <input @bind="_termoPesquisa"
        @bind:event="oninput"
        placeholder="Pesquisar por nome ou código de barras"
@@ -80,14 +89,17 @@ else
         </tbody>
     </table>
 
-    
+}
 
 }
 
 @code {
     private List<Estoque> estoques = new();
     private string _termoPesquisa = "";
-  
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private bool isAuthenticated = false;
+
     protected override async Task OnInitializedAsync()
     {
         var (response, errorMessage) = await _apiService.GetEstoque();

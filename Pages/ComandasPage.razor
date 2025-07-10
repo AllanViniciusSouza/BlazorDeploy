@@ -1,5 +1,5 @@
 ﻿@page "/comandas"
-
+@inject AuthService AuthService
 @inject ApiService _apiService
 @inject IJSRuntime JS
 
@@ -7,7 +7,7 @@
 
 <PageTitle>Comandas</PageTitle>
 
-@* @if (isLoading)
+@if (isLoading)
 {
     <p>Verificando autenticação...</p>
 }
@@ -15,8 +15,6 @@ else if (!isAuthenticated)
 {
     <p>Redirecionando para o login...</p>
 }
-else
-{ *@
 @if (!ComandasAbertas.Any())
 {
     <p>Nenhuma comanda encontrada</p>
@@ -120,7 +118,7 @@ else
         }
     </Accordion>
 }
-
+}
 
 @code {
     private List<Comanda> ComandasAbertas = new List<Comanda>();

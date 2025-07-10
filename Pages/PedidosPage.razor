@@ -1,12 +1,12 @@
 ﻿@page "/pedidos"
 @inject ApiService _apiService
-@* @inject AuthService AuthService *@
+@inject AuthService AuthService
 @inject NavigationManager Navigation
 @using System.Globalization
 
 <PageTitle>Pedidos</PageTitle>
 
-@* @if (isLoading)
+@if (isLoading)
 {
     <p>Verificando autenticação...</p>
 }
@@ -14,8 +14,6 @@ else if (!isAuthenticated)
 {
     <p>Redirecionando para o login...</p>
 }
-else
-{ *@
     <h2 class="mb-4">Pedidos de hoje</h2>
 
 <div class="d-flex align-items-center mb-3">
@@ -62,7 +60,7 @@ else
 
         <h3 class="mt-4">Total Vendido Hoje: R$ @totalVendido.ToString("F2")</h3>
     }
-
+    }
 
 @code {
     private List<Pedido> pedidosHoje = new();
@@ -72,6 +70,9 @@ else
     private decimal totalCredito = 0;
     private decimal totalPix = 0;
     private decimal totalDinheiro = 0;
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private bool isAuthenticated = false;
 
     private DateTime dataSelecionada = DateTime.Today;
 

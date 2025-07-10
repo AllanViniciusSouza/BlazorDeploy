@@ -1,8 +1,17 @@
 ﻿@page "/despesas"
 @inject ApiService _apiService
+@inject AuthService AuthService
 
 <h4 class="text-bg-primary text-center">Despesas</h4>
 
+@if (isLoading)
+{
+    <p>Verificando autenticação...</p>
+}
+else if (!isAuthenticated)
+{
+    <p>Redirecionando para o login...</p>
+}
 <button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Nova Despesa</button>
 
 @if (exibirFormulario)
@@ -60,11 +69,16 @@
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
     </EditForm>
 }
+}
+
 @code {
     private bool estaMarcado = false;
     private Despesas novaDespesa = new Despesas();
     private bool exibirFormulario = false;
     private List<Despesas> filteredDespesas = new();
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private bool isAuthenticated = false;
 
     protected override async Task OnInitializedAsync()
     {

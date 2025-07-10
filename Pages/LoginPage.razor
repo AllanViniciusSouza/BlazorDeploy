@@ -1,5 +1,6 @@
 ﻿@page "/login"
 @inject ApiService ApiService
+@inject AuthService AuthService
 
 @inject NavigationManager Navigation
 
@@ -33,13 +34,13 @@ else
     private string password = "";
     private string errorMessage = "";
 
-    // protected override async Task OnInitializedAsync()
-    // {
-    //     if (await AuthService.IsAuthenticated())
-    //     {
-    //         Navigation.NavigateTo("/caixa");
-    //     }
-    // }
+    protected override async Task OnInitializedAsync()
+    {
+        if (await AuthService.IsAuthenticatedAsync())
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
 
     private async Task PerformLogin()
     {
@@ -50,14 +51,14 @@ else
 
         if (!response.HasError && response.Data)
         {
-            // if (await AuthService.IsAuthenticated())
-            // {
-            //     Navigation.NavigateTo("/caixa");
-            // }
-            // else
-            // {
-            //     errorMessage = "Erro ao armazenar token.";
-            // }
+            if (await AuthService.IsAuthenticatedAsync())
+            {
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                errorMessage = "Erro ao armazenar token.";
+            }
         }
         else
         {

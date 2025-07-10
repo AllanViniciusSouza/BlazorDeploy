@@ -21,6 +21,9 @@ try
 
     // Registra HttpClient com URL da API
     builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
+
+    
+
 }
 catch (Exception ex)
 {
@@ -33,7 +36,7 @@ builder.Services.AddScoped<LocalStorageService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ApiService>();
 builder.Services.AddSingleton<IValidator, Validator>();
-
+builder.Services.AddScoped<AuthService>();
 builder.Services.AddBlazoredLocalStorage();
 
 

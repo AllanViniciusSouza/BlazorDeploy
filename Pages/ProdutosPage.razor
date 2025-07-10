@@ -23,6 +23,22 @@
             <InputNumber id="preco" class="form-control" @bind-Value="novoProduto.Preco" />
             <ValidationMessage For="@(() => novoProduto.Preco)" />
         </div>
+        <div class="form-group form-check">
+            <InputCheckbox id="popular" class="form-check-input" @bind-Value="novoProduto.Popular" />
+            <label class="form-check-label" for="popular">Popular</label>
+        </div>
+
+        <div class="form-group">
+            <label for="categoria">Categoria:</label>
+            <InputSelect id="categoria" class="form-control" @bind-Value="novoProduto.CategoriaId">
+                <option value="">Selecione...</option>
+                @foreach (var cat in categorias)
+                {
+                    <option value="@cat.Id">@cat.Nome</option>
+                }
+            </InputSelect>
+        </div>
+
         <div class="form-group">
             <label for="barcode">Barcode:</label>
             <InputText id="barcode" class="form-control" @bind-Value="novoProduto.Barcode" />
@@ -52,6 +68,9 @@
             <th>Nome</th>
             <th>Preço</th>
             <th>Barcode</th>
+            <th>Popular</th>
+            <th>Categoria</th>
+
             @* <th>Ações</th> *@
         </tr>
     </thead>
@@ -82,6 +101,40 @@
                         @produto.Preco.ToString("C2")
                     }
                 </td>
+                <td>
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                        <InputCheckbox @bind-Value="produto.Popular" class="form-check-input" />
+                    }
+                    else
+                    {
+                        @if (produto.Popular)
+                        {
+                            <span class="badge bg-success">Sim</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Não</span>
+                        }
+                    }
+                </td>
+
+                <td>
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                        <InputSelect class="form-control" @bind-Value="produto.CategoriaId">
+                            @foreach (var cat in categorias)
+                            {
+                                <option value="@cat.Id">@cat.Nome</option>
+                            }
+                        </InputSelect>
+                    }
+                    else
+                    {
+                        @categorias.FirstOrDefault(c => c.Id == produto.CategoriaId)?.Nome
+                    }
+                </td>
+
                 <td>
                     @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
                     {
@@ -118,18 +171,24 @@
     private Produto novoProduto = new Produto();
     private bool exibirFormulario = false;
     private Dictionary<int, bool> editandoProdutos = new();
+    private List<Categoria> categorias = new();
+
 
     protected override async Task OnInitializedAsync()
     {
-        // var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 
-        // if (string.IsNullOrEmpty(nome))
-        // {
-        //     Navigation.NavigateTo("/login");
-        // }
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("login");
+        }
 
         var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos;
+
+        var (todasCategorias, erroCategorias) = await _apiService.GetCategorias(); // ou seu método real
+        categorias = todasCategorias;
+
     }
 
     private void MostrarFormulario()

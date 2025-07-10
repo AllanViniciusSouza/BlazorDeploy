@@ -37,12 +37,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 
-        // if (string.IsNullOrEmpty(nome))
-        // {
-        //     Navigation.NavigateTo("/login");
-        // }
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("login");
+        }
     }
     private async Task SendMessage()
     {

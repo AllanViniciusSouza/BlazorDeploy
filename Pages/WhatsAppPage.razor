@@ -2,17 +2,10 @@
 @inject ApiService _apiService
 @inject AuthService AuthService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <h3>Enviar Mensagem</h3>
 
-@if (isLoading)
-{
-    <p>Verificando autenticação...</p>
-}
-else if (!isAuthenticated)
-{
-    <p>Redirecionando para o login...</p>
-}
 <div>
     <label>Telefone:</label>
     <input @bind="Phone" placeholder="Ex: 199987654321" class="form-control" />
@@ -42,6 +35,15 @@ else if (!isAuthenticated)
     private bool isProcessing = false;
     private bool isAuthenticated = false;
 
+    protected override async Task OnInitializedAsync()
+    {
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
     private async Task SendMessage()
     {
         IsSending = true;

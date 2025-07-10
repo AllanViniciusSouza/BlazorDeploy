@@ -7,14 +7,6 @@
 
 <PageTitle>Comandas</PageTitle>
 
-@if (isLoading)
-{
-    <p>Verificando autenticação...</p>
-}
-else if (!isAuthenticated)
-{
-    <p>Redirecionando para o login...</p>
-}
 @if (!ComandasAbertas.Any())
 {
     <p>Nenhuma comanda encontrada</p>
@@ -126,19 +118,15 @@ else
         .Where(c => string.IsNullOrEmpty(searchTerm) || c.Nome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
         .ToList();
     private string searchTerm = "";
-    private bool isAuthenticated = false;
-    private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
-        // isAuthenticated = await AuthService.IsAuthenticated();
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 
-        // if (!isAuthenticated)
-        // {
-        //     Navigation.NavigateTo("/login", forceLoad: true);
-        // }
-
-        // isLoading = false;
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("/login");
+        }
 
         var (comandasAbertas, errorMessage) = await _apiService.GetComandas();
         if (comandasAbertas is null) return;

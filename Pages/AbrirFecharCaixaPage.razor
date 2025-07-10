@@ -1,17 +1,10 @@
 ﻿@page "/abrirfecharcaixa"
 @inject ApiService _apiService
-@inject AuthService AuthService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <h3>Gerenciar Caixa</h3>
 
-@if (isLoading)
-{
-    <p>Verificando autenticação...</p>
-}
-else if (!isAuthenticated)
-{
-    <p>Redirecionando para o login...</p>
-}
 @if (carregando)
 {
     <p>Carregando status do caixa...</p>
@@ -93,7 +86,7 @@ else
         </tbody>
     </table>
 }
-}
+
 
 @code {
     private AbrirCaixaDto abrirDto = new();
@@ -102,12 +95,15 @@ else
     private List<Caixa> caixas = new();
     private string mensagem;
     private bool carregando = true;
-    private bool isLoading = true;
-    private bool isProcessing = false;
-    private bool isAuthenticated = false;
 
     protected override async Task OnInitializedAsync()
     {
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("/login");
+        }
         await CarregarStatusCaixa();
     }
 

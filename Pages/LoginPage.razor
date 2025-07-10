@@ -1,70 +1,39 @@
 ﻿@page "/login"
-@inject ApiService ApiService
-@inject AuthService AuthService
-
+@inject ApiService _apiService
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <h3>Login</h3>
 
-@if (isLoading)
+<EditForm Model="loginModel" OnValidSubmit="HandleLogin">
+    <InputText @bind-Value="loginModel.Email" placeholder="Email" class="form-control mb-2" />
+    <InputText @bind-Value="loginModel.Senha" type="password" placeholder="Senha" class="form-control mb-2" />
+    <button class="btn btn-primary">Entrar</button>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(mensagemErro))
 {
-    <p>Carregando...</p>
-}
-else
-{
-    <div>
-        <label>Email:</label>
-        <input @bind="email" type="text" />
-
-        <label>Senha:</label>
-        <input @bind="password" type="password" />
-
-        <button @onclick="PerformLogin">Entrar</button>
-
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <p style="color: red;">@errorMessage</p>
-        }
-    </div>
+    <p class="text-danger">@mensagemErro</p>
 }
 
 @code {
-    private bool isLoading = false;
-    private string email = "";
-    private string password = "";
-    private string errorMessage = "";
+    private Login loginModel = new();
+    private string mensagemErro;
 
-    protected override async Task OnInitializedAsync()
+    private async Task HandleLogin()
     {
-        if (await AuthService.IsAuthenticatedAsync())
-        {
-            Navigation.NavigateTo("/");
-        }
-    }
+        var usuario = await _apiService.Login(loginModel.Email, loginModel.Senha);
 
-    private async Task PerformLogin()
-    {
-        isLoading = true;
-        errorMessage = "";
-
-        var response = await ApiService.Login(email, password);
-
-        if (!response.HasError && response.Data)
-        {
-            if (await AuthService.IsAuthenticatedAsync())
+            if (usuario.Data != null)
             {
+                await JS.InvokeVoidAsync("sessionStorage.setItem", "Email", loginModel.Email); // ou outro campo
                 Navigation.NavigateTo("/");
             }
-            else
-            {
-                errorMessage = "Erro ao armazenar token.";
-            }
-        }
+
+        
         else
         {
-            errorMessage = "Email ou senha incorretos.";
+            mensagemErro = "Usuário ou senha inválidos.";
         }
-
-        isLoading = false;
     }
 }

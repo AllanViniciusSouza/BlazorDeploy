@@ -3,18 +3,9 @@
 @inject AuthService AuthService
 @inject NavigationManager Navigation
 @using System.Globalization
+@inject IJSRuntime JS
 
 <PageTitle>Pedidos</PageTitle>
-
-@if (isLoading)
-{
-    <p>Verificando autenticação...</p>
-}
-else if (!isAuthenticated)
-{
-    <p>Redirecionando para o login...</p>
-}
-    <h2 class="mb-4">Pedidos de hoje</h2>
 
 <div class="d-flex align-items-center mb-3">
     <label class="me-2 fw-bold">Selecionar Data:</label>
@@ -70,25 +61,17 @@ else if (!isAuthenticated)
     private decimal totalCredito = 0;
     private decimal totalPix = 0;
     private decimal totalDinheiro = 0;
-    private bool isLoading = true;
-    private bool isProcessing = false;
-    private bool isAuthenticated = false;
 
     private DateTime dataSelecionada = DateTime.Today;
 
-    // private bool isAuthenticated = false;
-    // private bool isLoading = true;
-
     protected override async Task OnInitializedAsync()
     {
-        // isAuthenticated = await AuthService.IsAuthenticated();
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 
-        // if (!isAuthenticated)
-        // {
-        //     Navigation.NavigateTo("/login", forceLoad: true);
-        // }
-
-        // isLoading = false;
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("/login");
+        }
 
         await BuscarPedidosPorData();
     }

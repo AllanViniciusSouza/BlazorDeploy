@@ -1,17 +1,11 @@
 ﻿@page "/despesas"
 @inject ApiService _apiService
 @inject AuthService AuthService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <h4 class="text-bg-primary text-center">Despesas</h4>
 
-@if (isLoading)
-{
-    <p>Verificando autenticação...</p>
-}
-else if (!isAuthenticated)
-{
-    <p>Redirecionando para o login...</p>
-}
 <button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Nova Despesa</button>
 
 @if (exibirFormulario)
@@ -76,20 +70,15 @@ else if (!isAuthenticated)
     private Despesas novaDespesa = new Despesas();
     private bool exibirFormulario = false;
     private List<Despesas> filteredDespesas = new();
-    private bool isLoading = true;
-    private bool isProcessing = false;
-    private bool isAuthenticated = false;
 
     protected override async Task OnInitializedAsync()
     {
-        // isAuthenticated = await AuthService.IsAuthenticated();
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 
-        // if (!isAuthenticated)
-        // {
-        //     Navigation.NavigateTo("/login", forceLoad: true);
-        // }
-
-        // isLoading = false;
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("/login");
+        }
 
         var (todasDespesas, errorMessage) = await _apiService.GetDespesasAsync();
         filteredDespesas = todasDespesas;

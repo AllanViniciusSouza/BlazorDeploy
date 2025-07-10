@@ -7,15 +7,6 @@
 
 <PageTitle>Lista de Produtos</PageTitle>
 
-@if (isLoading)
-{
-    <p>Verificando autenticação...</p>
-}
-else if (!isAuthenticated)
-{
-    <p>Redirecionando para o login...</p>
-}
-
 <button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
 
 @if (exibirFormulario)
@@ -127,19 +118,15 @@ else if (!isAuthenticated)
     private Produto novoProduto = new Produto();
     private bool exibirFormulario = false;
     private Dictionary<int, bool> editandoProdutos = new();
-    private bool isAuthenticated = false;
-    private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
-        // isAuthenticated = await AuthService.IsAuthenticated();
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 
-        // if (!isAuthenticated)
-        // {
-        //     Navigation.NavigateTo("/login", forceLoad: true);
-        // }
-
-        // isLoading = false;
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("/login");
+        }
 
         var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos;

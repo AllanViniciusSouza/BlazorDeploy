@@ -1,17 +1,11 @@
 ﻿@page "/estoque"
 @inject ApiService _apiService
 @inject AuthService AuthService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <h3>Estoque</h3>
 
-@if (isLoading)
-{
-    <p>Verificando autenticação...</p>
-}
-else if (!isAuthenticated)
-{
-    <p>Redirecionando para o login...</p>
-}
 <input @bind="_termoPesquisa"
        @bind:event="oninput"
        placeholder="Pesquisar por nome ou código de barras"
@@ -98,10 +92,15 @@ else
     private string _termoPesquisa = "";
     private bool isLoading = true;
     private bool isProcessing = false;
-    private bool isAuthenticated = false;
 
     protected override async Task OnInitializedAsync()
     {
+        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+
+        if (string.IsNullOrEmpty(nome))
+        {
+            Navigation.NavigateTo("/login");
+        }
         var (response, errorMessage) = await _apiService.GetEstoque();
         estoques = response;
     }

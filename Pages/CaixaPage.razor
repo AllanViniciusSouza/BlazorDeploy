@@ -24,12 +24,17 @@ else
                autocomplete="off"
                @bind="entryComanda"
                @oninput="BuscarSugestoesComanda"
-               placeholder="Digite a comanda" />
+               placeholder="Digite o nome" />
 
         <input type="text" id="entryTelefone" class="form-control"
                autocomplete="off"
                @bind="entryTelefone"
                placeholder="Digiteo telefone ex: 19987654321" />
+
+        <input type="text" id="entryEndereco" class="form-control"
+               autocomplete="off"
+               @bind="entryEndereco"
+               placeholder="Digite o Endereço" />
 
         @if (sugestoesComanda.Any())
         {
@@ -46,9 +51,18 @@ else
         }
     </div>
 
-    <button class="btn btn-primary" @onclick="CreateComanda" disabled="@(!cart.Any() || isProcessing)">
+    <button class="btn btn-primary" @onclick="CreateComanda"
+            disabled="@(!cart.Any() || isProcessing || string.IsNullOrEmpty(entryComanda) || string.IsNullOrEmpty(entryTelefone))">
         Criar comanda
     </button>
+
+    <div class="form-check align-self-center">
+        <input class="form-check-input" type="checkbox" id="chkImprimirCozinha" @bind="imprimirNaCozinha">
+        <label class="form-check-label" for="chkImprimirCozinha">
+            Imprimir na cozinha
+        </label>
+    </div>
+
 </div>
 
     
@@ -162,6 +176,9 @@ else
     private List<Comanda> todasComandasAbertas = new();
     private List<Comanda> sugestoesComanda = new();
     private string entryTelefone;
+    private string entryEndereco;
+    private bool imprimirNaCozinha = false;
+
 
     private decimal valorRecebido;
     private decimal troco => valorRecebido - cart.Sum(p => p.Preco);
@@ -292,7 +309,7 @@ else
     {
         if (isProcessing)
             return;
-        
+
         if (string.IsNullOrEmpty(entryComanda))
             return;
 
@@ -378,14 +395,32 @@ else
 
     private async Task<int> CriarNovaComanda(string nome, List<ItemComanda> carrinho)
     {
-        //criar uma comanda
-        var novaComanda = new Comanda()
+        var dto = carrinho.Select(i => new ItemComandaDTO
             {
-                DataAbertura = DateTime.Now,
-                Nome = nome,
-                ValorTotal = carrinho.Sum(p => p.PrecoUnitario),
-                Itens = carrinho
-            };
+                Id = i.Id,
+                Nome = i.Nome,
+                ProdutoId = i.ProdutoId,
+                NomeProduto = i.NomeProduto,
+                Quantidade = i.Quantidade,
+                PrecoUnitario = i.PrecoUnitario
+            }).ToList();
+        
+        // Verifica se o carrinho tem produtos da categoria 99 (Cozinha)
+        var temProdutosDeCozinha = dto.Any(p => p.CategoriaId == 99);
+
+        // Define o status com base nisso
+        var statusComanda = temProdutosDeCozinha ? "Aguardando Impressao" : "Aberta";
+
+        // Cria a nova comanda com o status adequado
+        var novaComanda = new Comanda()
+        {
+            DataAbertura = DateTime.Now,
+            Nome = nome,
+            ValorTotal = carrinho.Sum(p => p.ValorTotal),
+            Itens = carrinho,
+            Status = statusComanda
+        };
+
 
         var responseComanda = await _apiService.CriarComanda(novaComanda);
         if (responseComanda.Data != null)

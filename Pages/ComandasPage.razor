@@ -187,7 +187,31 @@ else
             await ShowAlert("Por favor, selecione uma forma de pagamento.");
             return;
         }
-        var sucesso = await _apiService.ConfirmarComanda(comanda);
+
+        var dto = new ComandasDTO
+        {
+            Id = comanda.Id,
+            Nome = comanda.Nome,
+            Telefone = comanda.Telefone,
+            DataAbertura = comanda.DataAbertura,
+            UsuarioId = comanda.UsuarioId,
+            ClienteId = comanda.ClienteId,
+            
+            ValorTotal = comanda.ValorTotal,
+            ValorRecebido = comanda.ValorRecebido,
+            FormaPagamento = comanda.FormaPagamento,
+            Itens = comanda.Itens.Select(i => new ItemComandaDTO
+            {
+                Id = i.Id,
+                Nome = i.Nome,
+                ProdutoId = i.ProdutoId,
+                NomeProduto = i.NomeProduto,
+                Quantidade = i.Quantidade,
+                PrecoUnitario = i.PrecoUnitario
+            }).ToList()
+        };
+
+        var sucesso = await _apiService.ConfirmarComanda(dto);
 
         if (sucesso.Data)
         {

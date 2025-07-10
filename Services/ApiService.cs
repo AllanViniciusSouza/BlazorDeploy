@@ -11,6 +11,7 @@ using BlazorDeploy.Pages;
 using System.Net.Http.Json;
 using System.Buffers.Text;
 using static System.Net.WebRequestMethods;
+using BlazorDeploy.DTOs;
 
 namespace BlazorDeploy.Services;
 
@@ -133,7 +134,7 @@ public class ApiService
         }
     }
 
-    public async Task<ApiResponse<bool>> ConfirmarComanda(Comanda comanda)
+    public async Task<ApiResponse<bool>> ConfirmarComanda(ComandasDTO comanda)
     {
         try
         {
@@ -149,7 +150,7 @@ public class ApiService
                     : $"Erro ao enviar requisição HTTP: {response.StatusCode}";
 
                 _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
-                return new ApiResponse<bool> { Data = true };
+                return new ApiResponse<bool> { Data = false };
             }
             return new ApiResponse<bool> { Data = true };
         }
@@ -1040,7 +1041,7 @@ public class ApiService
             var json = JsonSerializer.Serialize(pedido, _serializerOptions);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await PostRequest("api/ordemcompra", content);
+            var response = await PostRequest("api/comandacardapio", content);
 
             if (!response.IsSuccessStatusCode)
             {

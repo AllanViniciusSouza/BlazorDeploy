@@ -11,6 +11,7 @@ public class ItemComanda : INotifyPropertyChanged
     public decimal PrecoUnitario { get; set; }
     [JsonIgnore]
     public decimal ValorTotal => PrecoUnitario * Quantidade;
+    [JsonIgnore]
     private int quantidade;
 
     public int Quantidade
@@ -25,10 +26,12 @@ public class ItemComanda : INotifyPropertyChanged
             }
         }
     }
-
+    public int? ComandaId { get; set; }
     public int ProdutoId { get; set; }
-    public string? NomeProduto { get; set; }
+    public string NomeProduto { get; set; }
+    [JsonIgnore]
     public string? UrlImagem { get; set; }
+    [JsonIgnore]
     public string? CaminhoImagem => AppConfig.BaseUrl + UrlImagem;
 
     public event PropertyChangedEventHandler? PropertyChanged;

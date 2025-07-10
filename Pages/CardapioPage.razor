@@ -1,34 +1,71 @@
 ﻿@page "/cardapio"
 @layout CardapioLayout
 @inject ApiService _apiService
+@inject IJSRuntime JS
 
 <h3 class="text-center mb-4">🍽️ Cardápio</h3>
 
-@if (produtos == null)
+@if (todosProdutos == null)
 {
     <p>Carregando...</p>
 }
 else
 {
-    @foreach (var categoria in produtos.GroupBy(p => p.CategoriaId))
+    <!-- Barra de categorias rolável -->
+<div class="d-flex overflow-auto mb-3 gap-3 px-2 py-1 border-bottom" style="white-space: nowrap;">
+    @foreach (var categoria in categorias)
     {
-        <h4 class="text-primary mt-4">@categoria.Key</h4>
-        <div class="row">
-            @foreach (var item in categoria)
-            {
-                <div class="col-md-4 mb-3">
-                    <div class="card h-100 shadow">
-                        <div class="card-body text-center">
-                            <img src="@item.CaminhoImagem" alt="Imagem" class="img-fluid mb-2" style="max-height: 100px;" />
-                            <h5>@item.Nome</h5>
-                            <p class="text-success"><strong>R$ @item.Preco</strong></p>
-                            <button class="btn btn-outline-success" @onclick="() => AdicionarAoCarrinho(item)">Adicionar</button>
-                        </div>
-                    </div>
-                </div>
-            }
+        <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => SelecionarCategoria(categoria.Id)">
+            <img src="@categoria.CaminhoImagem" class="rounded-circle mb-1" style="width: 60px; height: 60px; object-fit: cover;" />
+            <div style="font-size: 0.75rem; white-space: normal;">@categoria.Nome</div>
         </div>
     }
+
+    <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => SelecionarCategoria(null)">
+        <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mb-1" style="width: 60px; height: 60px;">
+            📋
+        </div>
+        <div style="font-size: 0.75rem;">Todos</div>
+    </div>
+</div>
+
+<!-- Campo de busca -->
+<input type="text" class="form-control mb-3" placeholder="🔍 Buscar por nome..."
+       @oninput="BuscarPorNome" />
+
+<!-- Lista de produtos -->
+@if (produtosFiltrados.Any())
+{
+    <div class="row">
+        @foreach (var produto in produtosFiltrados)
+        {
+            <div class="col-6 col-md-4 mb-3">
+                <div class="card h-100 shadow-sm" style="font-size: 0.9rem;">
+                    <div class="card-body text-center p-2">
+                        <img src="@produto.CaminhoImagem" class="img-fluid mb-1" style="max-height: 50px; object-fit: contain;" />
+                        <div class="fw-bold text-truncate" style="font-size: 0.85rem;" title="@produto.Nome">
+                            @produto.Nome
+                        </div>
+                        <div class="text-success mb-1">R$ @produto.Preco.ToString("0.00")</div>
+                        <button class="btn btn-sm btn-outline-success" @onclick="() => AdicionarAoCarrinho(produto)">Adicionar</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <p class="text-muted text-center">Nenhum produto encontrado.</p>
+}
+
+}
+else
+{
+    <p class="text-muted">Nenhum produto encontrado.</p>
+}
+
+
 
     <!-- Carrinho fixo no rodapé -->
 <div class="carrinho-footer bg-success text-white text-center p-3" @onclick="ToggleCarrinho">
@@ -80,9 +117,11 @@ else
             <div class="mb-3">
                 <label>Forma de pagamento</label>
                 <select class="form-select" @bind="formaPagamento">
-                    <option>Dinheiro</option>
-                    <option>Pix</option>
-                    <option>Cartão</option>
+                    <option value="">Selecione a Forma de Pagamento</option>
+                     <option value="Dinheiro">Dinheiro</option>
+                     <option value="Credito">Crédito</option>
+                     <option value="Debito">Débito</option>
+                     <option value="Pix">Pix</option>
                 </select>
             </div>
 
@@ -92,13 +131,21 @@ else
             </div>
 
             <div class="mb-3">
+                <label>Nome</label>
+                <input class="form-control" @bind="nome" />
+            </div>
+
+            <div class="mb-3">
                 <label>Telefone</label>
                 <input class="form-control" @bind="telefone" />
             </div>
 
             <h5 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade):F2</h5>
 
-            <button class="btn btn-success w-100" @onclick="EnviarPedido">Finalizar Pedido</button>
+            <button class="btn btn-success w-100" @onclick="EnviarPedido" 
+            disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) ||
+                       formaPagamento == "Dinheiro" || string.IsNullOrEmpty(nome) || string.IsNullOrEmpty(telefone) )"
+            >Finalizar Pedido</button>
         }
     </div>
 }
@@ -106,19 +153,33 @@ else
 
 
 @code {
-    private List<Produto> produtos;
     private List<CarrinhoCompraItem> carrinho = new();
     private string mensagem;
     private bool carrinhoAberto = false;
-    private string formaPagamento = "Dinheiro";
+    private string formaPagamento = "";
     private string endereco = "";
+    private string nome = "";
     private string telefone = "";
 
+private List<Categoria> categorias = new();
+private List<Produto> todosProdutos = new();
+private List<Produto> produtosFiltrados = new();
+private int? categoriaSelecionadaId = null;
+private string filtroNome = string.Empty;
+
+
     protected override async Task OnInitializedAsync()
-    {
-        var (produtosApi, error) = await _apiService.GetTodosProdutos();
-        produtos = produtosApi;
-    }
+{
+    var (catResult, catError) = await _apiService.GetCategorias();
+    var (prodResult, prodError) = await _apiService.GetTodosProdutos();
+
+    if (catResult != null) categorias = catResult;
+    if (prodResult != null) todosProdutos = prodResult;
+
+    AplicarFiltros();
+}
+
+
 
     private void ToggleCarrinho()
     {
@@ -156,26 +217,102 @@ else
             return;
         }
 
-        var pedido = carrinho
-     .Select(i => new CarrinhoCompraItem
-     {
-         Id = i.Produto.Id,
-         Quantidade = i.Quantidade
-     })
-     .ToList();
+        var preComanda = carrinho
+                        .Select(i => new CarrinhoCompraItem
+                        {
+                            Preco = i.Produto.Preco,
+                            ProdutoId = i.Produto.Id,
+                            ProdutoNome = i.Produto.Nome,
+                            UrlImagem = i.Produto.CaminhoImagem,
+                            Quantidade = i.Quantidade,
+                            ValorTotal = i.Produto.Preco * i.Quantidade
+                        })
+                        .ToList();
 
+        var comanda = new Comanda
+        {
+            DataAbertura = DateTime.Now,
+            Nome = nome,
+            Telefone = telefone,
+            Endereco = endereco,
+            ValorTotal = carrinho.Sum(i => i.Produto.Preco * i.Quantidade),
+            FormaPagamento = formaPagamento,
+            Status = "Aguardando Impressao",
+            Itens = preComanda.Select(i => new ItemComanda
+            {
+                Nome = nome,
+                ProdutoId = i.ProdutoId,
+                NomeProduto = i.ProdutoNome,
+                PrecoUnitario = i.Preco,
+                Quantidade = i.Quantidade,
+                UrlImagem = i.UrlImagem
+            }).ToList()
+        };
 
-        var response = await _apiService.OrdemCompra(pedido); // Ajuste conforme sua API
-
-        if (response.Data)
+        var responseComanda = await _apiService.CriarComanda(comanda);
+   
+        if (responseComanda.Data != null)
         {
             mensagem = "Pedido enviado com sucesso!";
             carrinho.Clear();
+            nome = "";
+            endereco = "";
+            telefone = "";
+            formaPagamento = "";
+            StateHasChanged(); // Atualiza a UI
         }
         else
+        
         {
             mensagem = "Erro ao enviar pedido.";
         }
+
+
+    }
+
+    private void SelecionarCategoria(int? categoriaId)
+{
+    categoriaSelecionadaId = categoriaId;
+    AplicarFiltros();
+}
+
+private void FiltrarProdutosPorNome(ChangeEventArgs e)
+{
+    filtroNome = e?.Value?.ToString() ?? string.Empty;
+    AplicarFiltros();
+}
+
+private void BuscarPorNome(ChangeEventArgs e)
+{
+    filtroNome = e.Value?.ToString() ?? string.Empty;
+    AplicarFiltros();
+}
+
+private void AplicarFiltros()
+{
+    if (!categoriaSelecionadaId.HasValue && string.IsNullOrWhiteSpace(filtroNome))
+    {
+        // Exibe os produtos mais populares por padrão (ex: top 10 mais vendidos ou aleatórios)
+        produtosFiltrados = todosProdutos
+            .OrderByDescending(p => p.Popular) // ou outro critério
+            .Take(10)
+            .ToList();
+    }
+    else
+    {
+        produtosFiltrados = todosProdutos
+            .Where(p =>
+                (!categoriaSelecionadaId.HasValue || p.CategoriaId == categoriaSelecionadaId.Value) &&
+                (string.IsNullOrWhiteSpace(filtroNome) || p.Nome.Contains(filtroNome, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+}
+
+
+
+    private async Task ShowAlert(string message)
+    {
+        await JS.InvokeVoidAsync("alert", message);
     }
 }
 

@@ -160,7 +160,7 @@ else
     private string endereco = "";
     private string nome = "";
     private string telefone = "";
-
+    private bool isProcessing = false;
 private List<Categoria> categorias = new();
 private List<Produto> todosProdutos = new();
 private List<Produto> produtosFiltrados = new();
@@ -211,6 +211,15 @@ private string filtroNome = string.Empty;
 
     private async Task EnviarPedido()
     {
+        if (isProcessing)
+            return;
+
+        if (string.IsNullOrEmpty(nome) || string.IsNullOrEmpty(endereco) || string.IsNullOrEmpty(telefone))
+        ShowAlert("Por favor, preencha todos os campos obrigatórios.");
+            return;
+
+        isProcessing = true;
+
         if (!carrinho.Any())
         {
             mensagem = "Seu carrinho está vazio.";
@@ -266,7 +275,7 @@ private string filtroNome = string.Empty;
         {
             mensagem = "Erro ao enviar pedido.";
         }
-
+         isProcessing = false;
 
     }
 

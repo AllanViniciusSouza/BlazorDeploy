@@ -59,13 +59,6 @@ else
     <p class="text-muted text-center">Nenhum produto encontrado.</p>
 }
 
-}
-else
-{
-    <p class="text-muted">Nenhum produto encontrado.</p>
-}
-
-
 
     <!-- Carrinho fixo no rodapé -->
 <div class="carrinho-footer bg-success text-white text-center p-3" @onclick="ToggleCarrinho">
@@ -143,8 +136,7 @@ else
             <h5 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade):F2</h5>
 
             <button class="btn btn-success w-100" @onclick="EnviarPedido" 
-            disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) ||
-                       formaPagamento == "Dinheiro" || string.IsNullOrEmpty(nome) || string.IsNullOrEmpty(telefone) )"
+            disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) || string.IsNullOrEmpty(nome) || string.IsNullOrEmpty(telefone) )"
             >Finalizar Pedido</button>
         }
     </div>
@@ -161,23 +153,23 @@ else
     private string nome = "";
     private string telefone = "";
     private bool isProcessing = false;
-private List<Categoria> categorias = new();
-private List<Produto> todosProdutos = new();
-private List<Produto> produtosFiltrados = new();
-private int? categoriaSelecionadaId = null;
-private string filtroNome = string.Empty;
+    private List<Categoria> categorias = new();
+    private List<Produto> todosProdutos = new();
+    private List<Produto> produtosFiltrados = new();
+    private int? categoriaSelecionadaId = null;
+    private string filtroNome = string.Empty;
 
 
     protected override async Task OnInitializedAsync()
-{
-    var (catResult, catError) = await _apiService.GetCategorias();
-    var (prodResult, prodError) = await _apiService.GetTodosProdutos();
+    {
+        var (catResult, catError) = await _apiService.GetCategorias();
+        var (prodResult, prodError) = await _apiService.GetTodosProdutos();
 
-    if (catResult != null) categorias = catResult;
-    if (prodResult != null) todosProdutos = prodResult;
+        if (catResult != null) categorias = catResult;
+        if (prodResult != null) todosProdutos = prodResult;
 
-    AplicarFiltros();
-}
+        AplicarFiltros();
+    }
 
 
 
@@ -215,14 +207,17 @@ private string filtroNome = string.Empty;
             return;
 
         if (string.IsNullOrEmpty(nome) || string.IsNullOrEmpty(endereco) || string.IsNullOrEmpty(telefone))
-        ShowAlert("Por favor, preencha todos os campos obrigatórios.");
+        {
+            ShowAlert("Por favor, preencha todos os campos obrigatórios.");
             return;
+        }
+        
 
         isProcessing = true;
 
         if (!carrinho.Any())
         {
-            mensagem = "Seu carrinho está vazio.";
+            ShowAlert("Seu carrinho está vazio.");
             return;
         }
 
@@ -262,7 +257,7 @@ private string filtroNome = string.Empty;
    
         if (responseComanda.Data != null)
         {
-            mensagem = "Pedido enviado com sucesso!";
+           ShowAlert("Pedido enviado com sucesso!");
             carrinho.Clear();
             nome = "";
             endereco = "";
@@ -273,7 +268,7 @@ private string filtroNome = string.Empty;
         else
         
         {
-            mensagem = "Erro ao enviar pedido.";
+            ShowAlert("Erro ao enviar pedido.");
         }
          isProcessing = false;
 

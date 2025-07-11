@@ -13,6 +13,8 @@ public class Validator : IValidator
     public string EmailErro { get; set; } = "";
     public string TelefoneErro { get; set; } = "";
     public string SenhaErro { get; set; } = "";
+    public string EnderecoErro { get; set; } = "";
+
 
     private const string NomeVazioErroMsg = "Por favor, informe o seu nome.";
     private const string NomeInvalidoErroMsg = "Por favor, informe um nome válido.";
@@ -22,15 +24,28 @@ public class Validator : IValidator
     private const string TelefoneInvalidoErroMsg = "Por favor, informe um telefone válido.";
     private const string SenhaVazioErroMsg = "Por favor, informe a senha.";
     private const string SenhaInvalidoErroMsg = "A senha deve conter pelo menos 8 caracteres, incluindo letras e números.";
+    private const string EnderecoVazioErroMsg = "Por favor, informe o endereço.";
+    private const string EnderecoInvalidoErroMsg = "Por favor, informe um endereço válido.";
 
-    public Task<bool> Validar(string nome, string email, string telefone, string senha)
+
+    public Task<bool> ValidarUsuario(string nome, string email, string telefone, string senha, string endereco)
     {
         var inNomeValido = ValidarNome(nome);
         var isEmailValido = ValidarEmail(email);
         var isTelefoneValido = ValidarTelefone(telefone);
         var isSenhaValida = ValidarSenha(senha);
+        var isEnderecoValido = ValidarEndereco(endereco);
 
-        return Task.FromResult(inNomeValido && isEmailValido && isTelefoneValido && isSenhaValida);
+        return Task.FromResult(inNomeValido && isEmailValido && isTelefoneValido && isSenhaValida && isEnderecoValido);
+    }
+
+    public Task<bool> ValidarCliente(string nome, string telefone, string endereco)
+    {
+        var isNomeValido = ValidarNome(nome);
+        var isTelefoneValido = ValidarTelefone(telefone);
+        var isEnderecoValido = ValidarEndereco(endereco);
+
+        return Task.FromResult(isNomeValido && isTelefoneValido && isEnderecoValido);
     }
 
     private bool ValidarNome(string nome)
@@ -103,5 +118,27 @@ public class Validator : IValidator
         SenhaErro = "";
         return true;
     }
+
+    private bool ValidarEndereco(string endereco)
+    {
+        if (string.IsNullOrWhiteSpace(endereco))
+        {
+            EnderecoErro = EnderecoVazioErroMsg;
+            return false;
+        }
+
+        // Exige pelo menos "rua, número"
+        // Ex: "Rua das Flores, 123"
+        var partes = endereco.Split(',');
+        if (partes.Length < 2 || string.IsNullOrWhiteSpace(partes[0]) || string.IsNullOrWhiteSpace(partes[1]))
+        {
+            EnderecoErro = "Por favor, informe um endereço com rua e número. Ex: Rua Exemplo, 123";
+            return false;
+        }
+
+        EnderecoErro = "";
+        return true;
+    }
+
 
 }

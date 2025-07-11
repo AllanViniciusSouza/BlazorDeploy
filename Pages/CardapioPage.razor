@@ -2,6 +2,7 @@
 @layout CardapioLayout
 @inject ApiService _apiService
 @inject IJSRuntime JS
+@inject IValidator Validator
 
 <h3 class="text-center mb-4">🍽️ Cardápio</h3>
 
@@ -106,45 +107,72 @@ else
                 </tbody>
             </table>
 
-            <!-- Dados do cliente -->
-            <div class="mb-3">
-                <label>Forma de pagamento</label>
-                <select class="form-select" @bind="formaPagamento">
-                    <option value="">Selecione a Forma de Pagamento</option>
-                     <option value="Dinheiro">Dinheiro</option>
-                     <option value="Credito">Crédito</option>
-                     <option value="Debito">Débito</option>
-                     <option value="Pix">Pix</option>
-                </select>
-            </div>
+<!-- Forma de pagamento -->
+<div class="mb-3">
+    <label>Forma de pagamento</label>
+    <select class="form-select" @bind="formaPagamento">
+        <option value="">Selecione a Forma de Pagamento</option>
+        <option value="Dinheiro">Dinheiro</option>
+        <option value="Credito">Crédito</option>
+        <option value="Debito">Débito</option>
+        <option value="Pix">Pix</option>
+    </select>
+</div>
 
-            <div class="mb-3">
-                <label>Endereço</label>
-                <input class="form-control" @bind="endereco" />
-            </div>
+@if (formaPagamento == "Dinheiro")
+{
+    <div class="mb-3">
+        <label>Troco Para:</label>
+        <InputNumber @bind-Value="trocoPara" class="form-control" />
+    </div>
+}
 
-            <div class="mb-3">
-                <label>Nome</label>
-                <input class="form-control" @bind="nome" />
-            </div>
+<!-- Endereço -->
+<div class="mb-3">
+    <label>Endereço</label>
+    <input class="form-control" @bind="endereco" @oninput="@(() => Validator.EnderecoErro = "")"/>
+    @if (!string.IsNullOrEmpty(Validator.EnderecoErro))
+    {
+        <div class="text-danger">@Validator.EnderecoErro</div>
+    }
+</div>
 
-            <div class="mb-3">
-                <label>Telefone</label>
-                <input class="form-control" @bind="telefone" />
-            </div>
+<!-- Nome -->
+<div class="mb-3">
+    <label>Nome</label>
+    <input class="form-control" @bind="nome" @oninput="@(() => Validator.NomeErro = "")"/>
+    @if (!string.IsNullOrEmpty(Validator.NomeErro))
+    {
+        <div class="text-danger">@Validator.NomeErro</div>
+    }
+</div>
 
-            <h5 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade):F2</h5>
+<!-- Telefone -->
+<div class="mb-3">
+    <label>Telefone</label>
+    <input class="form-control" @bind="telefone" @oninput="@(() => Validator.TelefoneErro = "")"/>
+    @if (!string.IsNullOrEmpty(Validator.TelefoneErro))
+    {
+        <div class="text-danger">@Validator.TelefoneErro</div>
+    }
+</div>
 
-            <button class="btn btn-success w-100" @onclick="EnviarPedido" 
-            disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) || string.IsNullOrEmpty(nome) || string.IsNullOrEmpty(telefone) )"
-            >Finalizar Pedido</button>
+<h5 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade):F2</h5>
+
+<button class="btn btn-success w-100"
+        @onclick="EnviarPedido"
+        disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) || isProcessing ||
+                (formaPagamento == "Dinheiro" && trocoPara < carrinho.Sum(p => p.Preco * p.ValorTotal)))">
+    Finalizar Pedido
+</button>
+
         }
     </div>
 }
 
 
 
-@code {
+    @code {
     private List<CarrinhoCompraItem> carrinho = new();
     private string mensagem;
     private bool carrinhoAberto = false;
@@ -158,6 +186,7 @@ else
     private List<Produto> produtosFiltrados = new();
     private int? categoriaSelecionadaId = null;
     private string filtroNome = string.Empty;
+    private decimal trocoPara = 0;
 
 
     protected override async Task OnInitializedAsync()
@@ -206,14 +235,16 @@ else
         if (isProcessing)
             return;
 
-        if (string.IsNullOrEmpty(nome) || string.IsNullOrEmpty(endereco) || string.IsNullOrEmpty(telefone))
-        {
-            ShowAlert("Por favor, preencha todos os campos obrigatórios.");
-            return;
-        }
-        
-
         isProcessing = true;
+
+    var isValido = await Validator.ValidarCliente(nome, telefone, endereco); // só usa os campos necessários
+
+    if (!isValido)
+    {
+        ShowAlert("Por favor, corrija os erros antes de continuar.");
+        isProcessing = false;
+        return;
+    }
 
         if (!carrinho.Any())
         {
@@ -242,6 +273,7 @@ else
             ValorTotal = carrinho.Sum(i => i.Produto.Preco * i.Quantidade),
             FormaPagamento = formaPagamento,
             Status = "Aguardando Impressao",
+            ValorRecebido = trocoPara,
             Itens = preComanda.Select(i => new ItemComanda
             {
                 Nome = nome,
@@ -252,6 +284,7 @@ else
                 UrlImagem = i.UrlImagem
             }).ToList()
         };
+
 
         var responseComanda = await _apiService.CriarComanda(comanda);
    

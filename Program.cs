@@ -31,7 +31,6 @@ catch (Exception ex)
     throw; // Pra interromper e mostrar erro
 }
 
-
 builder.Services.AddScoped<LocalStorageService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ApiService>();

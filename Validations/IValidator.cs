@@ -6,5 +6,8 @@ public interface IValidator
     string EmailErro {  get; set; }
     string TelefoneErro {  get; set; }
     string SenhaErro {  get; set; }
-    Task<bool> Validar(string nome, string email, string telefone, string senha);
+    string EnderecoErro { get; set; }
+    Task<bool> ValidarUsuario(string nome, string email, string telefone, string senha, string endereco);
+
+    Task<bool> ValidarCliente(string nome, string telefone, string endereco);
 }

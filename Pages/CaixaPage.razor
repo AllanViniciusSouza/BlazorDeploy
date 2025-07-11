@@ -43,7 +43,7 @@
         </div>
 
         <button class="btn btn-primary" @onclick="CreateComanda"
-                disabled="@(!cart.Any() || isProcessing || string.IsNullOrEmpty(entryComanda) || string.IsNullOrEmpty(entryTelefone))">
+                disabled="@(!cart.Any() || isProcessing || string.IsNullOrEmpty(entryComanda))">
             Criar comanda
         </button>
 
@@ -400,10 +400,10 @@
 
 
         var responseComanda = await _apiService.CriarComanda(novaComanda);
-        if (responseComanda.Data != null)
+        if (responseComanda.Data != 0)
         {
             // await ShowAlert("Comanda criada!");
-            return responseComanda.Data.Id;
+            return responseComanda.Data;
         }
         else
         {

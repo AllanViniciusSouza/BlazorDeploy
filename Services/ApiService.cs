@@ -320,7 +320,7 @@ public class ApiService
         }
     }
 
-    public async Task<ApiResponse<Comanda>> CriarComanda(Comanda comanda)
+    public async Task<ApiResponse<int>> CriarComanda(Comanda comanda)
     {
         try
         {
@@ -332,7 +332,7 @@ public class ApiService
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
-                return new ApiResponse<Comanda>
+                return new ApiResponse<int>
                 {
                     ErrorMessage = $"Erro ao enviar requisição HTTP: {response.StatusCode}"
                 };
@@ -341,11 +341,11 @@ public class ApiService
             var responseContent = await response.Content.ReadAsStringAsync();
             var novaComanda = JsonSerializer.Deserialize<Comanda>(responseContent, _serializerOptions);
 
-            return new ApiResponse<Comanda> { Data = novaComanda };
+            return new ApiResponse<int> { Data = comanda.Id };
         }
         catch (Exception ex)
         {
-            return new ApiResponse<Comanda> { ErrorMessage = ex.Message };
+            return new ApiResponse<int> { ErrorMessage = ex.Message };
         }
     }
 

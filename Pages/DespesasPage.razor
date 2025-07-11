@@ -13,9 +13,9 @@
     <EditForm Model="novaDespesa" OnValidSubmit="SalvarDespesa">
         <DataAnnotationsValidator/>
         <div class="form-group">
-            <label for="dataselecionada">Data:</label>
-            <InputDate id="dataSelecionada" class="form-control" @bind-Value="novaDespesa.DataSelecionada" />
-            <ValidationMessage For="@(() => novaDespesa.DataSelecionada)" />
+            <label for="data">Data:</label>
+            <InputDate id="data" class="form-control" @bind-Value="novaDespesa.Data" />
+            <ValidationMessage For="@(() => novaDespesa.Data)" />
         </div>
         <div class="form-group">
             <label for="Descricao">Descricao:</label>
@@ -56,8 +56,8 @@
         </div>
         <div class="form-group">
             <label for="observacao">Observação:</label>
-            <InputText id="observacao" class="form-control" @bind-Value="novaDespesa.Observação" />
-            <ValidationMessage For="@(() => novaDespesa.Observação)" />
+            <InputText id="observacao" class="form-control" @bind-Value="novaDespesa.Observacao" />
+            <ValidationMessage For="@(() => novaDespesa.Observacao)" />
         </div>
         <button type="submit" class="btn btn-success">Salvar</button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
@@ -98,13 +98,13 @@
         {
             var copia = new Despesas
             {
-                DataSelecionada = novaDespesa.DataSelecionada.AddMonths(i),
+                Data = novaDespesa.Data.AddMonths(i),
                 Descricao = novaDespesa.Descricao + (totalParcelas > 1 ? $" (Parcela {i + 1}/{totalParcelas})" : ""),
                 Categoria = novaDespesa.Categoria,
                 FormaPagamento = novaDespesa.FormaPagamento,
                 Valor = novaDespesa.Valor / totalParcelas, // ou o valor total se não quiser dividir
                 Parcelas = totalParcelas,
-                Observação = novaDespesa.Observação
+                Observacao = novaDespesa.Observacao
             };
 
             await _apiService.AdicionarDespesaAsync(copia);

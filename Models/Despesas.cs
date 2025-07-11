@@ -5,8 +5,7 @@ namespace BlazorDeploy.Models
     public class Despesas
     {
         public int Id { get; set; }
-        [DataType(DataType.Date)]
-        public DateTime DataSelecionada { get; set; } = DateTime.Today;
+        public DateTime Data { get; set; } = DateTime.Today;
         public string Descricao { get; set; } = string.Empty;
         public string Categoria { get; set; } = string.Empty;
 
@@ -16,7 +15,8 @@ namespace BlazorDeploy.Models
 
         public int Parcelas{ get; set; }
 
-        public string? Observação { get; set; } = string.Empty;
+        public string? Observacao { get; set; } = string.Empty;
+        public int UsuarioId { get; set; } = 1;
     }
 
 }

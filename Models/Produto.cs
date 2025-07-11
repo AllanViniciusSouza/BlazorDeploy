@@ -1,4 +1,6 @@
-﻿namespace BlazorDeploy.Models;
+﻿using System.Text.Json.Serialization;
+
+namespace BlazorDeploy.Models;
 
 public class Produto
 {
@@ -12,6 +14,7 @@ public class Produto
     public bool Popular { get; set; }
     public bool MaisVendido { get; set; }
     public int EmEstoque { get; set; }
+    public string? DiasDisponiveis { get; set; }
     public bool Disponivel { get; set; }
     public int CategoriaId { get; set; }
 }

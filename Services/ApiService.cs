@@ -134,11 +134,11 @@ public class ApiService
         }
     }
 
-    public async Task<ApiResponse<bool>> ConfirmarComanda(ComandasDTO comanda)
+    public async Task<ApiResponse<bool>> ConfirmarComanda(ComandasDTO dto)
     {
         try
         {
-            var json = JsonSerializer.Serialize(comanda, _serializerOptions);
+            var json = JsonSerializer.Serialize(dto, _serializerOptions);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var response = await PostRequest("api/Pedidos/PostComanda", content);

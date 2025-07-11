@@ -39,7 +39,7 @@ else
 @if (produtosFiltrados.Any())
 {
     <div class="row">
-        @foreach (var produto in produtosFiltrados)
+        @foreach (var produto in ProdutosDisponiveisHoje)
         {
             <div class="col-6 col-md-4 mb-3">
                 <div class="card h-100 shadow-sm" style="font-size: 0.9rem;">
@@ -185,6 +185,14 @@ else
     private List<Categoria> categorias = new();
     private List<Produto> todosProdutos = new();
     private List<Produto> produtosFiltrados = new();
+    private List<Produto> ProdutosDisponiveisHoje => produtosFiltrados.Where(produto =>
+    string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase) ||
+    produto.DiasDisponiveis?
+        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+        .Select(d => Enum.Parse<DayOfWeek>(d.Trim()))
+        .Contains(DateTime.Today.DayOfWeek) == true
+).ToList();
+
     private int? categoriaSelecionadaId = null;
     private string filtroNome = string.Empty;
     private decimal trocoPara = 0;

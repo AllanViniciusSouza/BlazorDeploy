@@ -67,6 +67,7 @@
             <th>Imagem</th>
             <th>Nome</th>
             <th>Preço</th>
+            <th>Dias Disponíveis</th>
             <th>Popular</th>
             <th>Categoria</th>
             <th>Barcode</th>
@@ -100,6 +101,38 @@
                         @produto.Preco.ToString("C2")
                     }
                 </td>
+               <td>
+    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+    {
+            // Obtém os dias selecionados para o produto atual do dicionário
+            List<DayOfWeek> diasProduto = diasSelecionadosPorProduto.ContainsKey(produto.Id)
+                ? diasSelecionadosPorProduto[produto.Id]
+                : (
+                    string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase)
+                        ? Enum.GetValues<DayOfWeek>().ToList()
+                        : produto.DiasDisponiveis?
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(d => Enum.TryParse<DayOfWeek>(d.Trim(), out var result) ? result : DayOfWeek.Sunday) // fallback seguro
+                            .ToList() ?? new List<DayOfWeek>()
+                );
+
+        @foreach (var dia in diasSemana)
+        {
+            <div class="form-check form-check-inline">
+                <input type="checkbox"
+                       class="form-check-input"
+                       checked="@diasProduto.Contains(dia)"
+                       @onchange="@((ChangeEventArgs e) => OnDiaSelecionado(produto, dia, (bool)e.Value))" />
+                <label class="form-check-label">@dia</label>
+            </div>
+        }
+    }
+    else
+    {
+        <span>@produto.DiasDisponiveis</span>
+    }
+</td>
+
                 <td>
                     @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
                     {
@@ -171,6 +204,9 @@
     private bool exibirFormulario = false;
     private Dictionary<int, bool> editandoProdutos = new();
     private List<Categoria> categorias = new();
+    private List<DayOfWeek> diasSemana = Enum.GetValues<DayOfWeek>().ToList();
+    private Dictionary<int, List<DayOfWeek>> diasSelecionadosPorProduto = new();
+
 
 
     protected override async Task OnInitializedAsync()
@@ -187,7 +223,6 @@
 
         var (todasCategorias, erroCategorias) = await _apiService.GetCategorias(); // ou seu método real
         categorias = todasCategorias;
-
     }
 
     private void MostrarFormulario()
@@ -204,6 +239,32 @@
         filteredProdutos = todosProdutos;
         exibirFormulario = false;
     }
+
+    void OnDiaSelecionado(Produto produto, DayOfWeek dia, bool selecionado)
+    {
+        if (!diasSelecionadosPorProduto.ContainsKey(produto.Id))
+        {
+            diasSelecionadosPorProduto[produto.Id] = string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase)
+                ? Enum.GetValues<DayOfWeek>().ToList()
+                : produto.DiasDisponiveis?
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(d => Enum.Parse<DayOfWeek>(d.Trim()))
+                    .ToList() ?? new List<DayOfWeek>();
+        }
+
+        var dias = diasSelecionadosPorProduto[produto.Id];
+
+        if (selecionado && !dias.Contains(dia))
+            dias.Add(dia);
+        else if (!selecionado && dias.Contains(dia))
+            dias.Remove(dia);
+
+        produto.DiasDisponiveis = dias.Count == 7
+            ? "Todos"
+            : string.Join(",", dias.Select(d => d.ToString()));
+    }
+
+
 
     private void Cancelar()
     {

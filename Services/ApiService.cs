@@ -341,7 +341,7 @@ public class ApiService
             var responseContent = await response.Content.ReadAsStringAsync();
             var novaComanda = JsonSerializer.Deserialize<Comanda>(responseContent, _serializerOptions);
 
-            return new ApiResponse<int> { Data = comanda.Id };
+            return new ApiResponse<int> { Data = novaComanda.Id };
         }
         catch (Exception ex)
         {

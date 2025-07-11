@@ -400,7 +400,7 @@
 
 
         var responseComanda = await _apiService.CriarComanda(novaComanda);
-        if (responseComanda.Data != 0)
+        if (responseComanda.Data != null)
         {
             // await ShowAlert("Comanda criada!");
             return responseComanda.Data;

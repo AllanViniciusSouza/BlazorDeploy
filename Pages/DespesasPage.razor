@@ -4,9 +4,13 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
-<h4 class="text-bg-primary text-center">Despesas</h4>
+<h4 class="text-bg-primary text-center">
+    Despesas
+</h4>
 
-<button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Nova Despesa</button>
+<button class="btn btn-primary" @onclick="MostrarFormulario">
+    Adicionar Nova Despesa
+</button>
 
 @if (exibirFormulario)
 {
@@ -59,13 +63,16 @@
             <InputText id="observacao" class="form-control" @bind-Value="novaDespesa.Observacao" />
             <ValidationMessage For="@(() => novaDespesa.Observacao)" />
         </div>
-        <button type="submit" class="btn btn-success">Salvar</button>
+        <button type="submit" class="btn btn-success">
+            Salvar
+        </button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
     </EditForm>
 }
 
-
+@* html desenohs *@
 @code {
+    //c# como funciona
     private bool estaMarcado = false;
     private Despesas novaDespesa = new Despesas();
     private bool exibirFormulario = false;
@@ -86,7 +93,7 @@
 
     private void MostrarFormulario()
     {
-        novaDespesa = new Despesas();
+        novaDespesa = new Despesas(); //criando um objeto
         exibirFormulario = true;
     }
 

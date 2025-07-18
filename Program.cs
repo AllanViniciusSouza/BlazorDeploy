@@ -36,6 +36,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<ApiService>();
 builder.Services.AddSingleton<IValidator, Validator>();
 builder.Services.AddScoped<AuthService>();
+//builder.Services.AddScoped<GooglePlacesService>();
+
 builder.Services.AddBlazoredLocalStorage();
 
 

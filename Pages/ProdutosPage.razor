@@ -44,6 +44,23 @@
             <InputText id="barcode" class="form-control" @bind-Value="novoProduto.Barcode" />
             <ValidationMessage For="@(() => novoProduto.Barcode)" />
         </div>
+
+        <div class="form-group">
+            <label>Dias Disponíveis:</label>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var dia in diasSemana)
+                {
+                    <div class="form-check me-2">
+                        <input type="checkbox"
+                               class="form-check-input"
+                               checked="@diasSelecionadosNovoProduto.Contains(dia)"
+                               @onchange="@((ChangeEventArgs e) => OnDiaSelecionadoNovoProduto(dia, (bool)e.Value))" />
+                        <label class="form-check-label">@dia</label>
+                    </div>
+                }
+            </div>
+        </div>
+
         <button type="submit" class="btn btn-success">Salvar</button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
     </EditForm>
@@ -206,6 +223,7 @@
     private List<Categoria> categorias = new();
     private List<DayOfWeek> diasSemana = Enum.GetValues<DayOfWeek>().ToList();
     private Dictionary<int, List<DayOfWeek>> diasSelecionadosPorProduto = new();
+    private List<DayOfWeek> diasSelecionadosNovoProduto = new();
 
 
 
@@ -233,11 +251,17 @@
 
     private async Task AdicionarProduto()
     {
+        // Monta a string DiasDisponiveis
+        if (diasSelecionadosNovoProduto.Count == 7)
+            novoProduto.DiasDisponiveis = "Todos";
+        else
+            novoProduto.DiasDisponiveis = string.Join(",", diasSelecionadosNovoProduto);
         // Adicionar o novo produto ao serviço ou API
         await _apiService.AdicionarProdutoAsync(novoProduto);
         var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos;
         exibirFormulario = false;
+        diasSelecionadosNovoProduto.Clear();
     }
 
     void OnDiaSelecionado(Produto produto, DayOfWeek dia, bool selecionado)
@@ -344,6 +368,20 @@
             await JS.InvokeVoidAsync("alert", "Erro ao atualizar o produto.");
         }
     }
+
+    void OnDiaSelecionadoNovoProduto(DayOfWeek dia, bool selecionado)
+    {
+        if (selecionado)
+        {
+            if (!diasSelecionadosNovoProduto.Contains(dia))
+                diasSelecionadosNovoProduto.Add(dia);
+        }
+        else
+        {
+            diasSelecionadosNovoProduto.Remove(dia);
+        }
+    }
+
 
     private void CancelarEdicao(int idProduto)
     {

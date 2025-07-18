@@ -2,6 +2,7 @@
 @inject ApiService _apiService
 @inject AuthService AuthService
 @inject IJSRuntime JS
+@inject IValidator Validator
 
 @inject NavigationManager Navigation
 
@@ -122,6 +123,7 @@
             <option value="Credito">Crédito</option>
             <option value="Debito">Débito</option>
             <option value="Pix">Pix</option>
+        <option value="Ifood">Ifood</option>
         </select>
 
         @if (formaPagamentoSelecionada == "Dinheiro")
@@ -151,6 +153,7 @@
     private string searchBarcode = string.Empty;
     private string entryComanda = string.Empty;
     private List<Produto> filteredProdutos = new();
+    private List<Produto> maisVendidos = new();
     private List<Produto> cart = new();
     private List<ItemComanda> itensComanda = new();
     private int idcomanda;
@@ -177,8 +180,8 @@
             Navigation.NavigateTo("login");
         }
 
-        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-        filteredProdutos = todosProdutos;
+        var (produtosMaisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
+        filteredProdutos = produtosMaisVendidos;
     }
 
     private async Task BuscarSugestoesComanda(ChangeEventArgs e)
@@ -216,8 +219,8 @@
         searchNome = e.Value.ToString();
         if (string.IsNullOrWhiteSpace(searchNome))
         {
-            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-            filteredProdutos = todosProdutos;
+            var (maisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
+            filteredProdutos = maisVendidos;
         }
         else
         {
@@ -298,6 +301,18 @@
 
         try
         {
+            var (existeCliente, errorMessage) = await _apiService.GetClienteByPhoneAsync(entryTelefone);
+            if (existeCliente == null)
+            {
+                var novoCliente = new Clientes
+                {
+                    Nome = entryComanda,
+                    Telefone = entryTelefone,
+                    Endereco = entryEndereco
+                };
+                var respondeCliente = await _apiService.AddClienteAsync(novoCliente);
+            }
+
             var (comandaExistente, erro) = await _apiService.GetComandaPorNome(entryComanda);
 
             if (comandaExistente != null)
@@ -325,6 +340,10 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Erro ao criar ou atualizar comanda: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
         }
     }
 
@@ -383,7 +402,7 @@
         }).ToList();
 
         // Verifica se o carrinho tem produtos da categoria 99 (Cozinha)
-        var temProdutosDeCozinha = dto.Any(p => p.CategoriaId == 99);
+        var temProdutosDeCozinha = dto.Any(p => p.CategoriaId == 22 || p.CategoriaId == 18);
 
         // Define o status com base nisso
         var statusComanda = temProdutosDeCozinha ? "Aguardando Impressao" : "Aberta";

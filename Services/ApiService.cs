@@ -388,6 +388,12 @@ public class ApiService
         return await GetAsync<List<Produto>>(endpoint);
     }
 
+    public async Task<(List<Produto>? Produtos, string? ErrorNessage)> GetProdutosMaisVendidos()
+    {
+        string endpoint = $"api/Produtos/MaisVendidos";
+        return await GetAsync<List<Produto>>(endpoint);
+    }
+
     public async Task<(List<Produto>? Produtos, string? ErrorNessage)> GetTodosProdutos()
     {
         string endpoint = $"api/Produtos/GetTodosProdutos";
@@ -736,6 +742,15 @@ public class ApiService
             string endpoint = $"api/clientes/byname/{nome}";
             return await GetAsync<Clientes>(endpoint);
         }
+
+    /// <summary>
+    /// Obtém um cliente pelo Telefone.
+    /// </summary>
+    public async Task<(Clientes?, string? ErrorMessage)> GetClienteByPhoneAsync(string telefone)
+    {
+        string endpoint = $"api/clientes/byphone/{telefone}";
+        return await GetAsync<Clientes>(endpoint);
+    }
 
     /// <summary>
     /// Adiciona um novo cliente.

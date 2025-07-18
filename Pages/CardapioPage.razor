@@ -3,9 +3,17 @@
 @inject ApiService _apiService
 @inject IJSRuntime JS
 @inject IValidator Validator
+@inject HttpClient Http
+
+<gmpx-placeautocomplete
+  id="autocompleteEndereco"
+  placeholder="Digite seu endereço"
+  country="br"
+  style="width: 100%;">
+</gmpx-placeautocomplete>
 
 <div class="text-center mt-4">
-<img src="/logo.jpg" class="img-fluid rounded-circle" style="max-height: 90px; object-fit: contain;" />
+<img src="/logo.png" class="img-fluid rounded-circle" style="max-height: 90px; object-fit: contain;" />
 </div>
 @if (todosProdutos == null)
 {
@@ -85,6 +93,7 @@ else
             <table class="table table-sm">
                 <thead>
                     <tr>
+                        <th></th>
                         <th>Produto</th>
                         <th>Qtd</th>
                         <th>Preço</th>
@@ -95,11 +104,18 @@ else
                     @foreach (var item in carrinho)
                     {
                         <tr>
+                            <td>
+                                <div class="d-flex flex-column align-items-center">
+                                    <img src="@item.Produto.CaminhoImagem" class="img-fluid mb-1" style="max-height: 40px; object-fit: contain;" />
+                                </div>
+                            </td>  
                             <td>@item.Produto.Nome</td>
                             <td>
-                                <button class="btn btn-sm btn-light me-1" @onclick="() => Decrementar(item)">-</button>
-                                @item.Quantidade
-                                <button class="btn btn-sm btn-light ms-1" @onclick="() => Incrementar(item)">+</button>
+                                <div class="d-flex flex-column align-items-center">
+                                    <button class="btn btn-sm btn-light mb-1" @onclick="() => Incrementar(item)">+</button>
+                                    <span>@item.Quantidade</span>
+                                    <button class="btn btn-sm btn-light mt-1" @onclick="() => Decrementar(item)">-</button>
+                                </div>
                             </td>
                             <td>R$ @item.Produto.Preco</td>
                             <td><button class="btn btn-sm btn-danger" @onclick="() => Remover(item)">🗑</button></td>
@@ -128,15 +144,68 @@ else
     </div>
 }
 
-<!-- Endereço -->
 <div class="mb-3">
-    <label>Endereço</label>
-    <input class="form-control" @bind="endereco" @oninput="@(() => Validator.EnderecoErro = "")"/>
-    @if (!string.IsNullOrEmpty(Validator.EnderecoErro))
-    {
-        <div class="text-danger">@Validator.EnderecoErro</div>
-    }
+    <label class="form-label">Tipo de pedido</label>
+
+    <div class="form-check">
+        <input class="form-check-input"
+               type="radio"
+               id="entrega"
+               name="tipoPedido"
+               value="entrega"
+               checked="@(!retiradaNoLocal)"
+               @onchange="() => retiradaNoLocal = false" />
+        <label class="form-check-label" for="entrega">Entrega</label>
+    </div>
+
+    <div class="form-check">
+        <input class="form-check-input"
+               type="radio"
+               id="retirada"
+               name="tipoPedido"
+               value="retirada"
+               checked="@(retiradaNoLocal)"
+               @onchange="() => retiradaNoLocal = true" />
+        <label class="form-check-label" for="retirada">Retirada no local</label>
+    </div>
 </div>
+
+
+
+
+
+@if (!retiradaNoLocal)
+{
+    <!-- CEP -->
+    <div class="mb-3">
+        <label>CEP</label>
+        <input class="form-control" @bind="cep" @onblur="BuscarEndereco" maxlength="9" placeholder="Digite o CEP" />
+    </div>
+
+    <div class="mb-3">
+        <label>Endereço</label>
+        <gmpx-placeautocomplete
+  id="autocompleteEndereco"
+  placeholder="Digite seu endereço"
+  country="br"
+  style="width: 100%;">
+</gmpx-placeautocomplete>
+
+<p>Endereço: @EnderecoSelecionado</p>
+
+        @* Esse script só roda se o campo estiver no DOM *@
+        <script>
+            setTimeout(() => {
+                if (window.setupPlaceAutocomplete) {
+                    window.setupPlaceAutocomplete();
+                }
+            }, 100);
+        </script>
+    </div>
+
+}
+
+
 
 <!-- Nome -->
 <div class="mb-3">
@@ -158,12 +227,29 @@ else
     }
 </div>
 
-<h5 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade):F2</h5>
+<label>Aproveite e inclua:</label>
+ <!-- Barra de produtos mais vendidos rolavel -->
+<div class="d-flex overflow-auto mb-3 gap-3 px-2 py-1 border-bottom" style="white-space: nowrap;">
+    @foreach (var produto in produtosMaisVendidos)
+    {
+        <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => AdicionarAoCarrinho(produto)">
+            <img src="@produto.CaminhoImagem" class="rounded-circle mb-1" style="width: 60px; height: 60px; object-fit: cover;" />
+            <div style="font-size: 0.75rem; white-space: normal;">@produto.Nome</div>
+            <div style="font-size: 0.75rem; white-space: normal;">@produto.Preco</div>
+        </div>
+    }
+
+  
+</div>
+
+<h5 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade)</h5>
 
 <button class="btn btn-success w-100"
         @onclick="EnviarPedido"
         disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) || isProcessing ||
-                (formaPagamento == "Dinheiro" && trocoPara < carrinho.Sum(p => p.Preco * p.ValorTotal)))">
+    (formaPagamento == "Dinheiro" && trocoPara < carrinho.Sum(p => p.Produto.Preco * p.Quantidade)) ||
+    (!retiradaNoLocal && string.IsNullOrWhiteSpace(endereco)))"
+">
     Finalizar Pedido
 </button>
 
@@ -185,6 +271,7 @@ else
     private List<Categoria> categorias = new();
     private List<Produto> todosProdutos = new();
     private List<Produto> produtosFiltrados = new();
+    private List<Produto> produtosMaisVendidos = new();
     private List<Produto> ProdutosDisponiveisHoje => produtosFiltrados.Where(produto =>
     string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase) ||
     produto.DiasDisponiveis?
@@ -192,26 +279,74 @@ else
         .Select(d => Enum.Parse<DayOfWeek>(d.Trim()))
         .Contains(DateTime.Today.DayOfWeek) == true
 ).ToList();
-
+    private string cep = "";
     private int? categoriaSelecionadaId = null;
     private string filtroNome = string.Empty;
     private decimal trocoPara = 0;
-
+    private bool retiradaNoLocal = false;
+    private string EnderecoSelecionado;
+    private DotNetObjectReference<CardapioPage>? objRef;
 
     protected override async Task OnInitializedAsync()
     {
         var (catResult, catError) = await _apiService.GetCategorias();
         var (prodResult, prodError) = await _apiService.GetTodosProdutos();
+        var (maisVendidosResult, maisVendidosError) = await _apiService.GetProdutosMaisVendidos();
 
         if (catResult != null) categorias = catResult;
         if (prodResult != null) todosProdutos = prodResult;
+        if (maisVendidosResult != null) produtosMaisVendidos = maisVendidosResult;
 
         AplicarFiltros();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            objRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("initGoogleAutocomplete", "autocompleteEndereco", objRef);
+        }
+    }
 
+      [JSInvokable]
+    public void OnPlaceSelected(string endereco)
+    {
+        EnderecoSelecionado = endereco;
+        StateHasChanged();
+    }
 
-    private void ToggleCarrinho()
+    public void Dispose()
+    {
+        objRef?.Dispose();
+    }
+
+   private async Task BuscarEndereco()
+{
+    if (string.IsNullOrWhiteSpace(cep) || cep.Length < 8)
+        return;
+
+    try
+    {
+        var url = $"https://viacep.com.br/ws/{cep.Replace("-", "").Trim()}/json/";
+        var enderecoCep = await Http.GetFromJsonAsync<EnderecoViaCep>(url);
+
+        if (enderecoCep != null && enderecoCep.erro != "true")
+        {
+            endereco = $"{enderecoCep.logradouro}, {enderecoCep.bairro} - {enderecoCep.localidade}/{enderecoCep.uf}";
+        }
+        else
+        {
+            await ShowAlert("CEP inválido ou não encontrado.");
+        }
+    }
+    catch (Exception ex)
+    {
+        await ShowAlert($"Erro ao buscar CEP: {ex.Message}");
+    }
+  }
+
+    private async void ToggleCarrinho()
     {
         carrinhoAberto = !carrinhoAberto;
     }
@@ -246,19 +381,41 @@ else
 
         isProcessing = true;
 
-    var isValido = await Validator.ValidarCliente(nome, telefone, endereco); // só usa os campos necessários
+        if (formaPagamento == "Dinheiro" && trocoPara < carrinho.Sum(i => i.Produto.Preco * i.Quantidade))
+        {
+            ShowAlert("O valor do troco deve ser maior ou igual ao total do pedido.");
+            isProcessing = false;
+            return;
+        }
 
-    if (!isValido)
-    {
-        ShowAlert("Por favor, corrija os erros antes de continuar.");
-        isProcessing = false;
-        return;
-    }
+        var enderecoFinal = retiradaNoLocal ? "Retirada no local" : endereco;
+        var isValido = await Validator.ValidarCliente(nome, telefone, enderecoFinal);
+
+
+        if (!isValido)
+        {
+            ShowAlert("Por favor, corrija os erros antes de continuar.");
+            isProcessing = false;
+            return;
+        }
 
         if (!carrinho.Any())
         {
             ShowAlert("Seu carrinho está vazio.");
+            isProcessing = false;
             return;
+        }
+
+        var (existeCliente, errorMessage) = await _apiService.GetClienteByPhoneAsync(telefone);
+        if (existeCliente == null)
+        {
+            var novoCliente = new Clientes
+        {
+            Nome = nome,
+            Telefone = telefone,
+            Endereco = enderecoFinal
+        };
+        var respondeCliente = await _apiService.AddClienteAsync(novoCliente);
         }
 
         var preComanda = carrinho
@@ -278,7 +435,7 @@ else
             DataAbertura = DateTime.Now,
             Nome = nome,
             Telefone = telefone,
-            Endereco = endereco,
+            Endereco = enderecoFinal,
             ValorTotal = carrinho.Sum(i => i.Produto.Preco * i.Quantidade),
             FormaPagamento = formaPagamento,
             Status = "Aguardando Impressao",

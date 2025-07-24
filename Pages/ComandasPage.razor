@@ -33,7 +33,7 @@ else
                                     ? "#f8d7da"
                                     : "#c0c0c0");">
                 <AccordionItem>
-                    <AccordionHeader>
+                    <AccordionHeader @onclick="() => CarregarItens(comanda)">
                         <div class="w-100">
                             <div class="w-100 d-flex justify-content-between align-items-center">
                                 <div class="fw-bold fs-5">Comanda <span class="text-decoration-underline">@comanda.Nome</span></div>
@@ -44,6 +44,8 @@ else
                         </div>
                     </AccordionHeader>
 
+@if (comanda.Itens?.Any() == true)
+        {
                     <AccordionBody>
                         <div>
                             <ul class="list-group">
@@ -104,6 +106,7 @@ else
                             <button class="btn btn-danger w-100 mt-3" @onclick="() => DeletarComanda(comanda.Nome)">Excluir Comanda</button>
                         </div>
                     </AccordionBody>
+                    }
                 </AccordionItem>
             </div>
 
@@ -131,14 +134,25 @@ else
         var (comandasAbertas, errorMessage) = await _apiService.GetComandas();
         if (comandasAbertas is null) return;
 
-        foreach (var comanda in comandasAbertas)
-        {
-            comanda.Itens = await GetItensComanda(comanda.Nome);
-            // comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
-            // await _apiService.AtualizarComanda(comanda);
-        }
+        // foreach (var comanda in comandasAbertas)
+        // {
+        //     comanda.Itens = await GetItensComanda(comanda.Nome);
+        //     // comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
+        //     // await _apiService.AtualizarComanda(comanda);
+        // }
         ComandasAbertas = comandasAbertas;
 
+        // Carrega os itens em segundo plano (não bloqueia a UI)
+        _ = Task.Run(async () =>
+        {
+            foreach (var comanda in ComandasAbertas)
+            {
+                comanda.Itens = await GetItensComanda(comanda.Nome);
+                comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
+                await _apiService.AtualizarComanda(comanda);
+                InvokeAsync(StateHasChanged); // Atualiza a UI a cada comanda
+            }
+        });
     }
 
     private async Task DeletarComanda(string nome)
@@ -256,6 +270,15 @@ else
             }
         }
 
+    }
+
+    private async Task CarregarItens(Comanda comanda)
+    {
+        if (comanda.Itens != null && comanda.Itens.Any()) return; // já carregado
+
+        comanda.Itens = await GetItensComanda(comanda.Nome);
+        comanda.ValorTotal = comanda.Itens.Sum(i => i.PrecoUnitario * i.Quantidade);
+        StateHasChanged();
     }
 
     private async Task<List<ItemComanda>> GetItensComanda(string nome)

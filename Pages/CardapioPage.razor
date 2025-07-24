@@ -355,10 +355,11 @@ else
 
 private decimal CalcularValorFretePorKm(decimal km)
 {
-    if (km <= 1) return 3;
-    else if (km <= 2) return 5;
-    else if (km <= 3) return 8;
-    else return 12 + (km - 5) * 1.5m;
+    if (km <= 2) return 3;
+    else if (km <= 5) return 5;
+    else if (km <= 7) return 8;
+    else return 12;
+    // else return 12 + (km - 5) * 1.5m;
 }
 
 private void CalcularTotalPedido()

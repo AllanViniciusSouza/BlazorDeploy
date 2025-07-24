@@ -1074,5 +1074,11 @@ public class ApiService
             return new ApiResponse<bool> { Data = false };
         }
     }
+
+    public async Task<(DistanciaResult?, string? ErrorMessage)> CalcularDistanciaAsync(string origem, string destino)
+    {
+        var endpoint = $"api/maps/calcular?origem={Uri.EscapeDataString(origem)}&destino={Uri.EscapeDataString(destino)}";
+        return await GetAsync<DistanciaResult>(endpoint);
+    }
 }
 

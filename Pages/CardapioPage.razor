@@ -182,31 +182,30 @@ else
         <input class="form-control" @bind="cep" @onblur="BuscarEndereco" maxlength="9" placeholder="Digite o CEP" />
     </div>
 
-    <div class="mb-3">
-        <label>Endereço</label>
-        <gmpx-placeautocomplete
-  id="autocompleteEndereco"
-  placeholder="Digite seu endereço"
-  country="br"
-  style="width: 100%;">
-</gmpx-placeautocomplete>
+    <!-- Endereço retornado pelo ViaCEP (sem número) -->
+<div class="mb-3">
+    <label>Endereço</label>
+    <input class="form-control"
+           value="@enderecoBase"
+           readonly
+           placeholder="Endereço será preenchido automaticamente" />
+</div>
 
-<p>Endereço: @EnderecoSelecionado</p>
+<!-- Número da casa -->
+<div class="mb-3">
+    <label>Número</label>
+    <input class="form-control"
+           @bind="numeroCasa"
+           placeholder="Número da casa, apartamento etc." />
+</div>
 
-        @* Esse script só roda se o campo estiver no DOM *@
-        <script>
-            setTimeout(() => {
-                if (window.setupPlaceAutocomplete) {
-                    window.setupPlaceAutocomplete();
-                }
-            }, 100);
-        </script>
-    </div>
-
+<button class="btn btn-primary mb-3" @onclick="CalcularFreteAsync">Calcular Frete</button>
+@if (resultadoDistancia != null)
+{
+    <p><strong>Duração estimada:</strong> @resultadoDistancia.Duracao</p>
+    <p><strong>Frete:</strong> R$ @valorFrete.ToString("F2")</p>
 }
-
-
-
+}
 <!-- Nome -->
 <div class="mb-3">
     <label>Nome</label>
@@ -242,7 +241,8 @@ else
   
 </div>
 
-<h5 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade)</h5>
+<h4 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade)</h4>
+<h5 class="text-end">Total com frete: R$ @valorTotal.ToString("F2")</h5>
 
 <button class="btn btn-success w-100"
         @onclick="EnviarPedido"
@@ -286,6 +286,11 @@ else
     private bool retiradaNoLocal = false;
     private string EnderecoSelecionado;
     private DotNetObjectReference<CardapioPage>? objRef;
+    private string numeroCasa = "";
+    private string enderecoBase = ""; // ViaCEP retorna isso
+    DistanciaResult? resultadoDistancia = new();
+    decimal valorFrete = 0;
+    decimal valorTotal = 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -309,7 +314,7 @@ else
         }
     }
 
-      [JSInvokable]
+    [JSInvokable]
     public void OnPlaceSelected(string endereco)
     {
         EnderecoSelecionado = endereco;
@@ -321,7 +326,55 @@ else
         objRef?.Dispose();
     }
 
-   private async Task BuscarEndereco()
+    private async Task CalcularFreteAsync()
+    {
+        endereco = $"{enderecoBase}, {numeroCasa}";
+
+        var origem = "Av. Mário Trevenzoli, 1375, Campinas - SP";
+        var destino = endereco;
+
+        var (resultDistancia, errorMessage) = await _apiService.CalcularDistanciaAsync(origem, destino);
+
+        if (resultDistancia != null)
+        {
+            var distanciaTexto = resultDistancia.Distancia.Replace(" km", "").Replace(",", ".").Trim();
+
+            resultadoDistancia.Distancia = resultDistancia.Distancia;
+            resultadoDistancia.Duracao = resultDistancia.Duracao;
+
+            if (decimal.TryParse(distanciaTexto, out var distanciaKm))
+            {
+                valorFrete = CalcularValorFretePorKm(distanciaKm);
+                
+            }
+            
+    }
+
+    CalcularTotalPedido();
+}
+
+private decimal CalcularValorFretePorKm(decimal km)
+{
+    if (km <= 1) return 3;
+    else if (km <= 2) return 5;
+    else if (km <= 3) return 8;
+    else return 12 + (km - 5) * 1.5m;
+}
+
+private void CalcularTotalPedido()
+{
+   valorTotal = carrinho.Sum(p => p.Produto.Preco * p.Quantidade) + valorFrete;
+}
+
+
+//    private void AtualizarEnderecoCompleto(ChangeEventArgs? e = null)
+// {
+//     endereco = string.IsNullOrWhiteSpace(numeroCasa)
+//         ? enderecoBase
+//         : $"{enderecoBase}, {numeroCasa}";
+// }
+
+private async Task BuscarEndereco()
 {
     if (string.IsNullOrWhiteSpace(cep) || cep.Length < 8)
         return;
@@ -333,7 +386,8 @@ else
 
         if (enderecoCep != null && enderecoCep.erro != "true")
         {
-            endereco = $"{enderecoCep.logradouro}, {enderecoCep.bairro} - {enderecoCep.localidade}/{enderecoCep.uf}";
+            enderecoBase = $"{enderecoCep.logradouro}, {enderecoCep.bairro} - {enderecoCep.localidade}/{enderecoCep.uf}";
+            // AtualizarEnderecoCompleto();
         }
         else
         {
@@ -344,7 +398,16 @@ else
     {
         await ShowAlert($"Erro ao buscar CEP: {ex.Message}");
     }
-  }
+}
+
+private async void OnCepDigitado(ChangeEventArgs e)
+{
+    cep = e?.Value?.ToString() ?? "";
+    if (cep.Replace("-", "").Length == 8)
+    {
+        await BuscarEndereco();
+    }
+}
 
     private async void ToggleCarrinho()
     {

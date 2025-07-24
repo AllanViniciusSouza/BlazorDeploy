@@ -134,8 +134,8 @@ else
         foreach (var comanda in comandasAbertas)
         {
             comanda.Itens = await GetItensComanda(comanda.Nome);
-            comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
-            await _apiService.AtualizarComanda(comanda);
+            // comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
+            // await _apiService.AtualizarComanda(comanda);
         }
         ComandasAbertas = comandasAbertas;
 

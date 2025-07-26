@@ -248,8 +248,7 @@ else
         @onclick="EnviarPedido"
         disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) || isProcessing ||
     (formaPagamento == "Dinheiro" && trocoPara < carrinho.Sum(p => p.Produto.Preco * p.Quantidade)) ||
-    (!retiradaNoLocal && string.IsNullOrWhiteSpace(endereco)))"
-">
+    (!retiradaNoLocal && string.IsNullOrWhiteSpace(endereco)))">
     Finalizar Pedido
 </button>
 

@@ -96,8 +96,25 @@
         {
             <tr>
                 <td>
-                    <img src="@produto.CaminhoImagem" alt="Imagem do Produto" width="40" />
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                    <img src="@produto.CaminhoImagem"
+             @onclick="() => ClickInput(produto.Id)"
+             style="width:100px; cursor:pointer" />
+
+        <input type="file"
+               id="fileInput-@produto.Id"
+               style="display:none"
+               accept="image/*"
+               capture="environment"
+               @onchange="async e => await OnFotoSelecionada(e, produto.Id)" />
+                    }
+                     else
+                    {
+                    <img src="@produto.CaminhoImagem" alt="Imagem do Produto" width="40" style="cursor: pointer;" />
+    }
                 </td>
+
                 <td>
                     @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
                     {
@@ -247,6 +264,20 @@
     {
         novoProduto = new Produto();
         exibirFormulario = true;
+    }
+
+    private async Task ClickInput(int produtoId)
+    {
+        await JS.InvokeVoidAsync("triggerFileInput", $"fileInput-{produtoId}");
+    }
+
+    private async Task OnFotoSelecionada(ChangeEventArgs e, int produtoId)
+    {
+        if (e.Value is not null && e.Value is IBrowserFile arquivo)
+        {
+            using var stream = arquivo.OpenReadStream(5 * 1024 * 1024); // 5MB
+            await _apiService.EnviarFotoProdutoAsync(produtoId, stream, arquivo.ContentType);
+        }
     }
 
     private async Task AdicionarProduto()

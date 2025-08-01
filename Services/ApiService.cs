@@ -1,17 +1,18 @@
-﻿using BlazorDeploy.Models;
+﻿using BlazorDeploy.DTOs;
+using BlazorDeploy.Models;
+using BlazorDeploy.Pages;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using Microsoft.JSInterop;
+using System.Buffers.Text;
 using System.ComponentModel.Design;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using Microsoft.JSInterop;
-using BlazorDeploy.Pages;
-using System.Net.Http.Json;
-using System.Buffers.Text;
 using static System.Net.WebRequestMethods;
-using BlazorDeploy.DTOs;
 
 namespace BlazorDeploy.Services;
 
@@ -1080,5 +1081,16 @@ public class ApiService
         var endpoint = $"api/maps/calcular?origem={Uri.EscapeDataString(origem)}&destino={Uri.EscapeDataString(destino)}";
         return await GetAsync<DistanciaResult>(endpoint);
     }
+
+    public async Task EnviarFotoProdutoAsync(int produtoId, Stream imagemStream, string contentType)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StreamContent(imagemStream), "arquivo", $"foto_{produtoId}.jpg");
+
+        var response = await PutRequest($"api/produto/{produtoId}/foto", content);
+        response.EnsureSuccessStatusCode();
+    }
+
+
 }
 

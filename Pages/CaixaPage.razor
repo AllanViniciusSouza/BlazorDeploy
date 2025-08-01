@@ -301,18 +301,20 @@
 
         try
         {
+            if (!string.IsNullOrEmpty(entryTelefone))
+            {
             var (existeCliente, errorMessage) = await _apiService.GetClienteByPhoneAsync(entryTelefone);
             if (existeCliente == null)
             {
                 var novoCliente = new Clientes
-                {
-                    Nome = entryComanda,
-                    Telefone = entryTelefone,
-                    Endereco = entryEndereco
-                };
+                    {
+                        Nome = entryComanda,
+                        Telefone = entryTelefone,
+                        Endereco = entryEndereco
+                    };
                 var respondeCliente = await _apiService.AddClienteAsync(novoCliente);
             }
-
+        }
             var (comandaExistente, erro) = await _apiService.GetComandaPorNome(entryComanda);
 
             if (comandaExistente != null)

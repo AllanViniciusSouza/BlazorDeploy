@@ -5,15 +5,8 @@
 @inject IValidator Validator
 @inject HttpClient Http
 
-<gmpx-placeautocomplete
-  id="autocompleteEndereco"
-  placeholder="Digite seu endereço"
-  country="br"
-  style="width: 100%;">
-</gmpx-placeautocomplete>
-
 <div class="text-center mt-4">
-<img src="/logo.png" class="img-fluid rounded-circle" style="max-height: 90px; object-fit: contain;" />
+<img src="logo.png" class="img-fluid rounded-circle" style="max-height: 90px; object-fit: contain;" />
 </div>
 @if (todosProdutos == null)
 {
@@ -294,10 +287,33 @@ else
     protected override async Task OnInitializedAsync()
     {
         var (catResult, catError) = await _apiService.GetCategorias();
+        // Ordenar manualmente as categorias
+        var ordemManual = new List<string>
+        {
+            "Marmitas",
+            "Porções",
+            "Refrigerante",
+            "Combos",
+            "Carvão",
+            "Água"
+        };
+
+        // if (catResult != null) categorias = catResult;
+        if (catResult != null)
+        {
+            categorias = catResult
+            .OrderBy(c =>
+            {
+                var index = ordemManual.IndexOf(c.Nome);
+                return index == -1 ? int.MaxValue : index;
+            })
+            .ToList();
+        }
+
         var (prodResult, prodError) = await _apiService.GetTodosProdutos();
         var (maisVendidosResult, maisVendidosError) = await _apiService.GetProdutosMaisVendidos();
 
-        if (catResult != null) categorias = catResult;
+        
         if (prodResult != null) todosProdutos = prodResult;
         if (maisVendidosResult != null) produtosMaisVendidos = maisVendidosResult;
 
@@ -517,7 +533,7 @@ private async void OnCepDigitado(ChangeEventArgs e)
 
         var responseComanda = await _apiService.CriarComanda(comanda);
    
-        if (responseComanda.Data != null)
+        if (!responseComanda.HasError)
         {
            ShowAlert("Pedido enviado com sucesso!");
             carrinho.Clear();

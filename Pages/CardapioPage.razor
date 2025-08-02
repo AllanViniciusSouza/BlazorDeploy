@@ -6,7 +6,7 @@
 @inject HttpClient Http
 
 <div class="text-center mt-4">
-<img src="/logo.png" class="img-fluid rounded-circle" style="max-height: 90px; object-fit: contain;" />
+<img src="/logo1.jpg" class="img-fluid rounded-circle" style="max-height: 80px; object-fit: contain;" />
 </div>
 @if (todosProdutos == null)
 {
@@ -23,13 +23,6 @@ else
             <div style="font-size: 0.75rem; white-space: normal;">@categoria.Nome</div>
         </div>
     }
-
-    <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => SelecionarCategoria(null)">
-        <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mb-1" style="width: 60px; height: 60px;">
-            📋
-        </div>
-        <div style="font-size: 0.75rem;">Todos</div>
-    </div>
 </div>
 
 <!-- Campo de busca -->
@@ -40,22 +33,27 @@ else
 @if (produtosFiltrados.Any())
 {
     <div class="row">
-        @foreach (var produto in ProdutosDisponiveisHoje)
-        {
-            <div class="col-6 col-md-4 mb-3">
-                <div class="card h-100 shadow-sm" style="font-size: 0.9rem;">
-                    <div class="card-body text-center p-2">
+    @foreach (var produto in ProdutosDisponiveisHoje)
+    {
+        <div class="col-6 col-md-4 mb-3">
+            <div class="card h-100 shadow-sm" style="font-size: 0.9rem;">
+                <div class="card-body text-center p-2">
+                    @if (!string.IsNullOrWhiteSpace(produto.UrlImagem))
+                    {
                         <img src="@produto.CaminhoImagem" class="img-fluid mb-1" style="max-height: 50px; object-fit: contain;" />
-                        <div class="fw-bold text-truncate" style="font-size: 0.85rem;" title="@produto.Nome">
-                            @produto.Nome
-                        </div>
-                        <div class="text-success mb-1">R$ @produto.Preco.ToString("0.00")</div>
-                        <button class="btn btn-sm btn-outline-success" @onclick="() => AdicionarAoCarrinho(produto)">Adicionar</button>
+                    }
+
+                    <div class="fw-bold text-truncate" style="font-size: 0.85rem;" title="@produto.Nome">
+                        @produto.Nome
                     </div>
+                    <div class="text-success mb-1">R$ @produto.Preco.ToString("0.00")</div>
+                    <button class="btn btn-sm btn-outline-success" @onclick="() => AdicionarAoCarrinho(produto)">Adicionar</button>
                 </div>
             </div>
-        }
-    </div>
+        </div>
+    }
+</div>
+
 }
 else
 {
@@ -302,6 +300,7 @@ else
         if (catResult != null)
         {
             categorias = catResult
+            .Where(c => c.Id != 21) // exclui a categoria com Id 21
             .OrderBy(c =>
             {
                 var index = ordemManual.IndexOf(c.Nome);
@@ -467,7 +466,7 @@ private async void OnCepDigitado(ChangeEventArgs e)
             return;
         }
 
-        var enderecoFinal = retiradaNoLocal ? "Retirada no local" : endereco;
+        var enderecoFinal = retiradaNoLocal ? "Av. Mário Trevenzoli, 1375, Campinas - SP" : endereco;
         var isValido = await Validator.ValidarCliente(nome, telefone, enderecoFinal);
 
 
@@ -570,14 +569,38 @@ private void BuscarPorNome(ChangeEventArgs e)
     AplicarFiltros();
 }
 
+// private void AplicarFiltros()
+// {
+//     if (!categoriaSelecionadaId.HasValue && string.IsNullOrWhiteSpace(filtroNome))
+//     {
+//         // Exibe os produtos mais populares por padrão (ex: top 10 mais vendidos ou aleatórios)
+//         produtosFiltrados = todosProdutos
+//             .OrderByDescending(p => p.Popular) // ou outro critério
+//             .Take(10)
+//             .ToList();
+//     }
+//     else
+//     {
+//         produtosFiltrados = todosProdutos
+//             .Where(p =>
+//                 (!categoriaSelecionadaId.HasValue || p.CategoriaId == categoriaSelecionadaId.Value) &&
+//                 (string.IsNullOrWhiteSpace(filtroNome) || p.Nome.Contains(filtroNome, StringComparison.OrdinalIgnoreCase)))
+//             .ToList();
+//     }
+// }
+
 private void AplicarFiltros()
 {
     if (!categoriaSelecionadaId.HasValue && string.IsNullOrWhiteSpace(filtroNome))
     {
         // Exibe os produtos mais populares por padrão (ex: top 10 mais vendidos ou aleatórios)
         produtosFiltrados = todosProdutos
+            .Where(p =>
+                p.Preco > 0 &&
+                p.CategoriaId != 21
+            )
             .OrderByDescending(p => p.Popular) // ou outro critério
-            .Take(10)
+            .Take(30)
             .ToList();
     }
     else
@@ -585,11 +608,11 @@ private void AplicarFiltros()
         produtosFiltrados = todosProdutos
             .Where(p =>
                 (!categoriaSelecionadaId.HasValue || p.CategoriaId == categoriaSelecionadaId.Value) &&
-                (string.IsNullOrWhiteSpace(filtroNome) || p.Nome.Contains(filtroNome, StringComparison.OrdinalIgnoreCase)))
+                (string.IsNullOrWhiteSpace(filtroNome) || p.Nome.Contains(filtroNome, StringComparison.OrdinalIgnoreCase)) &&                p.Preco > 0 &&
+                p.CategoriaId != 21)
             .ToList();
     }
 }
-
 
 
     private async Task ShowAlert(string message)

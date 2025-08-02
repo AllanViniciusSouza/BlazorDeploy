@@ -38,7 +38,7 @@
     <Content Update="wwwroot\js\autocomplete.js">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Content>
-    <Content Update="wwwroot\logo.png">
+    <Content Update="wwwroot\logo1.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

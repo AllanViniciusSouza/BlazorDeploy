@@ -145,10 +145,10 @@ code {
 
 .carrinho-expandido {
     position: fixed;
-    bottom: 60px;
+    bottom: 70px;
     left: 0;
     right: 0;
-    max-height: 60vh;
+    max-height: 70vh;
     overflow-y: auto;
     background-color: white;
     z-index: 1060;

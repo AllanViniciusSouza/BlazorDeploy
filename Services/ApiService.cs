@@ -1082,15 +1082,44 @@ public class ApiService
         return await GetAsync<DistanciaResult>(endpoint);
     }
 
-    public async Task EnviarFotoProdutoAsync(int produtoId, Stream imagemStream, string contentType)
+    //public async Task EnviarFotoProdutoAsync(int produtoId, Stream imagemStream, string contentType)
+    //{
+    //    using var content = new MultipartFormDataContent();
+    //    content.Add(new StreamContent(imagemStream), "arquivo", $"foto_{produtoId}.jpg");
+
+    //    var response = await PutRequest($"api/produto/{produtoId}/foto", content);
+    //    response.EnsureSuccessStatusCode();
+    //}
+
+
+    public async Task EnviarFotoProdutoAsync(int id, Stream stream, string contentType)
     {
         using var content = new MultipartFormDataContent();
-        content.Add(new StreamContent(imagemStream), "arquivo", $"foto_{produtoId}.jpg");
+        content.Add(new StreamContent(stream) { Headers = { ContentType = new MediaTypeHeaderValue(contentType) } }, "arquivo", $"produto_{id}.jpg");
 
-        var response = await PutRequest($"api/produto/{produtoId}/foto", content);
+        var response = await PutRequest($"api/produtos/{id}/foto", content);
         response.EnsureSuccessStatusCode();
     }
 
+    //public async Task EnviarFotoProdutoAsync(int produtoId, Stream imagemStream, string contentType)
+    //{
+    //    var request = new HttpRequestMessage(HttpMethod.Put, $"api/produto/{produtoId}/foto");
+
+    //    var content = new MultipartFormDataContent();
+    //    var imageContent = new StreamContent(imagemStream);
+    //    imageContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+    //    content.Add(imageContent, "arquivo", $"foto_{produtoId}.jpg");
+
+    //    request.Content = content;
+
+    //    var response = await _httpClient.SendAsync(request);
+    //    var responseText = await response.Content.ReadAsStringAsync();
+
+    //    Console.WriteLine($"Status: {response.StatusCode}");
+    //    Console.WriteLine($"Response: {responseText}");
+
+    //    response.EnsureSuccessStatusCode();
+    //}
 
 }
 

@@ -102,12 +102,12 @@
              @onclick="() => ClickInput(produto.Id)"
              style="width:100px; cursor:pointer" />
 
-        <input type="file"
-               id="fileInput-@produto.Id"
-               style="display:none"
-               accept="image/*"
-               capture="environment"
-               @onchange="async e => await OnFotoSelecionada(e, produto.Id)" />
+        <!-- Campo de arquivo oculto -->
+        <InputFile id=@($"fileInput-{produto.Id}")
+           style="display:none"
+           accept="image/*"
+           capture="environment"
+           OnChange="@(e => OnFotoSelecionada(e, produto.Id))" />
                     }
                      else
                     {
@@ -271,13 +271,18 @@
         await JS.InvokeVoidAsync("triggerFileInput", $"fileInput-{produtoId}");
     }
 
-    private async Task OnFotoSelecionada(ChangeEventArgs e, int produtoId)
+    private async Task OnFotoSelecionada(InputFileChangeEventArgs  e, int produtoId)
     {
-        if (e.Value is not null && e.Value is IBrowserFile arquivo)
-        {
-            using var stream = arquivo.OpenReadStream(5 * 1024 * 1024); // 5MB
-            await _apiService.EnviarFotoProdutoAsync(produtoId, stream, arquivo.ContentType);
-        }
+        var arquivo = e.File;
+
+    using var stream = arquivo.OpenReadStream(5 * 1024 * 1024); // até 5MB
+    await _apiService.EnviarFotoProdutoAsync(produtoId, stream, arquivo.ContentType);
+
+    var novaImagem = $"/produto_{produtoId}.jpg?{DateTime.Now.Ticks}"; // força recarregar a imagem
+
+    var produto = filteredProdutos.FirstOrDefault(p => p.Id == produtoId);
+    if (produto != null)
+        produto.UrlImagem = novaImagem;
     }
 
     private async Task AdicionarProduto()

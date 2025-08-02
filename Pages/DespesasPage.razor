@@ -68,6 +68,40 @@
         </button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
     </EditForm>
+
+    
+}
+@if (filteredDespesas is not null && filteredDespesas.Any())
+{
+    <h4 class="mt-5">Despesas</h4>
+
+    <table class="table table-bordered mt-3">
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th>Categoria</th>
+                <th>Forma de pagamento</th>
+                <th>Valor</th>
+                <th>Parcela</th>
+                <th>Observação</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var despesa in filteredDespesas.OrderByDescending(c => c.Data))
+            {
+                <tr>
+                    <td>@despesa.Data.ToString("g")</td>
+                    <td>@despesa.Descricao</td>
+                    <td>@despesa.Categoria</td>
+                    <td>@despesa.FormaPagamento</td>
+                    <td>R$@despesa.Valor.ToString("C2")</td>
+                    <td>@despesa.Parcelas.ToString()</td>
+                    <td>@despesa.Observacao</td>
+                </tr>
+            }
+        </tbody>
+    </table>
 }
 
 @* html desenohs *@

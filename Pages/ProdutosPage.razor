@@ -1,7 +1,7 @@
 ﻿@page "/produtos"
 @inject ApiService _apiService
 @inject AuthService AuthService
-@inject IJSRuntime JS
+@* @inject IJSRuntime JS *@
 @inject NavigationManager Navigation
 @* @inject AuthService AuthService *@
 
@@ -241,6 +241,7 @@
     private List<DayOfWeek> diasSemana = Enum.GetValues<DayOfWeek>().ToList();
     private Dictionary<int, List<DayOfWeek>> diasSelecionadosPorProduto = new();
     private List<DayOfWeek> diasSelecionadosNovoProduto = new();
+    [Inject] IJSRuntime JS { get; set; }
 
 
 

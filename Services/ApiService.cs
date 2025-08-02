@@ -1040,7 +1040,7 @@ public class ApiService
 
     public async Task<(List<Despesas>?, string? ErrorMessage)> GetDespesasAsync()
     {
-        string endpoint = $"api/despesas";
+        string endpoint = $"api/Despesas";
         return await GetAsync<List<Despesas>>(endpoint);
     }
 

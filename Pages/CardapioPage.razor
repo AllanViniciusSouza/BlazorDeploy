@@ -569,26 +569,6 @@ private void BuscarPorNome(ChangeEventArgs e)
     AplicarFiltros();
 }
 
-// private void AplicarFiltros()
-// {
-//     if (!categoriaSelecionadaId.HasValue && string.IsNullOrWhiteSpace(filtroNome))
-//     {
-//         // Exibe os produtos mais populares por padrão (ex: top 10 mais vendidos ou aleatórios)
-//         produtosFiltrados = todosProdutos
-//             .OrderByDescending(p => p.Popular) // ou outro critério
-//             .Take(10)
-//             .ToList();
-//     }
-//     else
-//     {
-//         produtosFiltrados = todosProdutos
-//             .Where(p =>
-//                 (!categoriaSelecionadaId.HasValue || p.CategoriaId == categoriaSelecionadaId.Value) &&
-//                 (string.IsNullOrWhiteSpace(filtroNome) || p.Nome.Contains(filtroNome, StringComparison.OrdinalIgnoreCase)))
-//             .ToList();
-//     }
-// }
-
 private void AplicarFiltros()
 {
     if (!categoriaSelecionadaId.HasValue && string.IsNullOrWhiteSpace(filtroNome))
@@ -597,7 +577,8 @@ private void AplicarFiltros()
         produtosFiltrados = todosProdutos
             .Where(p =>
                 p.Preco > 0 &&
-                p.CategoriaId != 21
+                p.CategoriaId != 21 &&
+                p.Disponivel
             )
             .OrderByDescending(p => p.Popular) // ou outro critério
             .Take(30)
@@ -608,8 +589,10 @@ private void AplicarFiltros()
         produtosFiltrados = todosProdutos
             .Where(p =>
                 (!categoriaSelecionadaId.HasValue || p.CategoriaId == categoriaSelecionadaId.Value) &&
-                (string.IsNullOrWhiteSpace(filtroNome) || p.Nome.Contains(filtroNome, StringComparison.OrdinalIgnoreCase)) &&                p.Preco > 0 &&
-                p.CategoriaId != 21)
+                (string.IsNullOrWhiteSpace(filtroNome) || p.Nome.Contains(filtroNome, StringComparison.OrdinalIgnoreCase)) &&                
+                p.Preco > 0 &&
+                p.CategoriaId != 21 &&
+            p.Disponivel)
             .ToList();
     }
 }

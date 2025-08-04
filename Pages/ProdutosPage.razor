@@ -85,6 +85,7 @@
             <th>Nome</th>
             <th>Preço</th>
             <th>Dias Disponíveis</th>
+            <th>Disponivel no cardápio</th>
             <th>Popular</th>
             <th>Categoria</th>
             <th>Barcode</th>
@@ -175,6 +176,24 @@
                     else
                     {
                         @if (produto.Popular)
+                        {
+                            <span class="badge bg-success">Sim</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Não</span>
+                        }
+                    }
+                </td>
+
+                <td>
+                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                    {
+                        <InputCheckbox @bind-Value="produto.Disponivel" class="form-check-input" />
+                    }
+                    else
+                    {
+                        @if (produto.Disponivel)
                         {
                             <span class="badge bg-success">Sim</span>
                         }

@@ -84,11 +84,11 @@
             <th>Imagem</th>
             <th>Nome</th>
             <th>Preço</th>
-            <th>Dias Disponíveis</th>
             <th>Disponivel no cardápio</th>
             <th>Popular</th>
             <th>Categoria</th>
             <th>Barcode</th>
+            <th>Dias Disponíveis</th>
             @* <th>Ações</th> *@
         </tr>
     </thead>
@@ -136,37 +136,7 @@
                         @produto.Preco.ToString("C2")
                     }
                 </td>
-               <td>
-    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-    {
-            // Obtém os dias selecionados para o produto atual do dicionário
-            List<DayOfWeek> diasProduto = diasSelecionadosPorProduto.ContainsKey(produto.Id)
-                ? diasSelecionadosPorProduto[produto.Id]
-                : (
-                    string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase)
-                        ? Enum.GetValues<DayOfWeek>().ToList()
-                        : produto.DiasDisponiveis?
-                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                            .Select(d => Enum.TryParse<DayOfWeek>(d.Trim(), out var result) ? result : DayOfWeek.Sunday) // fallback seguro
-                            .ToList() ?? new List<DayOfWeek>()
-                );
-
-        @foreach (var dia in diasSemana)
-        {
-            <div class="form-check form-check-inline">
-                <input type="checkbox"
-                       class="form-check-input"
-                       checked="@diasProduto.Contains(dia)"
-                       @onchange="@((ChangeEventArgs e) => OnDiaSelecionado(produto, dia, (bool)e.Value))" />
-                <label class="form-check-label">@dia</label>
-            </div>
-        }
-    }
-    else
-    {
-        <span>@produto.DiasDisponiveis</span>
-    }
-</td>
+               
 
                 <td>
                     @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
@@ -230,6 +200,37 @@
                         @produto.Barcode
                     }
                 </td>
+                <td>
+    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+    {
+            // Obtém os dias selecionados para o produto atual do dicionário
+            List<DayOfWeek> diasProduto = diasSelecionadosPorProduto.ContainsKey(produto.Id)
+                ? diasSelecionadosPorProduto[produto.Id]
+                : (
+                    string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase)
+                        ? Enum.GetValues<DayOfWeek>().ToList()
+                        : produto.DiasDisponiveis?
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(d => Enum.TryParse<DayOfWeek>(d.Trim(), out var result) ? result : DayOfWeek.Sunday) // fallback seguro
+                            .ToList() ?? new List<DayOfWeek>()
+                );
+
+        @foreach (var dia in diasSemana)
+        {
+            <div class="form-check form-check-inline">
+                <input type="checkbox"
+                       class="form-check-input"
+                       checked="@diasProduto.Contains(dia)"
+                       @onchange="@((ChangeEventArgs e) => OnDiaSelecionado(produto, dia, (bool)e.Value))" />
+                <label class="form-check-label">@dia</label>
+            </div>
+        }
+    }
+    else
+    {
+        <span>@produto.DiasDisponiveis</span>
+    }
+</td>
                 <td>
                     @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
                     {
@@ -298,7 +299,7 @@
     using var stream = arquivo.OpenReadStream(5 * 1024 * 1024); // até 5MB
     await _apiService.EnviarFotoProdutoAsync(produtoId, stream, arquivo.ContentType);
 
-    var novaImagem = $"/produto_{produtoId}.jpg?{DateTime.Now.Ticks}"; // força recarregar a imagem
+    var novaImagem = $"produto_{produtoId}.jpg?{DateTime.Now.Ticks}"; // força recarregar a imagem
 
     var produto = filteredProdutos.FirstOrDefault(p => p.Id == produtoId);
     if (produto != null)

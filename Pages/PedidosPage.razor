@@ -26,7 +26,8 @@
             Débito: <strong>R$ @totalDebito.ToString("F2")</strong> |
             Crédito: <strong>R$ @totalCredito.ToString("F2")</strong> |
             Pix: <strong>R$ @totalPix.ToString("F2")</strong> |
-            Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong>
+            Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong> |
+            Ifood: <strong>R$ @totalIfood.ToString("F2")</strong> |
         </div>
     }
         <table class="table table-striped">
@@ -61,6 +62,7 @@
     private decimal totalCredito = 0;
     private decimal totalPix = 0;
     private decimal totalDinheiro = 0;
+    private decimal totalIfood = 0;
 
     private DateTime dataSelecionada = DateTime.Today;
 
@@ -104,5 +106,9 @@
         totalDinheiro = comandas
             .Where(c => c.FormaPagamento.Equals("Dinheiro", StringComparison.OrdinalIgnoreCase))
             .Sum(c => c.ValorTotal);
+
+        totalIfood = comandas
+        .Where(c => c.FormaPagamento.Equals("Ifood", StringComparison.OrdinalIgnoreCase))
+        .Sum(c => c.ValorTotal);
     }
 }

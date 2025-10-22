@@ -13,6 +13,8 @@
     <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
 </div>
 
+<h3 class="mt-4">Total Vendido Hoje: R$ @totalVendido.ToString("F2")</h3>
+
     @if (pedidosHoje.Count == 0)
     {
         <p>Nenhum pedido hoje.</p>
@@ -50,7 +52,7 @@
             </tbody>
         </table>
 
-        <h3 class="mt-4">Total Vendido Hoje: R$ @totalVendido.ToString("F2")</h3>
+        
     }
     
 

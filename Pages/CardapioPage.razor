@@ -6,260 +6,288 @@
 @inject HttpClient Http
 
 <div class="text-center mt-4">
-<img src="/logo1.jpg" class="img-fluid rounded-circle" style="max-height: 90px; object-fit: contain;" />
+    <img src="/logo1.jpg" class="img-fluid rounded-circle" style="max-height: 100px; object-fit: contain;" />
 </div>
-@if (todosProdutos == null)
+
+@if (EstaNoHorarioDeAtendimento)
 {
-    <p>Carregando...</p>
-}
-else
-{
-    <!-- Barra de categorias rolável -->
-<div class="d-flex overflow-auto mb-3 gap-3 px-2 py-1 border-bottom" style="white-space: nowrap;">
-    @foreach (var categoria in categorias)
+    @if (todosProdutos == null)
     {
-        <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => SelecionarCategoria(categoria.Id)">
-            <img src="@categoria.CaminhoImagem" class="rounded-circle mb-1" style="width: 60px; height: 60px; object-fit: cover;" />
-            <div style="font-size: 0.75rem; white-space: normal;">@categoria.Nome</div>
-        </div>
+        <p>Carregando...</p>
     }
-</div>
-
-<!-- Campo de busca -->
-<input type="text" class="form-control mb-3" placeholder="🔍 Buscar por nome..."
-       @oninput="BuscarPorNome" />
-
-       <div class="page-content">
-@if (produtosFiltrados.Any())
-{
-    <div class="row g-2">
-        @foreach (var produto in ProdutosDisponiveisHoje)
+    else
+    {
+        <!-- Barra de categorias rolável -->
+        <div class="d-flex overflow-auto mb-3 gap-3 px-2 py-1 border-bottom" style="white-space: nowrap;">
+        @foreach (var categoria in categorias)
         {
-            <div class="col-6 col-md-4 mb-3">
-                <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body text-center p-2 d-flex flex-column align-items-center">
-                        
-                        @if (!string.IsNullOrWhiteSpace(produto.UrlImagem))
-                        {
-                            <img src="@produto.CaminhoImagem"
-                                 class="img-fluid mb-2"
-                                 style="max-height: 70px; object-fit: contain;" />
-                        }
-
-                        <!-- Nome do produto: agora permite várias linhas -->
-                        <div class="fw-bold mb-1" style="font-size: 0.85rem; line-height: 1.1;">
-                            @produto.Nome
-                        </div>
-
-                        <div class="text-success mb-2 fw-semibold" style="font-size: 0.9rem;">
-                            R$ @produto.Preco.ToString("0.00")
-                        </div>
-
-                        <button class="btn btn-sm btn-success px-3" 
-                                style="border-radius: 20px; font-size: 0.8rem;"
-                                @onclick="() => AdicionarAoCarrinho(produto)">
-                            Adicionar
-                        </button>
-                    </div>
-                </div>
+            <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => SelecionarCategoria(categoria.Id)">
+                <img src="@categoria.CaminhoImagem" class="rounded-circle mb-1" style="width: 60px; height: 60px; object-fit: cover;" />
+                <div style="font-size: 0.75rem; white-space: normal;">@categoria.Nome</div>
             </div>
         }
-    </div>
+        </div>
+
+        <!-- Campo de busca -->
+        <input type="text" class="form-control mb-3" placeholder="🔍 Buscar por nome..."
+           @oninput="BuscarPorNome" />
+
+        <div class="page-content">
+        @if (produtosFiltrados.Any())
+        {
+            <div class="row g-2">
+            @foreach (var produto in ProdutosDisponiveisHoje)
+            {
+                <div class="col-6 col-md-4 mb-3">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-body text-center p-2 d-flex flex-column align-items-center">
+                            
+                            @if (!string.IsNullOrWhiteSpace(produto.UrlImagem))
+                            {
+                                <img src="@produto.CaminhoImagem"
+                                     class="img-fluid mb-2"
+                                     style="max-height: 70px; object-fit: contain;" />
+                            }
+
+                            <!-- Nome do produto: agora permite várias linhas -->
+                            <div class="fw-bold mb-1" style="font-size: 0.85rem; line-height: 1.1;">
+                                @produto.Nome
+                            </div>
+
+                            <div class="text-success mb-2 fw-semibold" style="font-size: 0.9rem;">
+                                R$ @produto.Preco.ToString("0.00")
+                            </div>
+
+                            <button class="btn btn-sm btn-success px-3" 
+                                    style="border-radius: 20px; font-size: 0.8rem;"
+                                    @onclick="() => AdicionarAoCarrinho(produto)">
+                                Adicionar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+            </div>
+            }
+            else
+            {
+            <p class="text-muted text-center">Nenhum produto encontrado.</p>
+            }
+        </div>
+
+        <!-- Carrinho fixo no rodapé -->
+        <div class="carrinho-footer bg-success text-white text-center p-3" @onclick="ToggleCarrinho">
+            🛒 Carrinho (@carrinho.Sum(c => c.Quantidade) itens)
+        </div>
+
+        <!-- Carrinho expandido -->
+        @if (carrinhoAberto)
+        {
+            <div class="carrinho-expandido shadow-lg p-3 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">🛒 Meu Carrinho</h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleCarrinho">Fechar</button>
+                </div>
+        
+                @if (!carrinho.Any())
+                {
+                    <p>Seu carrinho está vazio.</p>
+                }
+                else
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Produto</th>
+                                <th>Qtd</th>
+                                <th>Preço</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in carrinho)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="d-flex flex-column align-items-center">
+                                            <img src="@item.Produto.CaminhoImagem" class="img-fluid mb-1" style="max-height: 40px; object-fit: contain;" />
+                                        </div>
+                                    </td>  
+                                    <td>@item.Produto.Nome</td>
+                                    <td>
+                                        <div class="d-flex flex-column align-items-center">
+                                            <button class="btn btn-sm btn-light mb-1" @onclick="() => Incrementar(item)">+</button>
+                                            <span>@item.Quantidade</span>
+                                            <button class="btn btn-sm btn-light mt-1" @onclick="() => Decrementar(item)">-</button>
+                                        </div>
+                                    </td>
+                                    <td>R$ @item.Produto.Preco</td>
+                                    <td><button class="btn btn-sm btn-danger" @onclick="() => Remover(item)">🗑</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                <!-- Forma de pagamento -->
+                <div class="mb-3">
+                    <label>Forma de pagamento</label>
+                    <select class="form-select" @bind="formaPagamento">
+                        <option value="">Selecione a Forma de Pagamento</option>
+                        <option value="Dinheiro">Dinheiro</option>
+                        <option value="Credito">Crédito</option>
+                        <option value="Debito">Débito</option>
+                        <option value="Pix">Pix</option>
+                    </select>
+                </div>
+                
+                @if (formaPagamento == "Dinheiro")
+                {
+                    <div class="mb-3">
+                        <label>Troco Para:</label>
+                        <InputNumber @bind-Value="trocoPara" class="form-control" />
+                    </div>
+                }
+                
+                <div class="mb-3">
+                    <label class="form-label">Tipo de pedido</label>
+                
+                    <div class="form-check">
+                        <input class="form-check-input"
+                               type="radio"
+                               id="entrega"
+                               name="tipoPedido"
+                               value="entrega"
+                               checked="@(!retiradaNoLocal)"
+                               @onchange="() => retiradaNoLocal = false" />
+                        <label class="form-check-label" for="entrega">Entrega</label>
+                    </div>
+                
+                    <div class="form-check">
+                        <input class="form-check-input"
+                               type="radio"
+                               id="retirada"
+                               name="tipoPedido"
+                               value="retirada"
+                               checked="@(retiradaNoLocal)"
+                               @onchange="() => retiradaNoLocal = true" />
+                        <label class="form-check-label" for="retirada">Retirada no local</label>
+                    </div>
+                </div>
+
+                @if (!retiradaNoLocal)
+                {
+                    <!-- CEP -->
+                    <div class="mb-3">
+                        <label>CEP</label>
+                        <input class="form-control" @bind="cep" @onblur="BuscarEndereco" maxlength="9" placeholder="Digite o CEP" />
+                    </div>
+                
+                    @if (!string.IsNullOrWhiteSpace(cep))
+                    {
+                        <!-- Endereço retornado pelo ViaCEP (sem número) -->
+                        <div class="mb-3">
+                            <label>Endereço</label>
+                            <input class="form-control"
+                                   value="@enderecoBase"
+                                   readonly
+                                   placeholder="Endereço será preenchido automaticamente" />
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Endereço digitado manualmente -->
+                        <div class="mb-3">
+                            <label>Endereço</label>
+                            <input class="form-control"
+                                   @bind="@enderecoBase"
+                                   placeholder="Digite o endereço" />
+                        </div>
+                    }
+                    
+                    <!-- Número da casa -->
+                    <div class="mb-3">
+                        <label>Número</label>
+                        <input class="form-control"
+                               @bind="numeroCasa"
+                               placeholder="Número da casa, apartamento etc." />
+                    </div>
+                    
+                     @if (!string.IsNullOrWhiteSpace(cep))
+                    {
+                    <button class="btn btn-primary mb-3" @onclick="CalcularFreteAsync">Calcular Frete</button>
+                    }
+                    
+                    @if (resultadoDistancia != null)
+                    {
+                        <p><strong>Duração estimada:</strong> @resultadoDistancia.Duracao</p>
+                        <p><strong>Frete:</strong> R$ @valorFrete.ToString("F2")</p>
+                    }
+                }
+
+                <!-- Nome -->
+                <div class="mb-3">
+                    <label>Nome</label>
+                    <input class="form-control" @bind="nome" @oninput="@(() => Validator.NomeErro = "")"/>
+                    @if (!string.IsNullOrEmpty(Validator.NomeErro))
+                    {
+                        <div class="text-danger">@Validator.NomeErro</div>
+                    }
+                </div>
+                
+                <!-- Telefone -->
+                <div class="mb-3">
+                    <label>Telefone</label>
+                    <input class="form-control" @bind="telefone" @oninput="@(() => Validator.TelefoneErro = "")"/>
+                    @if (!string.IsNullOrEmpty(Validator.TelefoneErro))
+                    {
+                        <div class="text-danger">@Validator.TelefoneErro</div>
+                    }
+                </div>
+                
+                <label>Aproveite e inclua:</label>
+                 <!-- Barra de produtos mais vendidos rolavel -->
+                <div class="d-flex overflow-auto mb-3 gap-3 px-2 py-1 border-bottom" style="white-space: nowrap;">
+                    @foreach (var produto in produtosMaisVendidos)
+                    {
+                        <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => AdicionarAoCarrinho(produto)">
+                            <img src="@produto.CaminhoImagem" class="rounded-circle mb-1" style="width: 60px; height: 60px; object-fit: cover;" />
+                            <div style="font-size: 0.75rem; white-space: normal;">@produto.Nome</div>
+                            <div style="font-size: 0.75rem; white-space: normal;">@produto.Preco</div>
+                        </div>
+                    }
+                </div>
+                
+                <h4 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade)</h4>
+                
+                @if (valorFrete > 0){
+                    <h5 class="text-end">Total com frete: R$ @valorTotal.ToString("F2")</h5>
+                }
+                else
+                {
+                    <h4 class="text-end">O atendente informará o frete, ou digite o CEP para calcular.</h4>
+                }
+                
+                <button class="btn btn-success w-100"
+                        @onclick="EnviarPedido"
+                        disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) || isProcessing ||
+                    (formaPagamento == "Dinheiro" && trocoPara < carrinho.Sum(p => p.Produto.Preco * p.Quantidade)) ||
+                    (!retiradaNoLocal && string.IsNullOrWhiteSpace(endereco)))">
+                    Finalizar Pedido
+                </button>
+            </div>
+        }
+    }
 }
 else
 {
-    <p class="text-muted text-center">Nenhum produto encontrado.</p>
-}
-
-</div>
-
-    <!-- Carrinho fixo no rodapé -->
-<div class="carrinho-footer bg-success text-white text-center p-3" @onclick="ToggleCarrinho">
-    🛒 Carrinho (@carrinho.Sum(c => c.Quantidade) itens)
-</div>
-
-<!-- Carrinho expandido -->
-@if (carrinhoAberto)
-{
-    <div class="carrinho-expandido shadow-lg p-3 bg-white">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">🛒 Meu Carrinho</h5>
-            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleCarrinho">Fechar</button>
-        </div>
-
-        @if (!carrinho.Any())
-        {
-            <p>Seu carrinho está vazio.</p>
-        }
-        else
-        {
-            <table class="table table-sm">
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th>Produto</th>
-                        <th>Qtd</th>
-                        <th>Preço</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in carrinho)
-                    {
-                        <tr>
-                            <td>
-                                <div class="d-flex flex-column align-items-center">
-                                    <img src="@item.Produto.CaminhoImagem" class="img-fluid mb-1" style="max-height: 40px; object-fit: contain;" />
-                                </div>
-                            </td>  
-                            <td>@item.Produto.Nome</td>
-                            <td>
-                                <div class="d-flex flex-column align-items-center">
-                                    <button class="btn btn-sm btn-light mb-1" @onclick="() => Incrementar(item)">+</button>
-                                    <span>@item.Quantidade</span>
-                                    <button class="btn btn-sm btn-light mt-1" @onclick="() => Decrementar(item)">-</button>
-                                </div>
-                            </td>
-                            <td>R$ @item.Produto.Preco</td>
-                            <td><button class="btn btn-sm btn-danger" @onclick="() => Remover(item)">🗑</button></td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-
-<!-- Forma de pagamento -->
-<div class="mb-3">
-    <label>Forma de pagamento</label>
-    <select class="form-select" @bind="formaPagamento">
-        <option value="">Selecione a Forma de Pagamento</option>
-        <option value="Dinheiro">Dinheiro</option>
-        <option value="Credito">Crédito</option>
-        <option value="Debito">Débito</option>
-        <option value="Pix">Pix</option>
-    </select>
-</div>
-
-@if (formaPagamento == "Dinheiro")
-{
-    <div class="mb-3">
-        <label>Troco Para:</label>
-        <InputNumber @bind-Value="trocoPara" class="form-control" />
+    <!-- Mensagem fora do horário -->
+    <div class="text-center mt-5">
+        <h3>Estamos atendendo das 11h às 15h</h3>
+        <p>Volte nesse horário para fazer seu pedido 😊</p>
     </div>
 }
-
-<div class="mb-3">
-    <label class="form-label">Tipo de pedido</label>
-
-    <div class="form-check">
-        <input class="form-check-input"
-               type="radio"
-               id="entrega"
-               name="tipoPedido"
-               value="entrega"
-               checked="@(!retiradaNoLocal)"
-               @onchange="() => retiradaNoLocal = false" />
-        <label class="form-check-label" for="entrega">Entrega</label>
-    </div>
-
-    <div class="form-check">
-        <input class="form-check-input"
-               type="radio"
-               id="retirada"
-               name="tipoPedido"
-               value="retirada"
-               checked="@(retiradaNoLocal)"
-               @onchange="() => retiradaNoLocal = true" />
-        <label class="form-check-label" for="retirada">Retirada no local</label>
-    </div>
-</div>
-
-
-
-
-
-@if (!retiradaNoLocal)
-{
-    <!-- CEP -->
-    <div class="mb-3">
-        <label>CEP</label>
-        <input class="form-control" @bind="cep" @onblur="BuscarEndereco" maxlength="9" placeholder="Digite o CEP" />
-    </div>
-
-    <!-- Endereço retornado pelo ViaCEP (sem número) -->
-<div class="mb-3">
-    <label>Endereço</label>
-    <input class="form-control"
-           value="@enderecoBase"
-           readonly
-           placeholder="Endereço será preenchido automaticamente" />
-</div>
-
-<!-- Número da casa -->
-<div class="mb-3">
-    <label>Número</label>
-    <input class="form-control"
-           @bind="numeroCasa"
-           placeholder="Número da casa, apartamento etc." />
-</div>
-
-<button class="btn btn-primary mb-3" @onclick="CalcularFreteAsync">Calcular Frete</button>
-@if (resultadoDistancia != null)
-{
-    <p><strong>Duração estimada:</strong> @resultadoDistancia.Duracao</p>
-    <p><strong>Frete:</strong> R$ @valorFrete.ToString("F2")</p>
-}
-}
-<!-- Nome -->
-<div class="mb-3">
-    <label>Nome</label>
-    <input class="form-control" @bind="nome" @oninput="@(() => Validator.NomeErro = "")"/>
-    @if (!string.IsNullOrEmpty(Validator.NomeErro))
-    {
-        <div class="text-danger">@Validator.NomeErro</div>
-    }
-</div>
-
-<!-- Telefone -->
-<div class="mb-3">
-    <label>Telefone</label>
-    <input class="form-control" @bind="telefone" @oninput="@(() => Validator.TelefoneErro = "")"/>
-    @if (!string.IsNullOrEmpty(Validator.TelefoneErro))
-    {
-        <div class="text-danger">@Validator.TelefoneErro</div>
-    }
-</div>
-
-<label>Aproveite e inclua:</label>
- <!-- Barra de produtos mais vendidos rolavel -->
-<div class="d-flex overflow-auto mb-3 gap-3 px-2 py-1 border-bottom" style="white-space: nowrap;">
-    @foreach (var produto in produtosMaisVendidos)
-    {
-        <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => AdicionarAoCarrinho(produto)">
-            <img src="@produto.CaminhoImagem" class="rounded-circle mb-1" style="width: 60px; height: 60px; object-fit: cover;" />
-            <div style="font-size: 0.75rem; white-space: normal;">@produto.Nome</div>
-            <div style="font-size: 0.75rem; white-space: normal;">@produto.Preco</div>
-        </div>
-    }
-
-  
-</div>
-
-<h4 class="text-end">Total: R$ @carrinho.Sum(i => i.Produto.Preco * i.Quantidade)</h4>
-<h5 class="text-end">Total com frete: R$ @valorTotal.ToString("F2")</h5>
-
-<button class="btn btn-success w-100"
-        @onclick="EnviarPedido"
-        disabled="@(!carrinho.Any() || string.IsNullOrEmpty(formaPagamento) || isProcessing ||
-    (formaPagamento == "Dinheiro" && trocoPara < carrinho.Sum(p => p.Produto.Preco * p.Quantidade)) ||
-    (!retiradaNoLocal && string.IsNullOrWhiteSpace(endereco)))">
-    Finalizar Pedido
-</button>
-
-        }
-    </div>
-}
-
-
 
     @code {
     private List<CarrinhoCompraItem> carrinho = new();
@@ -293,6 +321,9 @@ else
     DistanciaResult? resultadoDistancia = new();
     decimal valorFrete = 0;
     decimal valorTotal = 0;
+    private bool EstaNoHorarioDeAtendimento =>
+        DateTime.Now.TimeOfDay >= new TimeSpan(11, 0, 0) &&
+        DateTime.Now.TimeOfDay <= new TimeSpan(15, 0, 0);
 
     protected override async Task OnInitializedAsync()
     {
@@ -614,7 +645,4 @@ private void AplicarFiltros()
     {
         await JS.InvokeVoidAsync("alert", message);
     }
-}
-
-
 }

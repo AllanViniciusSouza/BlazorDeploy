@@ -331,8 +331,8 @@ else
         // Ordenar manualmente as categorias
         var ordemManual = new List<string>
         {
-            "Marmitas",
-            "Porções",
+            // "Marmitas",
+            // "Porções",
             "Refrigerante",
             "Combos",
             "Carvão",
@@ -343,7 +343,7 @@ else
         if (catResult != null)
         {
             categorias = catResult
-            .Where(c => c.Id != 21) // exclui a categoria com Id 21
+            .Where(c => c.Id != 21 && c.Id != 22 && c.Id != 18) // exclui a categoria com Id 21
             .OrderBy(c =>
             {
                 var index = ordemManual.IndexOf(c.Nome);

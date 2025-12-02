@@ -13,6 +13,8 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using static System.Net.WebRequestMethods;
+using Microsoft.AspNetCore.Components.Forms;
+using System.Net.Http.Headers;
 
 namespace BlazorDeploy.Services;
 
@@ -20,7 +22,8 @@ public class ApiService
 {
     private readonly HttpClient _httpClient;
     private readonly IJSRuntime _jsRuntime;
-    private readonly string _baseUrl = "https://hc4df66l-7066.brs.devtunnels.ms/";
+    //private readonly string _baseUrl = "https://hc4df66l-7066.brs.devtunnels.ms/";
+    private readonly string _baseUrl = "";
     private readonly ILogger<ApiService> _logger;
 
     JsonSerializerOptions _serializerOptions;
@@ -34,6 +37,62 @@ public class ApiService
         {
             PropertyNameCaseInsensitive = true
         };
+    }
+
+    private string BuildUrl(string uri)
+    {
+        // Prefer HttpClient.BaseAddress configured in Program.cs (from appconfig.json)
+        if (_httpClient.BaseAddress != null)
+        {
+            return new Uri(_httpClient.BaseAddress, uri).ToString();
+        }
+
+        // Fallback to hardcoded base url
+        return _baseUrl.TrimEnd('/') + "/" + uri.TrimStart('/');
+    }
+
+    // Upload an XML file (invoice) to the backend
+    public async Task<ApiResponse<bool>> UploadInvoiceXml(IBrowserFile file)
+    {
+        try
+        {
+            // Read the file content as text (XML) and post as application/xml to the NotasEntrada controller
+            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var xml = await reader.ReadToEndAsync();
+
+            var content = new StringContent(xml, Encoding.UTF8, "application/xml");
+
+            // POST to the controller route implemented in the API: /api/NotasEntrada
+            var response = await PostRequest("api/NotasEntrada", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
+                return new ApiResponse<bool>
+                {
+                    ErrorMessage = $"Erro ao enviar requisição HTTP: {response.StatusCode}"
+                };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Erro ao fazer upload do xml: {ex.Message}");
+            return new ApiResponse<bool> { ErrorMessage = ex.Message };
+        }
+    }
+
+    public async Task<(List<InvoiceSummary>?, string? ErrorMessage)> GetLatestInvoices()
+    {
+        return await GetAsync<List<InvoiceSummary>>("api/invoices/latest");
+    }
+
+    public async Task<(List<InvoiceItem>?, string? ErrorMessage)> GetInvoiceItems(string invoiceId)
+    {
+        var endpoint = $"api/invoices/{Uri.EscapeDataString(invoiceId)}/items";
+        return await GetAsync<List<InvoiceItem>>(endpoint);
     }
 
     public async Task<ApiResponse<bool>> RegistrarUsuario(string nome, string email, 
@@ -191,9 +250,10 @@ public class ApiService
 
     public async Task<HttpResponseMessage> PostRequest(string uri, HttpContent content) 
     { 
-        var enderecoUrl = _baseUrl + uri;
+        var enderecoUrl = BuildUrl(uri);
         try
         {
+            await AddAuthorizationHeader();
             var result = await _httpClient.PostAsync(enderecoUrl, content);
             return result;
         }
@@ -281,7 +341,7 @@ public class ApiService
 
     private async Task<HttpResponseMessage> PutRequest(string uri, HttpContent content)
     {
-        var enderecoUrl = AppConfig.BaseUrl + uri;
+        var enderecoUrl = BuildUrl(uri);
         try
         {
             AddAuthorizationHeader();
@@ -491,7 +551,8 @@ public class ApiService
 
     public async Task<(List<PedidoDetalhe>?, string? ErrorMessage)> GetPedidoDetalhes(int pedidoId)
     {
-        string endpoint = $"api/pedidos/DetalhesPedido/{pedidoId}";
+        // Backend exposes GET api/Pedidos/Detalhes/{pedidoId}
+        string endpoint = $"api/pedidos/Detalhes/{pedidoId}";
         return await GetAsync<List<PedidoDetalhe>>(endpoint);
     }
 
@@ -663,8 +724,9 @@ public class ApiService
     {
         try
         {
-            AddAuthorizationHeader();
-            var response = await _httpClient.GetAsync(AppConfig.BaseUrl + endpoint);
+            await AddAuthorizationHeader();
+            var enderecoUrl = BuildUrl(endpoint);
+            var response = await _httpClient.GetAsync(enderecoUrl);
 
             if (response.IsSuccessStatusCode)
             {
@@ -707,7 +769,7 @@ public class ApiService
 
     }
 
-    private async void AddAuthorizationHeader()
+    private async Task AddAuthorizationHeader()
     {
         var token = await _jsRuntime.InvokeAsync<string>("sessionStorage.getItem", "accesstoken");
 
@@ -822,7 +884,7 @@ public class ApiService
 
     public async Task<HttpResponseMessage> DeleteRequest(string uri)
     {
-        var enderecoUrl = _baseUrl + uri;
+        var enderecoUrl = BuildUrl(uri);
         try
         {
             var result = await _httpClient.DeleteAsync(enderecoUrl);

@@ -1,4 +1,6 @@
-﻿namespace BlazorDeploy.Models;
+﻿using static System.Net.WebRequestMethods;
+
+namespace BlazorDeploy.Models;
 
 public class AppConfig
 {

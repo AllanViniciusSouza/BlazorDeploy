@@ -3,155 +3,268 @@
 @inject AuthService AuthService
 @inject IJSRuntime JS
 @inject IValidator Validator
+@using Microsoft.AspNetCore.Components.Forms
 
 @inject NavigationManager Navigation
 
 <PageTitle>Caixa</PageTitle>
 
-<h3 class="text-bg-primary text-center">*Caixa Registradora*</h3>
+@* compact vendor + client inputs shown at bottom (rendered near cart) *@
 
-  @*   <div class="d-flex gap-2" style="max-width: 600px;">
-        <div style="position: relative; flex-grow: 1;">
-            <input type="text" id="entryComanda" class="form-control"
-                   autocomplete="off"
-                   @bind="entryComanda"
-                   @oninput="BuscarSugestoesComanda"
-                   placeholder="Digite o nome" />
 
-            <input type="text" id="entryTelefone" class="form-control"
-                   autocomplete="off"
-                   @bind="entryTelefone"
-                   placeholder="Digiteo telefone ex: 19987654321" />
+    <div class="card shadow-sm p-3 mb-4 bg-dark text-white">
+    <h4 class="fw-bold text-white">Produtos</h4>
 
-            <input type="text" id="entryEndereco" class="form-control"
-                   autocomplete="off"
-                   @bind="entryEndereco"
-                   placeholder="Digite o Endereço" />
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">
+            <input class="form-control form-control-lg"
+                   placeholder="Pesquisar por nome"
+                   @bind="searchNome"
+                   @oninput="SearchByNome" />
+        </div>
+        <div class="col-md-6">
+            <input class="form-control form-control-lg"
+                   placeholder="Pesquisar código de barras"
+                   @bind="searchBarcode"
+                   @oninput="SearchByBarcode" />
+        </div>
+    </div>
 
-            @if (sugestoesComanda.Any())
+    <div style="max-height: 480px; overflow-y: auto;">
+        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-6 g-2">
+            @foreach (var Produto in filteredProdutos)
             {
-                <ul class="list-group"
-                    style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10;">
-                    @foreach (var sugestao in sugestoesComanda)
-                    {
-                        <li class="list-group-item list-group-item-action"
-                            @onclick="@(() => SelecionarSugestaoComanda(sugestao.Nome))">
-                            @sugestao.Nome
-                        </li>
-                    }
-                </ul>
+                <div class="col">
+                    <div class="card h-100 shadow-sm small" @onclick="() => OpenQuantityModal(Produto)" style="cursor:pointer;">
+                        @if (!string.IsNullOrEmpty(Produto.CaminhoImagem))
+                        {
+                            <div style="height:72px; overflow:hidden; background:#f8f9fa;">
+                                <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="d-flex align-items-center justify-content-center" style="height:72px; background:#f8f9fa;">
+                                <span class="text-muted small">Sem imagem</span>
+                            </div>
+                        }
+
+                        <div class="card-body p-1 d-flex flex-column">
+                            <div class="card-title mb-1 text-truncate" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
+                            <div class="text-success mb-1" style="font-size:0.85rem;">R$ @Produto.Preco.ToString("0.00")</div>
+                           @*  <div class="mt-auto">
+                                <button class="btn btn-sm btn-success w-100" @onclick="() => OpenQuantityModal(Produto)" @onclick:stopPropagation>Adicionar</button>
+                            </div> *@
+                        </div>
+                    </div>
+                </div>
             }
-        </div> *@
-
-        @* <button class="btn btn-primary" @onclick="CreateComanda"
-                disabled="@(!cart.Any() || isProcessing || string.IsNullOrEmpty(entryComanda))">
-            Criar comanda
-        </button> *@
-
-    @* </div> *@
-
-    <div class="row">
-        <div class="col-md-6">
-            <label for="searchNome" class="form-label fw-bold">Pesquisar por Nome</label>
-            <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
-        </div>
-
-        <div class="col-md-6">
-            <label for="searchBarcode" class="form-label fw-bold">Pesquisar por Código de Barras</label>
-            <input type="text" id="searchBarcode" class="form-control" @bind="searchBarcode" @oninput="SearchByBarcode" placeholder="Digite o código de barras" />
         </div>
     </div>
+</div>
 
-    <h4 class="fw-bold mt-3">Produtos Disponíveis</h4>
 
-    <div style="max-height: 300px; overflow-y: auto;">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Nome</th>
-                    <th>Preço</th>
-                    <th>Ação</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var Produto in filteredProdutos)
-                {
-                    <tr>
-                        <td>@Produto.Nome</td>
-                        <td>R$ @Produto.Preco.ToString("0.00")</td>
-                        <td>
-                            <button class="btn btn-success btn-sm" @onclick="() => AddToCart(Produto)">Adicionar</button>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
+<div class="card shadow-sm p-3 mb-4 bg-dark text-white">
+    <h4 class="fw-bold text-white">Carrinho</h4>
 
-    <h4 class="fw-bold mt-4">Carrinho</h4>
-    <table class="table">
-        <thead>
+    <table class="table table-bordered table-striped align-middle mt-2">
+        <thead class="table-dark">
             <tr>
-                <th>Nome</th>
-                <th>Preço</th>
-                <th>Ação</th>
+                <th>Produto</th>
+                <th>Unit.</th>
+                <th>Qtd</th>
+                <th>Total</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
             @foreach (var item in cart)
             {
                 <tr>
-                    <td>@item.Nome</td>
-                    <td>R$ @item.Preco.ToString("0.00")</td>
+                    <td class="fw-bold">@item.Produto.Nome</td>
+
                     <td>
-                        <button class="btn btn-danger btn-sm" @onclick="() => RemoveFromCart(item)">Remover</button>
+                        <input type="number" min="0" step="0.01"
+                               class="form-control form-control-sm text-end"
+                               @bind="item.PrecoUnitario" @bind:after="UpdateCartTotals" />
+                    </td>
+
+                    <td>
+                        <input type="number" min="1"
+                               class="form-control form-control-sm text-center"
+                               @bind="item.Quantidade" @bind:after="UpdateCartTotals" />
+                    </td>
+
+                    <td class="fw-bold">R$ @item.Total.ToString("0.00")</td>
+
+                    <td>
+                        <button class="btn btn-danger btn-sm"
+                                @onclick="@(() => RemoveFromCart(item))">
+                            X
+                        </button>
                     </td>
                 </tr>
             }
         </tbody>
     </table>
 
-    <h5>Total: R$ @cart.Sum(p => p.Preco).ToString("0.00")</h5>
+    <h3 class="text-end mt-3 fw-bold">
+        Total: R$ @cart.Sum(p => p.Total).ToString("0.00")
+    </h3>
 
-    <div class="d-flex flex-column gap-2 ms-2 mt-2" style="max-width: 400px;">
-        <select class="form-select" @bind="formaPagamentoSelecionada">
-            <option value="">Selecione a Forma de Pagamento</option>
-            <option value="Dinheiro">Dinheiro</option>
-            <option value="Credito">Crédito</option>
-            <option value="Debito">Débito</option>
-            <option value="Pix">Pix</option>
-        <option value="Ifood">Ifood</option>
-        </select>
+    <div class="row g-2 align-items-center">
+        <div class="col-md-6">
+            <label class="form-label fw-bold">Forma de Pagamento</label>
+            <div class="d-flex">
+                <select class="form-select form-select-lg" @bind="formaPagamentoSelecionada">
+                    <option value="">Selecione...</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Credito">Crédito</option>
+                    <option value="Debito">Débito</option>
+                    <option value="Pix">Pix</option>
+                    <option value="Ifood">Ifood</option>
+                </select>
+                <input type="number" step="0.01" class="form-control ms-2" style="max-width:140px;" placeholder="Valor" @bind="pagamento1" />
+            </div>
+        </div>
 
-        @if (formaPagamentoSelecionada == "Dinheiro")
-        {
+        <div class="col-md-6">
+            <label class="form-label fw-bold">Forma de Pagamento 2 (opcional)</label>
+            <div class="d-flex">
+                <select class="form-select form-select-lg" @bind="formaPagamento2">
+                    <option value="">Nenhuma</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Credito">Crédito</option>
+                    <option value="Debito">Débito</option>
+                    <option value="Pix">Pix</option>
+                    <option value="Ifood">Ifood</option>
+                </select>
+                <input type="number" step="0.01" class="form-control ms-2" style="max-width:140px;" placeholder="Valor" @bind="pagamento2" />
+            </div>
+        </div>
+    </div>
+
+    @if (formaPagamentoSelecionada == "Dinheiro")
+    {
+        <div class="mt-3">
+            <label class="fw-bold">Valor Recebido</label>
+            <InputNumber @bind-Value="valorRecebido"
+                         class="form-control form-control-lg" />
+            <p class="mt-2 fs-5">
+                Troco: <strong>R$ @troco.ToString("0.00")</strong>
+            </p>
+        </div>
+    }
+
+    @* Compact inputs row below cart: vendedor e dados do cliente lado a lado *@
+    <div class="d-flex gap-3 mt-3">
+        <div style="flex:1; max-width:380px;">
+            <label class="form-label fw-bold">Vendedor</label>
             <div>
-                <label>Valor Recebido:</label>
-                <InputNumber @bind-Value="valorRecebido" class="form-control" />
-                @if (valorRecebido > 0)
+                @if (vendedores != null && vendedores.Any())
                 {
-                    <p class="mt-2">Troco: <strong>R$ @troco.ToString("0.00")</strong></p>
+                    @foreach (var v in vendedores)
+                    {
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => vendedorNome = v" checked="@(vendedorNome == v)" />
+                            <label class="form-check-label ms-2" for="v_@v">@v</label>
+                        </div>
+                    }
+
+                    <div class="form-check mt-1">
+                        <input class="form-check-input" type="radio" name="vendedor" id="v_outro" @onchange="() => vendedorNome = string.Empty" checked="@(string.IsNullOrEmpty(vendedorNome) || !vendedores.Contains(vendedorNome))" />
+                        <label class="form-check-label ms-2" for="v_outro">Outro</label>
+                    </div>
+
+                    @if (string.IsNullOrEmpty(vendedorNome) || !vendedores.Contains(vendedorNome))
+                    {
+                        <input class="form-control form-control-sm mt-1" @bind="vendedorNome" placeholder="Digite o nome do vendedor" />
+                    }
+                }
+                else
+                {
+                    <input type="text" class="form-control form-control-sm" @bind="vendedorNome" placeholder="Vendedor" />
                 }
             </div>
-        }
+        </div>
 
-        <button class="btn btn-success"
-                @onclick="FinalizePurchase"
-                disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada) ||
-                                       (formaPagamentoSelecionada == "Dinheiro" && valorRecebido < cart.Sum(p => p.Preco)))">
+        <div style="flex:2; display:flex; gap:8px;">
+            <div style="flex:1">
+                <label class="form-label fw-bold">Cliente</label>
+                <input type="text" class="form-control form-control-sm" @bind="clienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome cliente" />
+            </div>
+            <div style="width:140px">
+                <label class="form-label fw-bold">Telefone</label>
+                <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
+            </div>
+            <div style="width:220px">
+                <label class="form-label fw-bold">Endereço</label>
+                <input type="text" class="form-control form-control-sm" @bind="entryEndereco" placeholder="Endereço" />
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <label class="form-label fw-bold">Status do Pedido</label>
+        <div class="d-flex gap-3 mt-2">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" @onchange='() => pedidoStatus = "Finalizado"' checked='@(pedidoStatus == "Finalizado")' />
+                <label class="form-check-label ms-2" for="status_finalizado">Finalizado</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" @onchange='() => pedidoStatus = "Retirada"' checked='@(pedidoStatus == "Retirada")' />
+                <label class="form-check-label ms-2" for="status_retirada">Retirada</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" @onchange='() => pedidoStatus = "Em entrega"' checked='@(pedidoStatus == "Em entrega")' />
+                <label class="form-check-label ms-2" for="status_entrega">Em entrega</label>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-success btn-lg w-100 mt-3"
+            @onclick="FinalizePurchase"
+            disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada))">
         Finalizar Compra
     </button>
 </div>
+
+
+
+
+@if (showQuantityModal)
+{
+    <div class="modal-backdrop fade show"></div>
+
+    <div class="modal d-block">
+        <div class="modal-dialog modal-sm mt-5">
+            <div class="modal-content p-4 shadow-lg">
+                <h5 class="fw-bold text-center">Quantidade</h5>
+
+                <input type="number" class="form-control form-control-lg text-center"
+                       min="1" @bind="selectedQuantity" />
+
+                <div class="d-flex mt-3 justify-content-around">
+                    <button class="btn btn-secondary btn-lg" @onclick="CloseModal">Cancelar</button>
+                    <button class="btn btn-primary btn-lg" @onclick="ConfirmAddToCart">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
 
 @* html *@
 @code {
     //c#
     private string searchNome = string.Empty;
     private string searchBarcode = string.Empty;
-    private string entryComanda = string.Empty;
+    private string clienteNome = string.Empty;
+    private string vendedorNome = string.Empty;
     private List<Produto> filteredProdutos = new();
     private List<Produto> maisVendidos = new();
-    private List<Produto> cart = new();
+    private List<CartItem> cart = new();
     private List<ItemComanda> itensComanda = new();
     private int idcomanda;
     private bool isProcessing = false;
@@ -162,11 +275,74 @@
     private string entryEndereco;
     private bool imprimirNaCozinha = false;
 
+    private bool showQuantityModal = false;
+private Produto selectedProduct;
+private int? selectedQuantity = null;
+    private bool showDebugImages = false;
+    private List<string> debugImageSources = new();
+    private string formaPagamento2 = string.Empty;
+    private decimal? pagamento1;
+    private decimal? pagamento2;
+    private List<string> vendedores = new();
+    private string pedidoStatus = "Finalizado";
+    
+    private void SelectVendedor(string nome) => vendedorNome = nome;
+    private void SelectStatus(string status) => pedidoStatus = status;
+
+    private void ToggleDebugImages()
+    {
+        showDebugImages = !showDebugImages;
+        if (showDebugImages)
+        {
+            debugImageSources = filteredProdutos.Select(p => p.CaminhoImagem ?? p.UrlImagem ?? "(none)").ToList();
+        }
+    }
+
+void OpenQuantityModal(Produto produto)
+{
+    selectedProduct = produto;
+    // start empty so user can type a value without having to delete a default
+    selectedQuantity = null;
+    showQuantityModal = true;
+}
+
+void CloseModal()
+{
+    showQuantityModal = false;
+}
+
+void ConfirmAddToCart()
+{
+    var qty = selectedQuantity ?? 1; // default 1 if user leaves empty
+
+    var existing = cart.FirstOrDefault(c => c.Produto.Nome == selectedProduct.Nome);
+
+    if (existing == null)
+    {
+        cart.Add(new CartItem
+        {
+            Produto = selectedProduct,
+            Quantidade = qty,
+            PrecoUnitario = selectedProduct.Preco // preço inicial (pode ser alterado depois)
+        });
+    }
+    else
+    {
+        existing.Quantidade += qty;
+    }
+
+    showQuantityModal = false;
+}
+
+void UpdateCartTotals()
+{
+    StateHasChanged();
+}
 
     private decimal valorRecebido;
-    private decimal troco => valorRecebido - cart.Sum(p => p.Preco);
+    private decimal troco => valorRecebido - cart.Sum(p => p.Total);
 
-    private int? NumeroComanda => int.TryParse(entryComanda, out int num) ? num : (int?)null;
+    private int? NumeroComanda => int.TryParse(clienteNome, out int num) ? num : (int?)null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -178,14 +354,25 @@
         }
 
         var (produtosMaisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
-        filteredProdutos = produtosMaisVendidos;
+        filteredProdutos = produtosMaisVendidos ?? new List<Produto>();
+
+        // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
+        if (vendedores == null || !vendedores.Any())
+        {
+            vendedores = new List<string> { "Ronaldo", "Neno", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
+        }
+
+        if (string.IsNullOrWhiteSpace(vendedorNome) && vendedores.Any())
+        {
+            vendedorNome = vendedores[0];
+        }
     }
 
     private async Task BuscarSugestoesComanda(ChangeEventArgs e)
     {
-        entryComanda = e.Value.ToString();
+        clienteNome = e.Value.ToString();
 
-        if (string.IsNullOrWhiteSpace(entryComanda))
+        if (string.IsNullOrWhiteSpace(clienteNome))
         {
             sugestoesComanda.Clear();
             return;
@@ -199,15 +386,28 @@
         }
 
         sugestoesComanda = todasComandasAbertas
-            .Where(c => c.Nome.Contains(entryComanda, StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.Nome.Contains(clienteNome, StringComparison.OrdinalIgnoreCase))
             .Take(5) // Limita sugestões
             .ToList();
     }
 
     private void SelecionarSugestaoComanda(string idSelecionado)
     {
-        entryComanda = idSelecionado;
+        clienteNome = idSelecionado;
         sugestoesComanda.Clear();
+    }
+
+    private string GetProdutoImageSrc(Produto produto)
+    {
+        // Prefer Produto.CaminhoImagem (already includes AppConfig.BaseUrl) when available
+        if (!string.IsNullOrEmpty(produto.CaminhoImagem))
+            return produto.CaminhoImagem;
+
+        // Fallback to UrlImagem if it's already an absolute URL
+        if (!string.IsNullOrEmpty(produto.UrlImagem) && produto.UrlImagem.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return produto.UrlImagem;
+
+        return string.Empty;
     }
 
     private async Task SearchByNome(ChangeEventArgs e)
@@ -246,42 +446,85 @@
         }
     }
 
-    private void AddToCart(Produto Produto)
-    {
-        cart.Add(Produto);
-    }
+    // private void AddToCart(Produto Produto)
+    // {
+    //     var newItem = new CartItem
+    //     {
+    //         Produto = Produto,
+    //         Quantidade = 1
+    //     };
+    //     cart.Add(Produto);
+    // }
 
-    private void RemoveFromCart(Produto Produto)
+    private void RemoveFromCart(CartItem  Produto)
     {
         cart.Remove(Produto);
     }
 
     private async Task FinalizePurchase()
     {
-        var pedido = new Pedido()
+        // exigir vendedor preenchido
+        if (string.IsNullOrWhiteSpace(vendedorNome))
         {
-            ValorTotal = cart.Sum(p => p.Preco),
+            await ShowAlert("Por favor selecione ou digite o nome do vendedor antes de finalizar a compra.");
+            return;
+        }
+        // Build DTO matching backend PedidoDetalheDTO for items
+        var itensDto = cart.Select(item => new
+        {
+            ProdutoId = item.Produto.Id,    
+            ProdutoNome = item.Produto.Nome,
+            ProdutoImagem = item.Produto.UrlImagem ?? item.Produto.CaminhoImagem,
+            Quantidade = item.Quantidade,
+            ProdutoPreco = item.PrecoUnitario,
+            SubTotal = item.Total,
+            CaminhoImagem = item.Produto.CaminhoImagem ?? (item.Produto.UrlImagem != null ? AppConfig.BaseUrl + item.Produto.UrlImagem : null)
+        }).ToList();
+
+        var pedidoDto = new
+        {
+            Endereco = entryEndereco,
+            VendedorNome = vendedorNome,
+            ClienteNome = clienteNome,
+            ValorTotal = cart.Sum(p => p.Total),
             DataPedido = DateTime.Now,
-            FormaPagamento = formaPagamentoSelecionada
+            FormaPagamento = formaPagamentoSelecionada,
+            ValorPago1 = pagamento1,
+            FormaPagamento2 = formaPagamento2,
+            ValorPago2 = pagamento2,
+            Status = pedidoStatus,
+            Itens = itensDto
         };
 
+        // serialize and post directly to API
+        var json = System.Text.Json.JsonSerializer.Serialize(pedidoDto);
+        var content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _apiService.PostRequest("api/Pedidos", content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await ShowAlert($"Falha ao confirmar pedido: {response.ReasonPhrase}");
+            return;
+        }
+
+        // registrar movimentações de estoque
         foreach (var item in cart)
         {
             var movimentacao = new MovimentacaoEstoque()
             {
-                ProdutoId = item.Id,
+                ProdutoId = item.Produto.Id,
                 Tipo = TipoMovimentacao.Venda,
-                Quantidade = 1,
+                Quantidade = item.Quantidade,
                 DataMovimentacao = DateTime.Now
             };
             await _apiService.MovimentarEstoqueAsync(movimentacao);
-
         }
-
-        await _apiService.ConfirmarPedido(pedido);
 
         cart.Clear();
         formaPagamentoSelecionada = string.Empty;
+        clienteNome = string.Empty;
+        vendedorNome = string.Empty;
         StateHasChanged(); // Atualiza a UI
         Console.WriteLine("Compra finalizada!");
     }
@@ -291,7 +534,7 @@
         if (isProcessing)
             return;
 
-        if (string.IsNullOrEmpty(entryComanda))
+        if (string.IsNullOrEmpty(clienteNome))
             return;
 
         isProcessing = true;
@@ -305,34 +548,50 @@
             {
                 var novoCliente = new Clientes
                     {
-                        Nome = entryComanda,
+                        Nome = clienteNome,
                         Telefone = entryTelefone,
                         Endereco = entryEndereco
                     };
                 var respondeCliente = await _apiService.AddClienteAsync(novoCliente);
             }
         }
-            var (comandaExistente, erro) = await _apiService.GetComandaPorNome(entryComanda);
+            var (comandaExistente, erro) = await _apiService.GetComandaPorNome(clienteNome);
 
             if (comandaExistente != null)
             {
+                var produtosCart = cart.Select(p => new Produto
+                {
+                    Id = p.Produto.Id,
+                    Nome = p.Produto.Nome,
+                    Preco = p.Produto.Preco,
+                    UrlImagem = p.Produto.UrlImagem
+                }).ToList();
+
                 // Comanda já existe, adicionar produtos do carrinho a ela
-                await AdicionarProdutosAComanda(comandaExistente.Nome, cart);
+                await AdicionarProdutosAComanda(comandaExistente.Nome, produtosCart);
                 await AtualizarValorComanda(comandaExistente.Nome);
             }
             else
             {
                 // Comanda não existe, criar uma nova
-                var comandaId = await CriarNovaComanda(entryComanda, itensComanda);
+                var comandaId = await CriarNovaComanda(clienteNome, itensComanda);
+                var produtosCart = cart.Select(p => new Produto
+                {
+                    Id = p.Produto.Id,
+                    Nome = p.Produto.Nome,
+                    Preco = p.Produto.Preco,
+                    UrlImagem = p.Produto.UrlImagem
+                }).ToList();
+
                 if (!(comandaId == 0))
                 {
-                    await AdicionarProdutosAComanda(entryComanda, cart);
-                    await AtualizarValorComanda(entryComanda);
+                    await AdicionarProdutosAComanda(clienteNome, produtosCart);
+                    await AtualizarValorComanda(clienteNome);
                 }
             }
             cart.Clear();
             itensComanda.Clear();
-            entryComanda = string.Empty;
+            clienteNome = string.Empty;
             entryTelefone = string.Empty;
             StateHasChanged(); // Atualiza a UI
         }

@@ -35,19 +35,74 @@
         <table class="table table-striped">
             <thead>
                 <tr>
-                <th>Hora</th>
+                    <th>Hora</th>
+                    <th>Cliente</th>
+                    <th>Vendedor</th>
                     <th>Forma de Pagamento</th>
+                    <th>Forma de Pagamento 2</th>
                     <th>Valor Total</th>
+                    <td>Status</td>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var comanda in pedidosHoje)
                 {
-                    <tr>
-                    <td>@(comanda.DataPedido?.ToString("HH:mm") ?? "-")</td>
-                        <td>@comanda.FormaPagamento</td>
+                    <tr style="cursor:pointer;" @onclick="() => ToggleDetails(comanda.Id)">
+                        <td>@(comanda.DataPedido?.ToString("HH:mm") ?? "-")</td>
+                        <td>@comanda.ClienteNome</td>
+                        <td>@comanda.VendedorNome</td>
+                        <td>@comanda.FormaPagamento - R$@comanda.ValorPago1</td>
+                        <td>@comanda.FormaPagamento2 - R$@comanda.ValorPago2</td>
                         <td>R$ @comanda.ValorTotal.ToString("F2")</td>
+                        <td>@comanda.Status</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => ToggleDetails(comanda.Id)">
+                                @((expanded.Contains(comanda.Id)) ? "Ocultar" : "Detalhes")
+                            </button>
+                        </td>
                     </tr>
+
+                    @if (expanded.Contains(comanda.Id) && detalhes.TryGetValue(comanda.Id, out var items) && items != null)
+                    {
+                        <tr>
+                            <td colspan="7" class="p-0">
+                                <table class="table mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Imagem</th>
+                                            <th>Produto</th>
+                                            <th>Quantidade</th>
+                                            <th>Preço Unit.</th>
+                                            <th>Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var it in items)
+                                        {
+                                            <tr>
+                                                <td style="width:80px;">
+                                                    @{
+                                                        var imgSrc = !string.IsNullOrEmpty(it.ProdutoImagem)
+                                                            ? AppConfig.BaseUrl + it.ProdutoImagem
+                                                            : it.CaminhoImagem;
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(imgSrc))
+                                                    {
+                                                        <img src="@imgSrc" style="max-height:48px; object-fit:cover;" />
+                                                    }
+                                                </td>
+                                                <td>@it.ProdutoNome</td>
+                                                <td>@it.Quantidade</td>
+                                                <td>R$ @it.ProdutoPreco.ToString("F2")</td>
+                                                <td>R$ @it.SubTotal.ToString("F2")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
@@ -58,6 +113,8 @@
 
 @code {
     private List<Pedido> pedidosHoje = new();
+    private HashSet<int> expanded = new();
+    private Dictionary<int, List<PedidoDetalhe>> detalhes = new();
     private decimal totalVendido = 0;
 
     private decimal totalDebito = 0;
@@ -112,5 +169,67 @@
         totalIfood = comandas
         .Where(c => c.FormaPagamento.Equals("Ifood", StringComparison.OrdinalIgnoreCase))
         .Sum(c => c.ValorTotal);
+    }
+
+    private async Task ToggleDetails(int pedidoId)
+    {
+        if (expanded.Contains(pedidoId))
+        {
+            expanded.Remove(pedidoId);
+            return;
+        }
+        Console.WriteLine($"Keys: {string.Join(',', detalhes.Keys)}; pedidoId={pedidoId}");
+        // Only fetch details if we don't have them cached
+        if (!detalhes.ContainsKey(pedidoId))
+        {
+            try
+            {
+                var (items, error) = await _apiService.GetPedidoDetalhes(pedidoId);
+                if (!string.IsNullOrEmpty(error))
+                {
+                    Console.WriteLine($"Erro ao obter detalhes do pedido {pedidoId}: {error}");
+                    detalhes[pedidoId] = new List<PedidoDetalhe>();
+                }
+                else
+                {
+                    detalhes[pedidoId] = items ?? new List<PedidoDetalhe>();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Exceção ao buscar detalhes do pedido {pedidoId}: {ex.Message}");
+                detalhes[pedidoId] = new List<PedidoDetalhe>();
+            }
+        }
+
+        // mark expanded after ensuring details are available
+        expanded.Add(pedidoId);
+        // Always fetch fresh details when expanding to avoid stale cache or missing keys
+        try
+        {
+            var (items, error) = await _apiService.GetPedidoDetalhes(pedidoId);
+            if (!string.IsNullOrEmpty(error))
+            {
+                Console.WriteLine($"Erro ao obter detalhes do pedido {pedidoId}: {error}");
+                detalhes[pedidoId] = new List<PedidoDetalhe>();
+            }
+            else
+            {
+                detalhes[pedidoId] = items ?? new List<PedidoDetalhe>();
+            }
+
+            Console.WriteLine($"Depois fetch - Keys: {string.Join(',', detalhes.Keys)}; pedidoId={pedidoId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Exceção ao buscar detalhes do pedido {pedidoId}: {ex.Message}");
+            detalhes[pedidoId] = new List<PedidoDetalhe>();
+        }
+
+        // mark expanded after ensuring details are available
+        if (!expanded.Contains(pedidoId))
+            expanded.Add(pedidoId);
+
+        StateHasChanged();
     }
 }

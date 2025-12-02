@@ -1,4 +1,6 @@
 ﻿@page "/inventario"
+@using BlazorDeploy.DTOs
+@using Microsoft.AspNetCore.Components.Forms
 @inject ApiService _apiService
 @inject AuthService AuthService
 @inject IJSRuntime JS
@@ -50,6 +52,59 @@
 
 <button class="btn btn-primary" @onclick="RegistrarMovimentacao">Registrar</button>
 
+<hr />
+
+<h4>Upload de XML (Notas)</h4>
+<InputFile OnChange="OnFileSelected" accept=".xml" />
+<button class="btn btn-success mt-2" @onclick="UploadXml" disabled="@(!hasSelectedFile || isUploading)">
+    @(isUploading ? "Enviando..." : "Enviar XML")
+</button>
+
+<h5 class="mt-4">Últimas Notas</h5>
+@if (latestInvoices == null)
+{
+    <p>Carregando...</p>
+}
+else if (!latestInvoices.Any())
+{
+    <p>Nenhuma nota encontrada.</p>
+}
+else
+{
+    <ul class="list-group">
+        @foreach (var inv in latestInvoices)
+        {
+            <li class="list-group-item list-group-item-action" style="cursor:pointer" @onclick="() => LoadInvoiceItems(inv.Id, inv.Number)">
+                <div class="d-flex justify-content-between">
+                    <div>@inv.Number</div>
+                    <div>@inv.Date.ToString("yyyy-MM-dd")</div>
+                </div>
+            </li>
+        }
+    </ul>
+}
+
+@if (selectedItems != null)
+{
+    <h5 class="mt-3">Itens da Nota: @selectedInvoiceNumber</h5>
+    <table class="table table-sm">
+        <thead>
+            <tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Preço Unit.</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var it in selectedItems)
+            {
+                <tr>
+                    <td>@it.Code</td>
+                    <td>@it.Description</td>
+                    <td>@it.Quantity</td>
+                    <td>@it.UnitPrice</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
 @if (!string.IsNullOrEmpty(mensagem))
 {
     <p class="mt-3">@mensagem</p>
@@ -64,7 +119,12 @@
     private string mensagem = "";
     private bool isLoading = true;
     private bool isProcessing = false;
-    private bool isAuthenticated = false;
+    private IBrowserFile? selectedFile;
+    private bool hasSelectedFile = false;
+    private bool isUploading = false;
+    private List<InvoiceSummary>? latestInvoices;
+    private List<InvoiceItem>? selectedItems;
+    private string? selectedInvoiceNumber;
 
     protected override async Task OnInitializedAsync()
     {
@@ -73,9 +133,49 @@
         if (string.IsNullOrEmpty(nome))
         {
             Navigation.NavigateTo("login");
+            return;
         }
+
         var (response, errorMessage) = await _apiService.GetTodosProdutos();
-        produtos = response;
+        produtos = response ?? new List<Produto>();
+
+        await LoadLatestInvoices();
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        hasSelectedFile = selectedFile != null;
+    }
+
+    private async Task UploadXml()
+    {
+        if (selectedFile == null) return;
+        isUploading = true;
+        var result = await _apiService.UploadInvoiceXml(selectedFile);
+        if (result.Data)
+        {
+            await LoadLatestInvoices();
+            await JS.InvokeVoidAsync("alert", "XML enviado com sucesso.");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", $"Falha ao enviar XML: {result.ErrorMessage}");
+        }
+        isUploading = false;
+    }
+
+    private async Task LoadLatestInvoices()
+    {
+        var (list, err) = await _apiService.GetLatestInvoices();
+        latestInvoices = list ?? new List<InvoiceSummary>();
+    }
+
+    private async Task LoadInvoiceItems(string id, string number)
+    {
+        var (items, err) = await _apiService.GetInvoiceItems(id);
+        selectedItems = items ?? new List<InvoiceItem>();
+        selectedInvoiceNumber = number;
     }
 
     private void FiltrarProdutos(ChangeEventArgs e)

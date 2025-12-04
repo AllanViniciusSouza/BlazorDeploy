@@ -19,6 +19,12 @@ try
     var config = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(responseStream);
     var apiBaseUrl = config?["ApiBaseUrl"] ?? throw new Exception("ApiBaseUrl not found");
 
+        // set optional BarcodeLookup API key into AppConfig
+        if (config != null && config.TryGetValue("BarcodeLookupApiKey", out var barcodeKey))
+        {
+            BlazorDeploy.Models.AppConfig.BarcodeLookupApiKey = barcodeKey;
+        }
+
     // Registra HttpClient com URL da API
     builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 

@@ -27,6 +27,9 @@
                    placeholder="Pesquisar código de barras"
                    @bind="searchBarcode"
                    @oninput="SearchByBarcode" />
+            <div class="mt-2">
+                <button class="btn btn-outline-primary mt-2" @onclick="OpenScanner">Abrir Leitor (câmera)</button>
+            </div>
         </div>
     </div>
 
@@ -39,7 +42,7 @@
                         @if (!string.IsNullOrEmpty(Produto.CaminhoImagem))
                         {
                             <div style="height:72px; overflow:hidden; background:#f8f9fa;">
-                                <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
+                            <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
                             </div>
                         }
                         else
@@ -49,9 +52,9 @@
                             </div>
                         }
 
-                        <div class="card-body p-1 d-flex flex-column">
+                    <div class="card-body p-1 d-flex flex-column">
                             <div class="card-title mb-1 text-truncate" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
-                            <div class="text-success mb-1" style="font-size:0.85rem;">R$ @Produto.Preco.ToString("0.00")</div>
+                            <div class="text-success mb-1" style="font-size:0.75rem;">R$ @Produto.Preco.ToString("0.00")</div>
                            @*  <div class="mt-auto">
                                 <button class="btn btn-sm btn-success w-100" @onclick="() => OpenQuantityModal(Produto)" @onclick:stopPropagation>Adicionar</button>
                             </div> *@
@@ -166,7 +169,7 @@
                     @foreach (var v in vendedores)
                     {
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => vendedorNome = v" checked="@(vendedorNome == v)" />
+                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => vendedorNome = v" checked="@(vendedorNome == v && !string.IsNullOrWhiteSpace(vendedorNome))" />
                             <label class="form-check-label ms-2" for="v_@v">@v</label>
                         </div>
                     }
@@ -188,16 +191,19 @@
             </div>
         </div>
 
-        <div style="flex:2; display:flex; gap:8px;">
-            <div style="flex:1">
-                <label class="form-label fw-bold">Cliente</label>
-                <input type="text" class="form-control form-control-sm" @bind="clienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome cliente" />
+        <div style="flex:2; display:flex; gap:8px; flex-direction:column;">
+            <div style="display:flex; gap:8px;">
+                <div style="flex:1">
+                    <label class="form-label fw-bold">Cliente</label>
+                    <input type="text" class="form-control form-control-sm" @bind="clienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome cliente" />
+                </div>
+                <div style="width:140px">
+                    <label class="form-label fw-bold">Telefone</label>
+                    <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
+                </div>
             </div>
-            <div style="width:140px">
-                <label class="form-label fw-bold">Telefone</label>
-                <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
-            </div>
-            <div style="width:220px">
+
+            <div>
                 <label class="form-label fw-bold">Endereço</label>
                 <input type="text" class="form-control form-control-sm" @bind="entryEndereco" placeholder="Endereço" />
             </div>
@@ -289,6 +295,10 @@ private int? selectedQuantity = null;
     private void SelectVendedor(string nome) => vendedorNome = nome;
     private void SelectStatus(string status) => pedidoStatus = status;
 
+    // scanner interop fields moved into code-behind section
+    private DotNetObjectReference<object>? _dotNetRef;
+
+
     private void ToggleDebugImages()
     {
         showDebugImages = !showDebugImages;
@@ -296,6 +306,36 @@ private int? selectedQuantity = null;
         {
             debugImageSources = filteredProdutos.Select(p => p.CaminhoImagem ?? p.UrlImagem ?? "(none)").ToList();
         }
+    }
+
+    private async Task OpenScanner()
+    {
+        _dotNetRef ??= DotNetObjectReference.Create((object)this);
+        await JS.InvokeVoidAsync("barcodeScanner.start", _dotNetRef, "barcode-scanner-container");
+    }
+
+    [JSInvokable]
+    public async Task OnBarcodeScanned(string code)
+    {
+        searchBarcode = code;
+        StateHasChanged();
+
+        var (todosProdutos, err) = await _apiService.GetTodosProdutos();
+        var produto = todosProdutos?.FirstOrDefault(p => p.Barcode == code);
+        if (produto != null)
+        {
+            OpenQuantityModal(produto);
+        }
+        else
+        {
+            await ShowAlert($"Produto com código {code} não encontrado.");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnBarcodeError(string message)
+    {
+        await ShowAlert("Erro no leitor: " + message);
     }
 
 void OpenQuantityModal(Produto produto)

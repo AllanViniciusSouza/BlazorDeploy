@@ -57,9 +57,14 @@
                         <td>R$ @comanda.ValorTotal.ToString("F2")</td>
                         <td>@comanda.Status</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => ToggleDetails(comanda.Id)">
-                                @((expanded.Contains(comanda.Id)) ? "Ocultar" : "Detalhes")
-                            </button>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => ToggleDetails(comanda.Id)">
+                                    @((expanded.Contains(comanda.Id)) ? "Ocultar" : "Detalhes")
+                                </button>
+                                <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ImprimirPedido(comanda.Id)">
+                                    Imprimir
+                                </button>
+                            </div>
                         </td>
                     </tr>
 
@@ -231,5 +236,42 @@
             expanded.Add(pedidoId);
 
         StateHasChanged();
+    }
+
+    private async Task ImprimirPedido(int pedidoId)
+    {
+        try
+        {
+            // Call backend print endpoint with minimal payload (DTO with Id)
+            var dto = new { Id = pedidoId };
+            var json = System.Text.Json.JsonSerializer.Serialize(dto);
+            var content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            var response = await _apiService.PostRequest("api/Impressao/pedido/imprimir", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var text = await response.Content.ReadAsStringAsync();
+                await JS.InvokeVoidAsync("alert", $"Falha na impressão: {response.StatusCode} - {text}");
+                return;
+            }
+
+            var respJson = await response.Content.ReadAsStringAsync();
+            var resultado = System.Text.Json.JsonSerializer.Deserialize<BlazorDeploy.Models.ImpressaoResultado>(respJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (resultado == null)
+            {
+                await JS.InvokeVoidAsync("alert", "Resposta inválida do servidor de impressão.");
+                return;
+            }
+
+            // show preview modal with resultado.Texto (simple)
+            await JS.InvokeVoidAsync("alert", "Impressão gerada para pedido " + resultado.PedidoId + "\nTexto:\n" + (resultado.Texto ?? "(vazio)"));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao imprimir: " + ex.Message);
+            await JS.InvokeVoidAsync("alert", "Erro ao imprimir pedido: " + ex.Message);
+        }
     }
 }

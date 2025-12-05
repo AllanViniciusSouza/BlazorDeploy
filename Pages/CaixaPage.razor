@@ -29,7 +29,8 @@
                    @oninput="SearchByBarcode"
                    @onkeydown="OnBarcodeKeyDown" />
             <div class="mt-2">
-                <button class="btn btn-outline-primary mt-2" @onclick="OpenScanner">Abrir Leitor (câmera)</button>
+                <button class="btn btn-outline-primary mt-2 me-2" @onclick="OpenScanner">Abrir Leitor (câmera)</button>
+                <button class="btn btn-outline-secondary mt-2" @onclick="OpenNativeScanner">Abrir Leitor (app)</button>
             </div>
         </div>
     </div>
@@ -374,6 +375,12 @@ private string? selectedTemperatura = null;
         await JS.InvokeVoidAsync("barcodeScanner.start", _dotNetRef, "barcode-scanner-container");
     }
 
+    private async Task OpenNativeScanner()
+    {
+        // call JS helper that tries to open ZXing or Intent
+        await JS.InvokeVoidAsync("barcodeScanner.openScannerApp");
+    }
+
     [JSInvokable]
     public async Task OnBarcodeScanned(string code)
     {
@@ -395,7 +402,7 @@ private string? selectedTemperatura = null;
     private async Task ProcessBarcode(string code)
     {
         // try local DB first
-        var (todosProdutos, err) = await _apiService.GetTodosProdutos();
+        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
         var produto = todosProdutos?.FirstOrDefault(p => p.Barcode == code);
         if (produto != null)
         {
@@ -599,6 +606,27 @@ void UpdateCartTotals()
     {
         // try to restore previous caixa state if any
         await RestoreCaixaStateIfAnyAsync();
+
+        // If opened via external scanner app it may include ?scanned=CODE in the URL -> handle it
+        try
+        {
+            var uri = Navigation.Uri;
+            var marker = "?scanned=";
+            var idx = uri.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                var code = Uri.UnescapeDataString(uri.Substring(idx + marker.Length));
+                if (!string.IsNullOrWhiteSpace(code))
+                {
+                    // remove query part from URL and process
+                    var baseUri = uri.Substring(0, idx);
+                    // navigate to base to remove query (keeps app state)
+                    Navigation.NavigateTo(baseUri, replace: true);
+                    await ProcessBarcode(code);
+                }
+            }
+        }
+        catch { }
 
         var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 

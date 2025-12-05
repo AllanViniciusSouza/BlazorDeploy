@@ -178,3 +178,28 @@
         }
     };
 })();
+
+// Try to open an external native scanner app (ZXing). If installed, it will redirect back to
+// the provided return URL with {CODE} replaced by the scanned value. Use as fallback to web scanner.
+window.barcodeScanner.openScannerApp = function () {
+    try {
+        const returnUrl = window.location.href.split('?')[0] + '?scanned={CODE}';
+
+        // Try ZXing URI scheme
+        const zxingUrl = 'zxing://scan/?ret=' + encodeURIComponent(returnUrl);
+        // Android intent fallback (works in Chrome)
+        const intentUrl = 'intent://scan/?ret=' + encodeURIComponent(returnUrl) + '#Intent;package=com.google.zxing.client.android;scheme=zxing;end';
+
+        // First try scheme
+        window.location.href = zxingUrl;
+
+        // After short delay, try intent fallback (if scheme didn't open)
+        setTimeout(() => {
+            window.location.href = intentUrl;
+        }, 800);
+
+        // As last resort, user can be shown instructions (not implemented here)
+    } catch (e) {
+        console.error('openScannerApp failed', e);
+    }
+};

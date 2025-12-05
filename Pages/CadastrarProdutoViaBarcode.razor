@@ -1,6 +1,8 @@
 @page "/cadastrar-produto"
+@page "/cadastrar-produto/{BarcodeParam}"
 @inject ApiService _apiService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <PageTitle>Cadastrar Produto</PageTitle>
 
@@ -27,6 +29,26 @@
                 <div class="mb-3">
                     <label class="form-label">Preço</label>
                     <InputNumber @bind-Value="produtoEncontrado.Preco" class="form-control" step="0.01" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Preço Quente</label>
+                    <InputNumber @bind-Value="produtoEncontrado.PrecoQuente" class="form-control" step="0.01" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Preço Gelada</label>
+                    <InputNumber @bind-Value="produtoEncontrado.PrecoGelada" class="form-control" step="0.01" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Preço Entrega</label>
+                    <InputNumber @bind-Value="produtoEncontrado.PrecoEntrega" class="form-control" step="0.01" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Preço Retirar</label>
+                    <InputNumber @bind-Value="produtoEncontrado.PrecoRetirar" class="form-control" step="0.01" />
                 </div>
 
                 <div class="mb-3">
@@ -84,6 +106,9 @@
 </div>
 
 @code {
+    [Parameter]
+    public string? BarcodeParam { get; set; }
+
     private string barcode = string.Empty;
     private Produto? produtoEncontrado;
     private string mensagem = string.Empty;
@@ -150,6 +175,8 @@
             mensagem = "Produto salvo com sucesso.";
             produtoEncontrado = null;
             barcode = string.Empty;
+            // volta para a tela de caixa onde o estado será restaurado
+            Navigation.NavigateTo("/");
         }
         else
         {
@@ -161,6 +188,17 @@
     {
         dotNetRef ??= DotNetObjectReference.Create(this);
         await JS.InvokeVoidAsync("barcodeScanner.start", dotNetRef, "barcode-scanner-container");
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(BarcodeParam))
+        {
+            barcode = BarcodeParam;
+            await Task.Delay(100); // small delay to allow render
+            await ConsultarBarcode();
+            StateHasChanged();
+        }
     }
 
     [JSInvokable]

@@ -55,7 +55,7 @@
                             </div>
 
                             <div class="text-success mb-2 fw-semibold" style="font-size: 0.9rem;">
-                                R$ @produto.Preco.ToString("0.00")
+                                R$ @(GetDisplayPrice(produto).ToString("0.00"))
                             </div>
 
                             <button class="btn btn-sm btn-success px-3" 
@@ -254,7 +254,7 @@
                         <div class="text-center flex-shrink-0" style="width: 80px; cursor: pointer;" @onclick="() => AdicionarAoCarrinho(produto)">
                             <img src="@produto.CaminhoImagem" class="rounded-circle mb-1" style="width: 60px; height: 60px; object-fit: cover;" />
                             <div style="font-size: 0.75rem; white-space: normal;">@produto.Nome</div>
-                            <div style="font-size: 0.75rem; white-space: normal;">@produto.Preco</div>
+                            <div style="font-size: 0.75rem; white-space: normal;">R$ @(GetDisplayPrice(produto).ToString("0.00"))</div>
                         </div>
                     }
                 </div>
@@ -290,6 +290,17 @@ else
 }
 
     @code {
+    // choose display price based on context (delivery vs pickup). Here default to PrecoRetirar if available
+    private decimal GetDisplayPrice(Produto produto)
+    {
+        if (produto == null) return 0m;
+        // prefer PrecoRetirar if set, otherwise fallback to PrecoEntrega, PrecoQuente, PrecoGelada, then legacy Preco
+        if (produto.PrecoRetirar > 0) return produto.PrecoRetirar;
+        if (produto.PrecoEntrega > 0) return produto.PrecoEntrega;
+        if (produto.PrecoQuente > 0) return produto.PrecoQuente;
+        if (produto.PrecoGelada > 0) return produto.PrecoGelada;
+        return produto.Preco;
+    }
     private List<CarrinhoCompraItem> carrinho = new();
     private string mensagem;
     private bool carrinhoAberto = false;
@@ -481,7 +492,9 @@ private async void OnCepDigitado(ChangeEventArgs e)
         }
         else
         {
-            carrinho.Add(new CarrinhoCompraItem { Produto = produto, Quantidade = 1 });
+            // Set the effective price selected by context (pickup/delivery)
+            var precoSelecionado = GetDisplayPrice(produto);
+            carrinho.Add(new CarrinhoCompraItem { Produto = produto, Quantidade = 1, Preco = precoSelecionado });
         }
     }
 

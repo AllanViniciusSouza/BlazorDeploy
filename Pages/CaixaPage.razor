@@ -26,7 +26,8 @@
             <input class="form-control form-control-lg"
                    placeholder="Pesquisar código de barras"
                    @bind="searchBarcode"
-                   @oninput="SearchByBarcode" />
+                   @oninput="SearchByBarcode"
+                   @onkeydown="OnBarcodeKeyDown" />
             <div class="mt-2">
                 <button class="btn btn-outline-primary mt-2" @onclick="OpenScanner">Abrir Leitor (câmera)</button>
             </div>
@@ -45,6 +46,8 @@
                             <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
                             </div>
                         }
+
+    
                         else
                         {
                             <div class="d-flex align-items-center justify-content-center" style="height:72px; background:#f8f9fa;">
@@ -54,7 +57,7 @@
 
                     <div class="card-body p-1 d-flex flex-column">
                             <div class="card-title mb-1 text-truncate" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
-                            <div class="text-success mb-1" style="font-size:0.75rem;">R$ @Produto.Preco.ToString("0.00")</div>
+                            <div class="text-success mb-1" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
                            @*  <div class="mt-auto">
                                 <button class="btn btn-sm btn-success w-100" @onclick="() => OpenQuantityModal(Produto)" @onclick:stopPropagation>Adicionar</button>
                             </div> *@
@@ -131,6 +134,18 @@
             </div>
         </div>
 
+        @if (formaPagamentoSelecionada == "Dinheiro")
+        {
+            <div class="mt-3">
+                <label class="fw-bold">Valor Recebido</label>
+                <InputNumber @bind-Value="valorRecebido"
+                             class="form-control form-control-lg" />
+                <p class="mt-2 fs-5">
+                    Troco: <strong>R$ @troco.ToString("0.00")</strong>
+                </p>
+            </div>
+        }
+
         <div class="col-md-6">
             <label class="form-label fw-bold">Forma de Pagamento 2 (opcional)</label>
             <div class="d-flex">
@@ -147,18 +162,7 @@
         </div>
     </div>
 
-    @if (formaPagamentoSelecionada == "Dinheiro")
-    {
-        <div class="mt-3">
-            <label class="fw-bold">Valor Recebido</label>
-            <InputNumber @bind-Value="valorRecebido"
-                         class="form-control form-control-lg" />
-            <p class="mt-2 fs-5">
-                Troco: <strong>R$ @troco.ToString("0.00")</strong>
-            </p>
-        </div>
-    }
-
+    
     @* Compact inputs row below cart: vendedor e dados do cliente lado a lado *@
     <div class="d-flex gap-3 mt-3">
         <div style="flex:1; max-width:380px;">
@@ -169,13 +173,13 @@
                     @foreach (var v in vendedores)
                     {
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => vendedorNome = v" checked="@(vendedorNome == v && !string.IsNullOrWhiteSpace(vendedorNome))" />
+                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => vendedorNome = v" checked="@(vendedorNome == v)" />
                             <label class="form-check-label ms-2" for="v_@v">@v</label>
                         </div>
                     }
 
                     <div class="form-check mt-1">
-                        <input class="form-check-input" type="radio" name="vendedor" id="v_outro" @onchange="() => vendedorNome = string.Empty" checked="@(string.IsNullOrEmpty(vendedorNome) || !vendedores.Contains(vendedorNome))" />
+                        <input class="form-check-input" type="radio" name="vendedor" id="v_outro" @onchange="() => vendedorNome = string.Empty" checked="@(!string.IsNullOrEmpty(vendedorNome) && !vendedores.Contains(vendedorNome))" />
                         <label class="form-check-label ms-2" for="v_outro">Outro</label>
                     </div>
 
@@ -213,16 +217,16 @@
     <div class="mt-3">
         <label class="form-label fw-bold">Status do Pedido</label>
         <div class="d-flex gap-3 mt-2">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" checked='@(PedidoStatus == "Finalizado")' @onchange='() => PedidoStatus = "Finalizado"' />
+                    <label class="form-check-label ms-2" for="status_finalizado">Finalizado</label>
+                </div>
             <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" @onchange='() => pedidoStatus = "Finalizado"' checked='@(pedidoStatus == "Finalizado")' />
-                <label class="form-check-label ms-2" for="status_finalizado">Finalizado</label>
-            </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" @onchange='() => pedidoStatus = "Retirada"' checked='@(pedidoStatus == "Retirada")' />
+                <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" checked='@(PedidoStatus == "Retirada")' @onchange='() => PedidoStatus = "Retirada"' />
                 <label class="form-check-label ms-2" for="status_retirada">Retirada</label>
             </div>
             <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" @onchange='() => pedidoStatus = "Em entrega"' checked='@(pedidoStatus == "Em entrega")' />
+                <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" checked='@(PedidoStatus == "Em entrega")' @onchange='() => PedidoStatus = "Em entrega"' />
                 <label class="form-check-label ms-2" for="status_entrega">Em entrega</label>
             </div>
         </div>
@@ -247,8 +251,28 @@
             <div class="modal-content p-4 shadow-lg">
                 <h5 class="fw-bold text-center">Quantidade</h5>
 
-                <input type="number" class="form-control form-control-lg text-center"
-                       min="1" @bind="selectedQuantity" />
+                <div class="mb-3">
+                    <input type="number" class="form-control form-control-lg text-center"
+                           min="1" @bind="selectedQuantity" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Temperatura</label>
+                    <div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_none" checked="@(string.IsNullOrEmpty(selectedTemperatura))" @onchange="() => selectedTemperatura = null" />
+                            <label class="form-check-label" for="temp_none">Nenhuma</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_quente" checked='@(selectedTemperatura == "Quente")' @onchange='() => selectedTemperatura = "Quente"' />
+                            <label class="form-check-label" for="temp_quente">Quente</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_gelada" checked='@(selectedTemperatura == "Gelada")' @onchange='() => selectedTemperatura = "Gelada"' />
+                            <label class="form-check-label" for="temp_gelada">Gelada</label>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="d-flex mt-3 justify-content-around">
                     <button class="btn btn-secondary btn-lg" @onclick="CloseModal">Cancelar</button>
@@ -284,6 +308,7 @@
     private bool showQuantityModal = false;
 private Produto selectedProduct;
 private int? selectedQuantity = null;
+private string? selectedTemperatura = null;
     private bool showDebugImages = false;
     private List<string> debugImageSources = new();
     private string formaPagamento2 = string.Empty;
@@ -291,6 +316,32 @@ private int? selectedQuantity = null;
     private decimal? pagamento2;
     private List<string> vendedores = new();
     private string pedidoStatus = "Finalizado";
+    private string PedidoStatus
+    {
+        get => pedidoStatus;
+        set
+        {
+            if (pedidoStatus != value)
+            {
+                pedidoStatus = value;
+                // update existing cart item prices based on new status if they don't have a temperature selected
+                foreach (var item in cart)
+                {
+                    if (!string.IsNullOrEmpty(item.Temperatura))
+                        continue; // temperature-specific items keep their selected price
+
+                    if (pedidoStatus == "Retirada" && item.Produto.PrecoRetirar > 0)
+                        item.PrecoUnitario = item.Produto.PrecoRetirar;
+                    else if (pedidoStatus == "Em entrega" && item.Produto.PrecoEntrega > 0)
+                        item.PrecoUnitario = item.Produto.PrecoEntrega;
+                    else
+                        item.PrecoUnitario = GetProdutoDisplayPrice(item.Produto);
+                }
+
+                StateHasChanged();
+            }
+        }
+    }
     
     private void SelectVendedor(string nome) => vendedorNome = nome;
     private void SelectStatus(string status) => pedidoStatus = status;
@@ -298,6 +349,15 @@ private int? selectedQuantity = null;
     // scanner interop fields moved into code-behind section
     private DotNetObjectReference<object>? _dotNetRef;
 
+    private decimal GetProdutoDisplayPrice(Produto p)
+    {
+        if (p == null) return 0m;
+        if (p.PrecoRetirar > 0) return p.PrecoRetirar;
+        if (p.PrecoEntrega > 0) return p.PrecoEntrega;
+        if (p.PrecoQuente > 0) return p.PrecoQuente;
+        if (p.PrecoGelada > 0) return p.PrecoGelada;
+        return p.Preco;
+    }
 
     private void ToggleDebugImages()
     {
@@ -319,16 +379,148 @@ private int? selectedQuantity = null;
     {
         searchBarcode = code;
         StateHasChanged();
+        await ProcessBarcode(code);
+    }
 
+    private async Task OnBarcodeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var code = searchBarcode?.Trim();
+            if (!string.IsNullOrEmpty(code))
+                await ProcessBarcode(code);
+        }
+    }
+
+    private async Task ProcessBarcode(string code)
+    {
+        // try local DB first
         var (todosProdutos, err) = await _apiService.GetTodosProdutos();
         var produto = todosProdutos?.FirstOrDefault(p => p.Barcode == code);
         if (produto != null)
         {
             OpenQuantityModal(produto);
+            return;
         }
-        else
+
+        // not found locally -> save current Caixa state then navigate to cadastrar page with barcode param
+        await SaveCaixaStateAsync();
+        Navigation.NavigateTo($"/cadastrar-produto/{Uri.EscapeDataString(code)}");
+    }
+
+    private class CaixaStateDto
+    {
+        public List<object>? Cart { get; set; }
+        public string? ClienteNome { get; set; }
+        public string? VendedorNome { get; set; }
+        public string? FormaPagamentoSelecionada { get; set; }
+        public string? FormaPagamento2 { get; set; }
+        public decimal? Pagamento1 { get; set; }
+        public decimal? Pagamento2 { get; set; }
+        public string? PedidoStatus { get; set; }
+        public decimal ValorRecebido { get; set; }
+    }
+
+    private async Task SaveCaixaStateAsync()
+    {
+        try
         {
-            await ShowAlert($"Produto com código {code} não encontrado.");
+            var dto = new CaixaStateDto
+            {
+                Cart = cart.Select(i => new {
+                    ProdutoId = i.Produto?.Id,
+                    i.Produto?.Nome,
+                    i.Produto?.Barcode,
+                    PrecoUnitario = i.PrecoUnitario,
+                    Quantidade = i.Quantidade,
+                    Temperatura = i.Temperatura
+                }).Cast<object>().ToList(),
+                ClienteNome = clienteNome,
+                VendedorNome = vendedorNome,
+                FormaPagamentoSelecionada = formaPagamentoSelecionada,
+                FormaPagamento2 = formaPagamento2,
+                Pagamento1 = pagamento1,
+                Pagamento2 = pagamento2,
+                PedidoStatus = pedidoStatus,
+                ValorRecebido = valorRecebido
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(dto);
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "caixaState", json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao salvar estado do caixa: " + ex.Message);
+        }
+    }
+
+    private async Task RestoreCaixaStateIfAnyAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("sessionStorage.getItem", "caixaState");
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            var dto = System.Text.Json.JsonSerializer.Deserialize<CaixaStateDto>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (dto == null) return;
+
+            // restore basic fields
+            clienteNome = dto.ClienteNome ?? clienteNome;
+            vendedorNome = dto.VendedorNome ?? vendedorNome;
+            formaPagamentoSelecionada = dto.FormaPagamentoSelecionada ?? formaPagamentoSelecionada;
+            formaPagamento2 = dto.FormaPagamento2 ?? formaPagamento2;
+            pagamento1 = dto.Pagamento1 ?? pagamento1;
+            pagamento2 = dto.Pagamento2 ?? pagamento2;
+            pedidoStatus = dto.PedidoStatus ?? pedidoStatus;
+            valorRecebido = dto.ValorRecebido;
+
+            // restore cart: we need to fetch products and match ids
+            if (dto.Cart != null && dto.Cart.Any())
+            {
+                var (todosProdutos, err) = await _apiService.GetTodosProdutos();
+                var prodList = todosProdutos ?? new List<Produto>();
+                var newCart = new List<CartItem>();
+                foreach (var itemObj in dto.Cart)
+                {
+                    // parse with JsonElement
+                    var elem = itemObj as System.Text.Json.JsonElement?;
+                    System.Text.Json.JsonElement je;
+                    if (itemObj is System.Text.Json.JsonElement)
+                        je = (System.Text.Json.JsonElement)itemObj;
+                    else
+                        je = (System.Text.Json.JsonElement)System.Text.Json.JsonSerializer.SerializeToElement(itemObj);
+
+                    int? prodId = null;
+                    try { if (je.TryGetProperty("ProdutoId", out var p1) && p1.ValueKind == System.Text.Json.JsonValueKind.Number) prodId = p1.GetInt32(); } catch { }
+                    string nome = null;
+                    try { if (je.TryGetProperty("Nome", out var p2) && p2.ValueKind == System.Text.Json.JsonValueKind.String) nome = p2.GetString(); } catch { }
+                    decimal preco = 0;
+                    try { if (je.TryGetProperty("PrecoUnitario", out var p3) && p3.ValueKind == System.Text.Json.JsonValueKind.Number) preco = p3.GetDecimal(); } catch { }
+                    int quantidade = 1;
+                    try { if (je.TryGetProperty("Quantidade", out var p4) && p4.ValueKind == System.Text.Json.JsonValueKind.Number) quantidade = p4.GetInt32(); } catch { }
+                    string temperatura = null;
+                    try { if (je.TryGetProperty("Temperatura", out var p5) && p5.ValueKind == System.Text.Json.JsonValueKind.String) temperatura = p5.GetString(); } catch { }
+
+                    Produto? prod = null;
+                    if (prodId.HasValue) prod = prodList.FirstOrDefault(p => p.Id == prodId.Value);
+                    if (prod == null && !string.IsNullOrEmpty(nome)) prod = prodList.FirstOrDefault(p => p.Nome == nome);
+
+                    if (prod != null)
+                    {
+                        newCart.Add(new CartItem { Produto = prod, Quantidade = quantidade, PrecoUnitario = preco, Temperatura = temperatura });
+                    }
+                }
+
+                if (newCart.Any()) cart = newCart;
+            }
+
+            // remove saved state
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "caixaState");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao restaurar estado do caixa: " + ex.Message);
         }
     }
 
@@ -343,6 +535,8 @@ void OpenQuantityModal(Produto produto)
     selectedProduct = produto;
     // start empty so user can type a value without having to delete a default
     selectedQuantity = null;
+    // default temperature to null
+    selectedTemperatura = null;
     showQuantityModal = true;
 }
 
@@ -355,19 +549,36 @@ void ConfirmAddToCart()
 {
     var qty = selectedQuantity ?? 1; // default 1 if user leaves empty
 
-    var existing = cart.FirstOrDefault(c => c.Produto.Nome == selectedProduct.Nome);
+    // consider product identity + temperatura when merging items
+    var existing = cart.FirstOrDefault(c => c.Produto.Id == selectedProduct.Id && (c.Temperatura ?? string.Empty) == (selectedTemperatura ?? string.Empty));
 
     if (existing == null)
     {
+        var precoUnit = selectedProduct.Preco;
+        // determine price by selected temperature / global pedido status
+        if (!string.IsNullOrEmpty(selectedTemperatura))
+        {
+            if (selectedTemperatura == "Quente" && selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
+            if (selectedTemperatura == "Gelada" && selectedProduct.PrecoGelada > 0) precoUnit = selectedProduct.PrecoGelada;
+        }
+        else
+        {
+            // if pedido status set to Retirada or Em entrega, choose appropriate price
+            if (pedidoStatus == "Retirada" && selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
+            if (pedidoStatus == "Em entrega" && selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
+        }
+
         cart.Add(new CartItem
         {
             Produto = selectedProduct,
             Quantidade = qty,
-            PrecoUnitario = selectedProduct.Preco // preço inicial (pode ser alterado depois)
+            PrecoUnitario = precoUnit,
+            Temperatura = selectedTemperatura
         });
     }
     else
     {
+        // same product and temperature -> increment quantity
         existing.Quantidade += qty;
     }
 
@@ -386,6 +597,9 @@ void UpdateCartTotals()
 
     protected override async Task OnInitializedAsync()
     {
+        // try to restore previous caixa state if any
+        await RestoreCaixaStateIfAnyAsync();
+
         var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
 
         if (string.IsNullOrEmpty(nome))
@@ -400,11 +614,6 @@ void UpdateCartTotals()
         if (vendedores == null || !vendedores.Any())
         {
             vendedores = new List<string> { "Ronaldo", "Neno", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
-        }
-
-        if (string.IsNullOrWhiteSpace(vendedorNome) && vendedores.Any())
-        {
-            vendedorNome = vendedores[0];
         }
     }
 

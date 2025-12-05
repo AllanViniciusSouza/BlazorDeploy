@@ -129,11 +129,16 @@
                 <td>
                     @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
                     {
-                        <InputNumber class="form-control" @bind-Value="produto.Preco" />
+                        <div class="d-flex flex-wrap gap-1">
+                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoRetirar" step="0.01" />
+                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoEntrega" step="0.01" />
+                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoQuente" step="0.01" />
+                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoGelada" step="0.01" />
+                        </div>
                     }
                     else
                     {
-                        @produto.Preco.ToString("C2")
+                       @*  @GetDisplayPrice(produto).ToString("C2") *@
                     }
                 </td>
                

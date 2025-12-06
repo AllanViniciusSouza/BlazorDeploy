@@ -344,7 +344,7 @@ public class ApiService
         var enderecoUrl = BuildUrl(uri);
         try
         {
-            AddAuthorizationHeader();
+            await AddAuthorizationHeader();
             var result = await _httpClient.PutAsync(enderecoUrl, content);
             return result;
         }
@@ -472,13 +472,18 @@ public class ApiService
 
             if (!response.IsSuccessStatusCode)
             {
+                var respBody = string.Empty;
+                try { respBody = await response.Content.ReadAsStringAsync(); } catch { }
+
                 string errorMessage = response.StatusCode == HttpStatusCode.Unauthorized
                     ? "Unauthorized"
-                    : $"Erro ao enviar requisição HTTP: {response.StatusCode}";
+                    : $"Erro ao enviar requisição HTTP: {response.StatusCode} - {respBody}";
 
-                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
-                return new ApiResponse<bool> { Data = true };
+                _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode} - {respBody}");
+                return new ApiResponse<bool> { ErrorMessage = errorMessage, Data = false };
             }
+
+            // Optionally read created resource (ignored for now)
             return new ApiResponse<bool> { Data = true };
         }
         catch (Exception ex)
@@ -491,7 +496,7 @@ public class ApiService
     // Método para excluir um produto
     public async Task<bool> ExcluirProdutoAsync(int idProduto)
     {
-        var response = await _httpClient.DeleteAsync($"api/produtos/{idProduto}");
+        var response = await DeleteRequest($"api/produtos/{idProduto}");
         return response.IsSuccessStatusCode;
     }
 
@@ -499,6 +504,192 @@ public class ApiService
     {
         string endpoint = $"api/produtos/{produtoId}";
         return await GetAsync<Produto>(endpoint);
+    }
+
+    /// <summary>
+    /// Consulta um produto por código de barras usando o serviço BarcodeLookup (ou endpoint equivalente).
+    /// Endpoint esperado: GET api/produto/barcodelookup/consulta/{barcode}
+    /// </summary>
+    public async Task<(Produto? Produto, string? ErrorMessage)> GetProdutoPorBarcodeLookup(string barcode)
+    {
+        if (string.IsNullOrWhiteSpace(barcode)) return (default, "Barcode vazio");
+
+        // Some backends expect POST with barcode in the body. Try POST candidates first.
+        var postCandidates = new[]
+        {
+            "api/produto/barcodelookup/consulta",
+            "api/produto/barcodelookup",
+            "api/produtos/barcodelookup/consulta",
+            "api/produtos/barcodelookup"
+        };
+
+        var getCandidates = new[]
+        {
+            $"api/produto/barcodelookup/consulta/{Uri.EscapeDataString(barcode)}",
+            $"api/produto/barcodelookup/{Uri.EscapeDataString(barcode)}",
+            $"api/produtos/barcodelookup/consulta/{Uri.EscapeDataString(barcode)}",
+            $"api/produtos/barcodelookup/{Uri.EscapeDataString(barcode)}",
+            $"api/produto/barcodelookup/consulta?code={Uri.EscapeDataString(barcode)}",
+            $"api/produto/barcodelookup?code={Uri.EscapeDataString(barcode)}"
+        };
+
+        string? lastError = null;
+
+        // Try POST endpoints
+        foreach (var endpoint in postCandidates)
+        {
+            try
+            {
+                await AddAuthorizationHeader();
+                var enderecoUrl = BuildUrl(endpoint);
+                _logger.LogInformation("Trying barcode lookup POST: {url}", enderecoUrl);
+
+                // Try body with property 'barcode' and fallback to 'code'
+                var payloads = new[]
+                {
+                    JsonSerializer.Serialize(new { barcode }),
+                    JsonSerializer.Serialize(new { code = barcode })
+                };
+
+                foreach (var payload in payloads)
+                {
+                    var content = new StringContent(payload, Encoding.UTF8, "application/json");
+                    var response = await _httpClient.PostAsync(enderecoUrl, content);
+                    var responseText = await response.Content.ReadAsStringAsync();
+                    try { await _jsRuntime.InvokeVoidAsync("console.log", "Barcode POST response body: " + responseText); } catch { }
+                    _logger.LogInformation("POST {url} -> {status}", enderecoUrl, response.StatusCode);
+                    try { await _jsRuntime.InvokeVoidAsync("console.log", $"POST {enderecoUrl} -> {response.StatusCode}"); } catch { }
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        lastError = response.StatusCode == HttpStatusCode.NotFound ? "NotFound" : response.ReasonPhrase ?? response.StatusCode.ToString();
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(responseText))
+                    {
+                        lastError = "Empty response body";
+                        continue;
+                    }
+
+                    // Try to parse as Produto or as external lookup shape
+                    Produto? produto = TryParseProdutoLookup(responseText, barcode);
+                    if (produto != null)
+                        return (produto, null);
+
+                    lastError = "Unable to parse product from POST response";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Barcode lookup POST candidate failed: {endpoint}", endpoint);
+                lastError = ex.Message;
+            }
+        }
+
+        // Fallback: try GET endpoints
+        foreach (var endpoint in getCandidates)
+        {
+            try
+            {
+                await AddAuthorizationHeader();
+                var enderecoUrl = BuildUrl(endpoint);
+                _logger.LogInformation("Trying barcode lookup GET: {url}", enderecoUrl);
+
+                var response = await _httpClient.GetAsync(enderecoUrl);
+                var responseText = await response.Content.ReadAsStringAsync();
+                try { await _jsRuntime.InvokeVoidAsync("console.log", "Barcode GET response body: " + responseText); } catch { }
+                _logger.LogInformation("GET {url} -> {status}", enderecoUrl, response.StatusCode);
+                try { await _jsRuntime.InvokeVoidAsync("console.log", $"GET {enderecoUrl} -> {response.StatusCode}"); } catch { }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    lastError = response.StatusCode == HttpStatusCode.NotFound ? "NotFound" : response.ReasonPhrase ?? response.StatusCode.ToString();
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(responseText))
+                {
+                    lastError = "Empty response body";
+                    continue;
+                }
+
+                Produto? produto = TryParseProdutoLookup(responseText, barcode);
+                if (produto != null)
+                    return (produto, null);
+
+                lastError = "Unable to parse product from GET response";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Barcode lookup GET candidate failed: {endpoint}", endpoint);
+                lastError = ex.Message;
+            }
+        }
+
+        return (default, lastError ?? "Produto não encontrado");
+    }
+
+    // Attempt to interpret response from barcode lookup service and map to Produto
+    private Produto? TryParseProdutoLookup(string responseText, string originalBarcode)
+    {
+        try
+        {
+            // first try direct Produto shape
+            try
+            {
+                var direct = JsonSerializer.Deserialize<Produto>(responseText, _serializerOptions);
+                if (direct != null && (!string.IsNullOrEmpty(direct.Nome) || !string.IsNullOrEmpty(direct.Barcode)))
+                    return direct;
+            }
+            catch { /* ignored */ }
+
+            // try external lookup shape: { title, productName, description, images:[], offers:[{price}] }
+            using var doc = JsonDocument.Parse(responseText);
+            var root = doc.RootElement;
+            string? title = null;
+            if (root.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String) title = t.GetString();
+            if (string.IsNullOrEmpty(title) && root.TryGetProperty("productName", out var pn) && pn.ValueKind == JsonValueKind.String) title = pn.GetString();
+
+            string? description = null;
+            if (root.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String) description = d.GetString();
+
+            string? image = null;
+            if (root.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array && imgs.GetArrayLength() > 0)
+            {
+                var first = imgs[0];
+                if (first.ValueKind == JsonValueKind.String) image = first.GetString();
+            }
+
+            decimal price = 0;
+            if (root.TryGetProperty("offers", out var offers) && offers.ValueKind == JsonValueKind.Array && offers.GetArrayLength() > 0)
+            {
+                var firstOffer = offers[0];
+                if (firstOffer.ValueKind == JsonValueKind.Object && firstOffer.TryGetProperty("price", out var p) && p.ValueKind == JsonValueKind.Number)
+                {
+                    try { price = p.GetDecimal(); } catch { }
+                }
+            }
+
+            if (title != null)
+            {
+                var prod = new Produto
+                {
+                    Nome = title,
+                    Detalhe = description,
+                    Barcode = originalBarcode,
+                    UrlImagem = image,
+                    Preco = price
+                };
+                return prod;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "TryParseProdutoLookup failed");
+        }
+
+        return null;
     }
 
     public async Task<(List<CarrinhoCompraItem>? CarrinhoCompraItems, string? ErrorMessage)> GetItensCarrinhoCompra (int usuarioId)

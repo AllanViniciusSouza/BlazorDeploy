@@ -4,6 +4,7 @@
 @inject IJSRuntime JS
 @inject IValidator Validator
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
 
 @inject NavigationManager Navigation
 
@@ -25,9 +26,8 @@
         <div class="col-md-6">
             <input class="form-control form-control-lg"
                    placeholder="Pesquisar código de barras"
-                   @bind="searchBarcode"
-                   @oninput="SearchByBarcode"
-                   @onkeydown="OnBarcodeKeyDown" />
+                   @bind="searchBarcode" @bind:event="oninput"
+                   @onkeyup="OnBarcodeKeyUp" />
             <div class="mt-2">
                 <button class="btn btn-outline-primary mt-2 me-2" @onclick="OpenScanner">Abrir Leitor (câmera)</button>
                 <button class="btn btn-outline-secondary mt-2" @onclick="OpenNativeScanner">Abrir Leitor (app)</button>
@@ -44,11 +44,9 @@
                         @if (!string.IsNullOrEmpty(Produto.CaminhoImagem))
                         {
                             <div style="height:72px; overflow:hidden; background:#f8f9fa;">
-                            <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
+                                <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
                             </div>
                         }
-
-    
                         else
                         {
                             <div class="d-flex align-items-center justify-content-center" style="height:72px; background:#f8f9fa;">
@@ -56,7 +54,7 @@
                             </div>
                         }
 
-                    <div class="card-body p-1 d-flex flex-column">
+                        <div class="card-body p-1 d-flex flex-column">
                             <div class="card-title mb-1 text-truncate" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
                             <div class="text-success mb-1" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
                            @*  <div class="mt-auto">
@@ -69,6 +67,56 @@
         </div>
     </div>
 </div>
+@* create-from-barcode modal *@
+@if (showCreateProductModal)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal d-block">
+        <div class="modal-dialog modal-md mt-5">
+            <div class="modal-content p-4 shadow-lg">
+                <h5 class="fw-bold text-center">Cadastrar Produto (código: @newProductForBarcode.Barcode)</h5>
+
+                <div class="mb-3">
+                    <label class="form-label">Nome</label>
+                    <input class="form-control" @bind="newProductForBarcode.Nome" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Preço (padrão)</label>
+                    <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.Preco" />
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Quente (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoQuente" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Gelada (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoGelada" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Retirada (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoRetirar" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Entrega (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoEntrega" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Custo (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoCusto" />
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3">
+                    <button class="btn btn-secondary btn-lg" @onclick="CancelCreateProduct">Cancelar</button>
+                    <button class="btn btn-primary btn-lg" @onclick="CreateProductFromBarcode">Cadastrar e Adicionar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 
 <div class="card shadow-sm p-3 mb-4 bg-dark text-white">
@@ -307,6 +355,8 @@
     private bool imprimirNaCozinha = false;
 
     private bool showQuantityModal = false;
+    private bool showCreateProductModal = false;
+    private Produto newProductForBarcode = new Produto();
 private Produto selectedProduct;
 private int? selectedQuantity = null;
 private string? selectedTemperatura = null;
@@ -349,6 +399,63 @@ private string? selectedTemperatura = null;
 
     // scanner interop fields moved into code-behind section
     private DotNetObjectReference<object>? _dotNetRef;
+
+
+    private void CancelCreateProduct()
+    {
+        showCreateProductModal = false;
+    }
+
+    private async Task CreateProductFromBarcode()
+    {
+        try
+        {
+            // Basic validation and defaults required by backend
+            if (string.IsNullOrWhiteSpace(newProductForBarcode.Nome))
+            {
+                await ShowAlert("Por favor informe o nome do produto antes de cadastrar.");
+                return;
+            }
+
+            // PrecoCusto is required by backend. If not provided, fallback to Preco or a small non-zero value.
+            if (newProductForBarcode.PrecoCusto <= 0)
+            {
+                if (newProductForBarcode.Preco > 0)
+                    newProductForBarcode.PrecoCusto = newProductForBarcode.Preco;
+                else
+                    newProductForBarcode.PrecoCusto = 0.01m;
+            }
+
+            // CategoriaId may be required; pick a sensible default if not set
+            if (newProductForBarcode.CategoriaId == 0)
+            {
+                var (cats, _) = await _apiService.GetCategorias();
+                if (cats != null && cats.Any())
+                    newProductForBarcode.CategoriaId = cats.First().Id;
+                else
+                    newProductForBarcode.CategoriaId = 1; // fallback
+            }
+
+            // call API to create product
+            var response = await _apiService.AdicionarProdutoAsync(newProductForBarcode);
+            if (!string.IsNullOrEmpty(response.ErrorMessage))
+            {
+                await ShowAlert("Falha ao criar produto: " + response.ErrorMessage);
+                return;
+            }
+
+            // reload products and add created product to cart
+            var (todosProdutos, err) = await _apiService.GetTodosProdutos();
+            var created = todosProdutos?.FirstOrDefault(p => p.Barcode == newProductForBarcode.Barcode) ?? newProductForBarcode;
+            // open quantity modal for the newly created product
+            showCreateProductModal = false;
+            OpenQuantityModal(created);
+        }
+        catch (Exception ex)
+        {
+            await ShowAlert("Erro ao criar produto: " + ex.Message);
+        }
+    }
 
     private decimal GetProdutoDisplayPrice(Produto p)
     {
@@ -394,25 +501,106 @@ private string? selectedTemperatura = null;
         if (e.Key == "Enter")
         {
             var code = searchBarcode?.Trim();
-            if (!string.IsNullOrEmpty(code))
-                await ProcessBarcode(code);
+            await JS.InvokeVoidAsync("console.log", $"OnBarcodeKeyDown Enter pressed, code='" + (code ?? "(null)") + "'");
+            if (string.IsNullOrEmpty(code))
+            {
+                await JS.InvokeVoidAsync("console.warn", "Barcode input empty on Enter");
+                return;
+            }
+            await ProcessBarcode(code);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnBarcodeKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var code = searchBarcode?.Trim();
+            await JS.InvokeVoidAsync("console.log", $"OnBarcodeKeyUp Enter pressed, code='" + (code ?? "(null)") + "'");
+            if (string.IsNullOrEmpty(code))
+            {
+                await JS.InvokeVoidAsync("console.warn", "Barcode input empty on Enter (keyup)");
+                return;
+            }
+
+            await ProcessBarcode(code);
+            StateHasChanged();
         }
     }
 
     private async Task ProcessBarcode(string code)
     {
-        // try local DB first
-        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-        var produto = todosProdutos?.FirstOrDefault(p => p.Barcode == code);
-        if (produto != null)
+        try
         {
-            OpenQuantityModal(produto);
-            return;
-        }
+            // 1) Check backend product DB first
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
 
-        // not found locally -> save current Caixa state then navigate to cadastrar page with barcode param
-        await SaveCaixaStateAsync();
-        Navigation.NavigateTo($"/cadastrar-produto/{Uri.EscapeDataString(code)}");
+            if (todosProdutos == null || !todosProdutos.Any())
+            {
+                await JS.InvokeVoidAsync("console.warn", "ProcessBarcode: GetTodosProdutos returned no items: " + (errorMessage ?? "(no error msg)"));
+            }
+
+            string Normalize(string? s) => string.IsNullOrWhiteSpace(s) ? string.Empty : new string(s.Where(char.IsDigit).ToArray());
+            var normalizedCode = Normalize(code);
+
+            Produto? produto = null;
+            if (!string.IsNullOrEmpty(normalizedCode))
+            {
+                produto = (todosProdutos ?? new List<Produto>())
+                    .FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.Barcode) && Normalize(p.Barcode) == normalizedCode);
+            }
+            if (produto == null)
+            {
+                produto = (todosProdutos ?? new List<Produto>())
+                    .FirstOrDefault(p => string.Equals(p.Barcode?.Trim(), code?.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (produto != null)
+            {
+                // product exists in DB -> open quantity modal
+                OpenQuantityModal(produto);
+                return;
+            }
+            // 2) Not in DB -> open modal immediately with barcode, then prefill asynchronously
+            try
+            {
+                // set minimal barcode and clear other fields on the existing instance so bindings show immediately
+                newProductForBarcode.Barcode = code;
+                newProductForBarcode.Nome = null;
+                newProductForBarcode.Preco = 0m;
+                newProductForBarcode.Detalhe = null;
+                newProductForBarcode.UrlImagem = null;
+                newProductForBarcode.PrecoCusto = 0m;
+                newProductForBarcode.PrecoQuente = 0m;
+                newProductForBarcode.PrecoGelada = 0m;
+                newProductForBarcode.PrecoEntrega = 0m;
+                newProductForBarcode.PrecoRetirar = 0m;
+                newProductForBarcode.CategoriaId = 0;
+
+                showCreateProductModal = true;
+                StateHasChanged();
+
+                // Prefill in background so UI is responsive
+                _ = PrefillProductFromLookup(code);
+                return;
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", "Barcode lookup exception: " + ex.Message);
+                newProductForBarcode.Barcode = code;
+                showCreateProductModal = true;
+                StateHasChanged();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", "Erro em ProcessBarcode: " + ex.Message);
+            newProductForBarcode = new Produto { Barcode = code };
+            showCreateProductModal = true;
+            StateHasChanged();
+        }
     }
 
     private class CaixaStateDto
@@ -723,6 +911,26 @@ void UpdateCartTotals()
         }
     }
 
+    private async Task OnBarcodeInput(ChangeEventArgs e)
+    {
+        // keep behavior consistent with SearchByBarcode
+        searchNome = string.Empty;
+        searchBarcode = e?.Value?.ToString();
+
+        if (string.IsNullOrWhiteSpace(searchBarcode))
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos ?? new List<Produto>();
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = (todosProdutos ?? new List<Produto>())
+                                .Where(c => string.Equals(c.Barcode, searchBarcode, StringComparison.OrdinalIgnoreCase))
+                                .ToList();
+        }
+    }
+
     // private void AddToCart(Produto Produto)
     // {
     //     var newItem = new CartItem
@@ -991,6 +1199,42 @@ void UpdateCartTotals()
     private async Task ShowAlert(string message)
     {
         await JS.InvokeVoidAsync("alert", message);
+    }
+
+    private async Task PrefillProductFromLookup(string code)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("console.log", "PrefillProductFromLookup: calling GetProdutoPorBarcodeLookup for: " + code);
+            var (produtoLookup, errLookup) = await _apiService.GetProdutoPorBarcodeLookup(code);
+
+            if (!string.IsNullOrEmpty(errLookup))
+            {
+                await JS.InvokeVoidAsync("console.warn", "GetProdutoPorBarcodeLookup returned error: " + errLookup);
+            }
+
+            if (produtoLookup != null)
+            {
+                newProductForBarcode.Nome = produtoLookup.Nome;
+                newProductForBarcode.Preco = produtoLookup.Preco;
+                newProductForBarcode.Detalhe = produtoLookup.Detalhe;
+                newProductForBarcode.UrlImagem = produtoLookup.UrlImagem;
+                newProductForBarcode.PrecoCusto = produtoLookup.PrecoCusto;
+                newProductForBarcode.PrecoQuente = produtoLookup.PrecoQuente;
+                newProductForBarcode.PrecoGelada = produtoLookup.PrecoGelada;
+                newProductForBarcode.PrecoEntrega = produtoLookup.PrecoEntrega;
+                newProductForBarcode.PrecoRetirar = produtoLookup.PrecoRetirar;
+                newProductForBarcode.CategoriaId = produtoLookup.CategoriaId;
+
+                try { await JS.InvokeVoidAsync("console.log", "PrefillProductFromLookup: filled -> " + System.Text.Json.JsonSerializer.Serialize(newProductForBarcode)); } catch { }
+
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", "PrefillProductFromLookup exception: " + ex.Message);
+        }
     }
 
 }

@@ -39,6 +39,27 @@ public class ApiService
         };
     }
 
+    // Cancel a pedido by id (attempt PUT to an assumed endpoint)
+    public async Task<ApiResponse<bool>> CancelarPedido(int pedidoId)
+    {
+        try
+        {
+            var content = new StringContent(string.Empty, Encoding.UTF8, "application/json");
+            var response = await PutRequest($"api/pedidos/{pedidoId}/cancel", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao cancelar pedido: {response.StatusCode}");
+                return new ApiResponse<bool> { ErrorMessage = $"Erro ao cancelar pedido: {response.StatusCode}", Data = false };
+            }
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao cancelar pedido");
+            return new ApiResponse<bool> { ErrorMessage = ex.Message };
+        }
+    }
+
     private string BuildUrl(string uri)
     {
         // Prefer HttpClient.BaseAddress configured in Program.cs (from appconfig.json)
@@ -719,6 +740,12 @@ public class ApiService
     public async Task<(List<Pedido>?, string? ErrorMessage)> GetPedidosPorData(DateTime data)
     {
         string endpoint = $"api/pedidos/data/{data:yyyy-MM-dd}";
+        return await GetAsync<List<Pedido>>(endpoint);
+    }
+
+    public async Task<(List<Pedido>?, string? ErrorMessage)> GetAllPedidos()
+    {
+        string endpoint = $"api/pedidos";
         return await GetAsync<List<Pedido>>(endpoint);
     }
 

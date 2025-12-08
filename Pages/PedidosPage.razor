@@ -13,14 +13,136 @@
     <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
 </div>
 
-<h3 class="mt-4">Total Vendido Hoje: R$ @totalVendido.ToString("F2")</h3>
+<h3 class="mt-4">Total Vendido: R$ @totalVendido.ToString("F2")</h3>
 
-    @if (pedidosHoje.Count == 0)
-    {
-        <p>Nenhum pedido hoje.</p>
-    }
-    else
-    {
+@if (pedidosHoje == null || !pedidosHoje.Any())
+{
+    <p>Nenhum pedido na data selecionada.</p>
+}
+
+@* Pedido detail modal *@
+@if (showPedidoModal && currentPedido != null)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal d-block">
+        <div class="modal-dialog modal-lg mt-4">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Pedido #@currentPedido.Id</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePedidoModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h5 class="mb-2">Dados do Cliente</h5>
+                            <dl class="row small">
+                                <dt class="col-4">Cliente</dt>
+                                <dd class="col-8">@currentPedido.ClienteNome</dd>
+
+                            <dt class="col-4">Telefone</dt>
+                            <dd class="col-8">@currentPedido?.Telefone ?? "-"</dd>
+
+                                <dt class="col-4">Endereço</dt>
+                                <dd class="col-8 text-truncate">@currentPedido.Endereco</dd>
+
+                                <dt class="col-4">Observações</dt>
+                                <dd class="col-8">@currentPedido.Observacoes</dd>
+                            </dl>
+                        </div>
+
+                        <div class="col-md-6">
+                            <h5 class="mb-2">Resumo do Pedido</h5>
+                            <dl class="row small text-end">
+                                <dt class="col-6">Vendedor</dt>
+                                <dd class="col-6">@currentPedido.VendedorNome</dd>
+
+                                <dt class="col-6">Data</dt>
+                                <dd class="col-6">@currentPedido.DataPedido?.ToString("yyyy-MM-dd HH:mm")</dd>
+
+                                <dt class="col-6">Total</dt>
+                                <dd class="col-6">R$ @currentPedido.ValorTotal.ToString("F2")</dd>
+
+                                <dt class="col-6">Forma(s)</dt>
+                                <dd class="col-6">
+                                    @currentPedido.FormaPagamento
+                                    @if(!string.IsNullOrEmpty(currentPedido.FormaPagamento2)) { <text> / @currentPedido.FormaPagamento2</text> }
+                                </dd>
+
+                                <dt class="col-6">Valor Pago</dt>
+                                <dd class="col-6">R$ @(currentPedido.ValorPago1?.ToString("F2") ?? "0.00")
+                                    @if (currentPedido.ValorPago2.HasValue && currentPedido.ValorPago2.Value > 0)
+                                    {
+                                        <div>R$ @currentPedido.ValorPago2.Value.ToString("F2")</div>
+                                    }
+                                </dd>
+                            </dl>
+
+                            @* prazo dates *@
+                            @if (currentPedido.DataPagamentoPrazo.HasValue && string.Equals(currentPedido.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="mt-2 small text-muted">Pagamento (forma 1): @currentPedido.DataPagamentoPrazo.Value.ToString("yyyy-MM-dd")</div>
+                            }
+                            @if (currentPedido.DataPagamentoPrazo2.HasValue && string.Equals(currentPedido.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="mt-1 small text-muted">Pagamento (forma 2): @currentPedido.DataPagamentoPrazo2.Value.ToString("yyyy-MM-dd")</div>
+                            }
+                        </div>
+                    </div>
+
+                    <h6 class="mb-2">Itens</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    <th>Produto</th>
+                                    <th class="text-end">Qtd</th>
+                                    <th class="text-end">Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (detalhes.TryGetValue(currentPedido.Id, out var pdItems) && pdItems != null && pdItems.Any())
+                                {
+                                    @foreach (var it in pdItems)
+                                    {
+                                        <tr>
+                                            <td style="width:64px;">
+                                                @{
+                                                    var img = !string.IsNullOrEmpty(it.ProdutoImagem) ? AppConfig.BaseUrl + it.ProdutoImagem : it.CaminhoImagem;
+                                                }
+                                                @if (!string.IsNullOrEmpty(img))
+                                                {
+                                                    <img src="@img" style="width:48px; height:48px; object-fit:cover;" />
+                                                }
+                                            </td>
+                                            <td class="align-middle">@it.ProdutoNome</td>
+                                            <td class="text-end align-middle">@it.Quantidade</td>
+                                            <td class="text-end align-middle">R$ @it.ProdutoPreco.ToString("F2")</td>
+                                            <td class="text-end align-middle">R$ @it.SubTotal.ToString("F2")</td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr><td colspan="5">Sem detalhes disponíveis.</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="ClosePedidoModal">Fechar</button>
+                    <button class="btn btn-primary" @onclick="() => ImprimirPedido(currentPedido.Id)">Imprimir</button>
+                    <button class="btn btn-danger" @onclick="() => ConfirmarCancelar(currentPedido.Id)" disabled="@(string.Equals(currentPedido.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
     @if (pedidosHoje.Count > 0)
     {
         <div class="alert alert-info">
@@ -29,92 +151,68 @@
             Crédito: <strong>R$ @totalCredito.ToString("F2")</strong> |
             Pix: <strong>R$ @totalPix.ToString("F2")</strong> |
             Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong> |
-            Ifood: <strong>R$ @totalIfood.ToString("F2")</strong> |
+            Ifood: <strong>R$ @totalIfood.ToString("F2")</strong>
         </div>
     }
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>Hora</th>
-                    <th>Cliente</th>
-                    <th>Vendedor</th>
-                    <th>Forma de Pagamento</th>
-                    <th>Forma de Pagamento 2</th>
-                    <th>Valor Total</th>
-                    <td>Status</td>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var comanda in pedidosHoje)
-                {
-                    <tr style="cursor:pointer;" @onclick="() => ToggleDetails(comanda.Id)">
-                        <td>@(comanda.DataPedido?.ToString("HH:mm") ?? "-")</td>
-                        <td>@comanda.ClienteNome</td>
-                        <td>@comanda.VendedorNome</td>
-                        <td>@comanda.FormaPagamento - R$@comanda.ValorPago1</td>
-                        <td>@comanda.FormaPagamento2 - R$@comanda.ValorPago2</td>
-                        <td>R$ @comanda.ValorTotal.ToString("F2")</td>
-                        <td>@comanda.Status</td>
-                        <td>
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => ToggleDetails(comanda.Id)">
-                                    @((expanded.Contains(comanda.Id)) ? "Ocultar" : "Detalhes")
-                                </button>
-                                <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ImprimirPedido(comanda.Id)">
-                                    Imprimir
-                                </button>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        @foreach (var comanda in pedidosHoje)
+        {
+            <div class="col">
+                <div class="card h-100 bg-dark text-white @GetRowClass(comanda)" style="cursor:pointer;" @onclick="() => ShowPedidoModal(comanda.Id)">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="card-title mb-1">@comanda.ClienteNome</h5>
+                                <div class="text-muted small">@comanda.VendedorNome</div>
                             </div>
-                        </td>
-                    </tr>
+                            <div class="text-end">
+                                <div class="fs-6">R$ @comanda.ValorTotal.ToString("F2")</div>
+                                <div class="text-muted small">@(comanda.DataPedido?.ToString("HH:mm") ?? "-")</div>
+                            </div>
+                        </div>
 
-                    @if (expanded.Contains(comanda.Id) && detalhes.TryGetValue(comanda.Id, out var items) && items != null)
-                    {
-                        <tr>
-                            <td colspan="7" class="p-0">
-                                <table class="table mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Imagem</th>
-                                            <th>Produto</th>
-                                            <th>Quantidade</th>
-                                            <th>Preço Unit.</th>
-                                            <th>Subtotal</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var it in items)
-                                        {
-                                            <tr>
-                                                <td style="width:80px;">
-                                                    @{
-                                                        var imgSrc = !string.IsNullOrEmpty(it.ProdutoImagem)
-                                                            ? AppConfig.BaseUrl + it.ProdutoImagem
-                                                            : it.CaminhoImagem;
-                                                    }
-                                                    @if (!string.IsNullOrEmpty(imgSrc))
-                                                    {
-                                                        <img src="@imgSrc" style="max-height:48px; object-fit:cover;" />
-                                                    }
-                                                </td>
-                                                <td>@it.ProdutoNome</td>
-                                                <td>@it.Quantidade</td>
-                                                <td>R$ @it.ProdutoPreco.ToString("F2")</td>
-                                                <td>R$ @it.SubTotal.ToString("F2")</td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </td>
-                        </tr>
-                    }
-                }
-            </tbody>
-        </table>
+                        <p class="card-text mt-2 mb-1">Pagamento: <strong>@comanda.FormaPagamento</strong> (@(comanda.ValorPago1?.ToString("F2") ?? "0.00"))</p>
+                        @if (!string.IsNullOrEmpty(comanda.FormaPagamento2))
+                        {
+                            <p class="card-text small">Pagamento 2: @comanda.FormaPagamento2 (@(comanda.ValorPago2?.ToString("F2") ?? "0.00"))</p>
+                        }
+                        @if (comanda.DataPagamentoPrazo.HasValue)
+                        {
+                            <p class="card-text small">Data Pagamento: @comanda.DataPagamentoPrazo.Value.ToString("yyyy-MM-dd")</p>
+                        }
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ImprimirPedido(comanda.Id)">Imprimir</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => ToggleDetails(comanda.Id)">@((expanded.Contains(comanda.Id)) ? "Ocultar detalhes" : "Ver detalhes")</button>
+                            <button class="btn btn-sm btn-danger ms-auto" @onclick:stopPropagation="true" @onclick="() => ConfirmarCancelar(comanda.Id)" disabled="@(string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))">Cancelar</button>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent border-top-0 small text-muted">
+                        Status: @comanda.Status
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 
-        
+    @* Confirm cancel modal *@
+    @if (showCancelModal)
+    {
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal d-block">
+            <div class="modal-dialog modal-sm mt-5">
+                <div class="modal-content p-3">
+                    <h5 class="fw-bold">Confirmar cancelamento</h5>
+                    <p>Tem certeza que deseja cancelar o pedido <strong>#@cancelPedidoId</strong>?</p>
+                    <div class="d-flex justify-content-end">
+                        <button class="btn btn-secondary me-2" @onclick="() => showCancelModal = false">Não</button>
+                        <button class="btn btn-danger" @onclick="ConfirmCancelar">Sim, cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     }
-    
+}
 
 @code {
     private List<Pedido> pedidosHoje = new();
@@ -130,50 +228,161 @@
 
     private DateTime dataSelecionada = DateTime.Today;
 
+    private bool showCancelModal = false;
+    private int cancelPedidoId = 0;
+    private bool showPedidoModal = false;
+    private Pedido? currentPedido = null;
+
+    private string GetRowClass(Pedido p)
+    {
+        if (string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase))
+            return "table-success";
+        if (string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase))
+            return "table-warning";
+        if (string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+            return "table-danger";
+        return string.Empty; // normal
+    }
+
+    private void ConfirmarCancelar(int pedidoId)
+    {
+        cancelPedidoId = pedidoId;
+        // If the details modal is open, close it so the confirm modal appears on top
+        showPedidoModal = false;
+        showCancelModal = true;
+    }
+
+    private async Task ShowPedidoModal(int pedidoId)
+    {
+        currentPedido = pedidosHoje.FirstOrDefault(p => p.Id == pedidoId);
+        // ensure details are loaded before showing modal
+        await LoadDetailsIfNeeded(pedidoId);
+        showPedidoModal = true;
+        StateHasChanged();
+    }
+
+    private void ClosePedidoModal()
+    {
+        showPedidoModal = false;
+        currentPedido = null;
+    }
+
+    private async Task ConfirmCancelar()
+    {
+        showCancelModal = false;
+        try
+        {
+            var result = await _apiService.CancelarPedido(cancelPedidoId);
+            if (!string.IsNullOrEmpty(result.ErrorMessage) || !result.Data)
+            {
+                await JS.InvokeVoidAsync("alert", "Falha ao cancelar pedido: " + (result.ErrorMessage ?? ""));
+                return;
+            }
+
+            var pedido = pedidosHoje.FirstOrDefault(p => p.Id == cancelPedidoId);
+            if (pedido != null)
+            {
+                pedido.Status = "Cancelado";
+            }
+
+            await RecomputeTotals();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao cancelar pedido: " + ex.Message);
+            await JS.InvokeVoidAsync("alert", "Erro ao cancelar pedido: " + ex.Message);
+        }
+    }
+
+    private async Task LoadDetailsIfNeeded(int pedidoId)
+    {
+        if (!detalhes.ContainsKey(pedidoId))
+        {
+            try
+            {
+                var (items, error) = await _apiService.GetPedidoDetalhes(pedidoId);
+                detalhes[pedidoId] = items ?? new List<PedidoDetalhe>();
+            }
+            catch
+            {
+                detalhes[pedidoId] = new List<PedidoDetalhe>();
+            }
+        }
+    }
+
+    private Task RecomputeTotals()
+    {
+        var valid = pedidosHoje.Where(c => !string.Equals(c.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
+        totalVendido = valid.Sum(c => c.ValorTotal);
+
+        totalDebito = valid
+            .Where(c => string.Equals(c.FormaPagamento, "Debito", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        totalCredito = valid
+            .Where(c => string.Equals(c.FormaPagamento, "Credito", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        totalPix = valid
+            .Where(c => string.Equals(c.FormaPagamento, "Pix", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        totalDinheiro = valid
+            .Where(c => string.Equals(c.FormaPagamento, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        totalIfood = valid
+            .Where(c => string.Equals(c.FormaPagamento, "Ifood", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        return Task.CompletedTask;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
-
         if (string.IsNullOrEmpty(nome))
         {
             Navigation.NavigateTo("login");
+            return;
         }
 
-        await BuscarPedidosPorData();
+        // load all pedidos initially (backend endpoint GET api/pedidos)
+        try
+        {
+            var (todos, err) = await _apiService.GetAllPedidos();
+            if (!string.IsNullOrEmpty(err))
+            {
+                Console.WriteLine("Erro ao carregar pedidos: " + err);
+                pedidosHoje = new List<Pedido>();
+            }
+            else
+            {
+                pedidosHoje = todos ?? new List<Pedido>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exceção ao carregar pedidos: " + ex.Message);
+            pedidosHoje = new List<Pedido>();
+        }
+
+        await RecomputeTotals();
     }
 
     private async Task BuscarPedidosPorData()
     {
         var (comandas, errorMessage) = await _apiService.GetPedidosPorData(dataSelecionada);
-
         if (!string.IsNullOrEmpty(errorMessage))
         {
             Console.WriteLine("Erro ao buscar pedidos: " + errorMessage);
             return;
         }
 
-        pedidosHoje = comandas;
-        totalVendido = comandas.Sum(c => c.ValorTotal);
-
-        totalDebito = comandas
-            .Where(c => c.FormaPagamento.Equals("Debito", StringComparison.OrdinalIgnoreCase))
-            .Sum(c => c.ValorTotal);
-
-        totalCredito = comandas
-            .Where(c => c.FormaPagamento.Equals("Credito", StringComparison.OrdinalIgnoreCase))
-            .Sum(c => c.ValorTotal);
-
-        totalPix = comandas
-            .Where(c => c.FormaPagamento.Equals("Pix", StringComparison.OrdinalIgnoreCase))
-            .Sum(c => c.ValorTotal);
-
-        totalDinheiro = comandas
-            .Where(c => c.FormaPagamento.Equals("Dinheiro", StringComparison.OrdinalIgnoreCase))
-            .Sum(c => c.ValorTotal);
-
-        totalIfood = comandas
-        .Where(c => c.FormaPagamento.Equals("Ifood", StringComparison.OrdinalIgnoreCase))
-        .Sum(c => c.ValorTotal);
+        pedidosHoje = comandas ?? new List<Pedido>();
+        await RecomputeTotals();
+        StateHasChanged();
     }
 
     private async Task ToggleDetails(int pedidoId)
@@ -183,22 +392,13 @@
             expanded.Remove(pedidoId);
             return;
         }
-        Console.WriteLine($"Keys: {string.Join(',', detalhes.Keys)}; pedidoId={pedidoId}");
-        // Only fetch details if we don't have them cached
+
         if (!detalhes.ContainsKey(pedidoId))
         {
             try
             {
                 var (items, error) = await _apiService.GetPedidoDetalhes(pedidoId);
-                if (!string.IsNullOrEmpty(error))
-                {
-                    Console.WriteLine($"Erro ao obter detalhes do pedido {pedidoId}: {error}");
-                    detalhes[pedidoId] = new List<PedidoDetalhe>();
-                }
-                else
-                {
-                    detalhes[pedidoId] = items ?? new List<PedidoDetalhe>();
-                }
+                detalhes[pedidoId] = items ?? new List<PedidoDetalhe>();
             }
             catch (Exception ex)
             {
@@ -207,34 +407,7 @@
             }
         }
 
-        // mark expanded after ensuring details are available
         expanded.Add(pedidoId);
-        // Always fetch fresh details when expanding to avoid stale cache or missing keys
-        try
-        {
-            var (items, error) = await _apiService.GetPedidoDetalhes(pedidoId);
-            if (!string.IsNullOrEmpty(error))
-            {
-                Console.WriteLine($"Erro ao obter detalhes do pedido {pedidoId}: {error}");
-                detalhes[pedidoId] = new List<PedidoDetalhe>();
-            }
-            else
-            {
-                detalhes[pedidoId] = items ?? new List<PedidoDetalhe>();
-            }
-
-            Console.WriteLine($"Depois fetch - Keys: {string.Join(',', detalhes.Keys)}; pedidoId={pedidoId}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Exceção ao buscar detalhes do pedido {pedidoId}: {ex.Message}");
-            detalhes[pedidoId] = new List<PedidoDetalhe>();
-        }
-
-        // mark expanded after ensuring details are available
-        if (!expanded.Contains(pedidoId))
-            expanded.Add(pedidoId);
-
         StateHasChanged();
     }
 
@@ -242,11 +415,9 @@
     {
         try
         {
-            // Call backend print endpoint with minimal payload (DTO with Id)
             var dto = new { Id = pedidoId };
             var json = System.Text.Json.JsonSerializer.Serialize(dto);
             var content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json");
-
             var response = await _apiService.PostRequest("api/Impressao/pedido/imprimir", content);
 
             if (!response.IsSuccessStatusCode)
@@ -258,14 +429,12 @@
 
             var respJson = await response.Content.ReadAsStringAsync();
             var resultado = System.Text.Json.JsonSerializer.Deserialize<BlazorDeploy.Models.ImpressaoResultado>(respJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
             if (resultado == null)
             {
                 await JS.InvokeVoidAsync("alert", "Resposta inválida do servidor de impressão.");
                 return;
             }
 
-            // show preview modal with resultado.Texto (simple)
             await JS.InvokeVoidAsync("alert", "Impressão gerada para pedido " + resultado.PedidoId + "\nTexto:\n" + (resultado.Texto ?? "(vazio)"));
         }
         catch (Exception ex)

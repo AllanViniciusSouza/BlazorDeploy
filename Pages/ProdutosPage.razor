@@ -1,6 +1,7 @@
 ﻿@page "/produtos"
 @inject ApiService _apiService
 @inject AuthService AuthService
+@* Using QueryHelpers requires package Microsoft.AspNetCore.WebUtilities; avoid compile-time reference and parse manually below *@
 @* @inject IJSRuntime JS *@
 @inject NavigationManager Navigation
 @* @inject AuthService AuthService *@
@@ -18,15 +19,17 @@
             <InputText id="nome" class="form-control" @bind-Value="novoProduto.Nome" />
             <ValidationMessage For="@(() => novoProduto.Nome)" />
         </div>
-        <div class="form-group">
-            <label for="preco">Preço:</label>
-            <InputNumber id="preco" class="form-control" @bind-Value="novoProduto.Preco" />
-            <ValidationMessage For="@(() => novoProduto.Preco)" />
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Preço Quente</label>
+                <InputNumber class="form-control" @bind-Value="novoProduto.PrecoQuente" step="0.01" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Preço Gelada</label>
+                <InputNumber class="form-control" @bind-Value="novoProduto.PrecoGelada" step="0.01" />
+            </div>
         </div>
-        <div class="form-group form-check">
-            <InputCheckbox id="popular" class="form-check-input" @bind-Value="novoProduto.Popular" />
-            <label class="form-check-label" for="popular">Popular</label>
-        </div>
+        
 
         <div class="form-group">
             <label for="categoria">Categoria:</label>
@@ -45,21 +48,7 @@
             <ValidationMessage For="@(() => novoProduto.Barcode)" />
         </div>
 
-        <div class="form-group">
-            <label>Dias Disponíveis:</label>
-            <div class="d-flex flex-wrap gap-2">
-                @foreach (var dia in diasSemana)
-                {
-                    <div class="form-check me-2">
-                        <input type="checkbox"
-                               class="form-check-input"
-                               checked="@diasSelecionadosNovoProduto.Contains(dia)"
-                               @onchange="@((ChangeEventArgs e) => OnDiaSelecionadoNovoProduto(dia, (bool)e.Value))" />
-                        <label class="form-check-label">@dia</label>
-                    </div>
-                }
-            </div>
-        </div>
+        @* dias disponiveis removido do formulario conforme solicitado *@
 
         <button type="submit" class="btn btn-success">Salvar</button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
@@ -78,180 +67,67 @@
     </div>
 </div>
 
-<table class="table">
-    <thead>
-        <tr>
-            <th>Imagem</th>
-            <th>Nome</th>
-            <th>Preço</th>
-            <th>Disponivel no cardápio</th>
-            <th>Popular</th>
-            <th>Categoria</th>
-            <th>Barcode</th>
-            <th>Dias Disponíveis</th>
-            @* <th>Ações</th> *@
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var produto in filteredProdutos)
-        {
-            <tr>
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                    <img src="@produto.CaminhoImagem"
-             @onclick="() => ClickInput(produto.Id)"
-             style="width:100px; cursor:pointer" />
-
-        <!-- Campo de arquivo oculto -->
-        <InputFile id=@($"fileInput-{produto.Id}")
-           style="display:none"
-           accept="image/*"
-           capture="environment"
-           OnChange="@(e => OnFotoSelecionada(e, produto.Id))" />
-                    }
-                     else
-                    {
-                    <img src="@produto.CaminhoImagem" alt="Imagem do Produto" width="40" style="cursor: pointer;" />
-    }
-                </td>
-
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                        <InputText class="form-control" @bind-Value="produto.Nome" />
-                    }
-                    else
-                    {
-                        @produto.Nome
-                    }
-                </td>
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                        <div class="d-flex flex-wrap gap-1">
-                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoRetirar" step="0.01" />
-                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoEntrega" step="0.01" />
-                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoQuente" step="0.01" />
-                            <InputNumber class="form-control form-control-sm" style="width:110px" @bind-Value="produto.PrecoGelada" step="0.01" />
-                        </div>
-                    }
-                    else
-                    {
-                       @*  @GetDisplayPrice(produto).ToString("C2") *@
-                    }
-                </td>
-               
-
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                        <InputCheckbox @bind-Value="produto.Popular" class="form-check-input" />
-                    }
-                    else
-                    {
-                        @if (produto.Popular)
-                        {
-                            <span class="badge bg-success">Sim</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary">Não</span>
-                        }
-                    }
-                </td>
-
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                        <InputCheckbox @bind-Value="produto.Disponivel" class="form-check-input" />
-                    }
-                    else
-                    {
-                        @if (produto.Disponivel)
-                        {
-                            <span class="badge bg-success">Sim</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary">Não</span>
-                        }
-                    }
-                </td>
-
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                        <InputSelect class="form-control" @bind-Value="produto.CategoriaId">
-                            @foreach (var cat in categorias)
-                            {
-                                <option value="@cat.Id">@cat.Nome</option>
-                            }
-                        </InputSelect>
-                    }
-                    else
-                    {
-                        @categorias.FirstOrDefault(c => c.Id == produto.CategoriaId)?.Nome
-                    }
-                </td>
-
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                        <InputText class="form-control" @bind-Value="produto.Barcode" />
-                    }
-                    else
-                    {
-                        @produto.Barcode
-                    }
-                </td>
-                <td>
-    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+    @foreach (var produto in filteredProdutos)
     {
-            // Obtém os dias selecionados para o produto atual do dicionário
-            List<DayOfWeek> diasProduto = diasSelecionadosPorProduto.ContainsKey(produto.Id)
-                ? diasSelecionadosPorProduto[produto.Id]
-                : (
-                    string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase)
-                        ? Enum.GetValues<DayOfWeek>().ToList()
-                        : produto.DiasDisponiveis?
-                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                            .Select(d => Enum.TryParse<DayOfWeek>(d.Trim(), out var result) ? result : DayOfWeek.Sunday) // fallback seguro
-                            .ToList() ?? new List<DayOfWeek>()
-                );
+        <div class="col">
+            <div class="card bg-dark text-white position-relative" style="cursor:pointer; min-height:120px;" @onclick="() => EditRowClicked(produto.Id)">
+                @* compact card header image *@
+                @if (!string.IsNullOrEmpty(produto.CaminhoImagem))
+                {
+                    <div style="height:64px; overflow:hidden; background:#1e1e1e; display:flex; align-items:center; justify-content:center;">
+                        <img src="@produto.CaminhoImagem" style="width:100%; height:100%; object-fit:cover; display:block;" />
+                    </div>
+                }
 
-        @foreach (var dia in diasSemana)
-        {
-            <div class="form-check form-check-inline">
-                <input type="checkbox"
-                       class="form-check-input"
-                       checked="@diasProduto.Contains(dia)"
-                       @onchange="@((ChangeEventArgs e) => OnDiaSelecionado(produto, dia, (bool)e.Value))" />
-                <label class="form-check-label">@dia</label>
+                @* small delete button in top-right to save space *@
+                <button class="btn btn-sm btn-outline-danger position-absolute" style="top:6px; right:6px; z-index:3; padding:0.2rem 0.45rem; font-size:0.85rem;" @onclick:stopPropagation="true" @onclick="() => ExcluirProduto(produto.Id)">×</button>
+
+                <div class="card-body py-1 px-2 small d-flex align-items-start">
+                    <div class="flex-grow-1 pe-2">
+                        @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                        {
+                            <InputText class="form-control form-control-sm mb-1" @bind-Value="produto.Nome" @onclick:stopPropagation="true" />
+                            <InputSelect class="form-control form-control-sm mb-1" @bind-Value="produto.CategoriaId" @onclick:stopPropagation="true">
+                                @foreach (var cat in categorias)
+                                {
+                                    <option value="@cat.Id">@cat.Nome</option>
+                                }
+                            </InputSelect>
+                        }
+                        else
+                        {
+                            <div class="fw-bold text-truncate">@produto.Nome</div>
+                            <div class="small text-light text-truncate">@categorias.FirstOrDefault(c => c.Id == produto.CategoriaId)?.Nome</div>
+                        }
+                    </div>
+
+                    <div class="text-end" style="min-width:110px;">
+                        @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                        {
+                            <InputNumber class="form-control form-control-sm mb-1 text-end" style="width:100px; display:block;" @bind-Value="produto.PrecoQuente" step="0.01" @onclick:stopPropagation="true" />
+                            <InputNumber class="form-control form-control-sm text-end" style="width:100px; display:block;" @bind-Value="produto.PrecoGelada" step="0.01" @onclick:stopPropagation="true" />
+                        }
+                        else
+                        {
+                            <div><span class="small text-light">Quente:</span> <span class="fw-bold">R$ @produto.PrecoQuente.ToString("0.00")</span></div>
+                            <div class="mt-1"><span class="small text-light">Gelado:</span> <span class="fw-bold">R$ @produto.PrecoGelada.ToString("0.00")</span></div>
+                        }
+                    </div>
+                </div>
+                <div class="card-footer py-1 px-2 border-0 bg-transparent d-flex justify-content-end">
+                    <div @onclick:stopPropagation="true">
+                        @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                        {
+                            <button class="btn btn-success btn-sm me-1" @onclick:stopPropagation="true" @onclick="() => SalvarEdicao(produto)">Salvar</button>
+                            <button class="btn btn-secondary btn-sm" @onclick:stopPropagation="true" @onclick="() => CancelarEdicao(produto.Id)">Cancelar</button>
+                        }
+                    </div>
+                </div>
             </div>
-        }
+        </div>
     }
-    else
-    {
-        <span>@produto.DiasDisponiveis</span>
-    }
-</td>
-                <td>
-                    @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                    {
-                        <button class="btn btn-success btn-sm" @onclick="() => SalvarEdicao(produto)">Salvar</button>
-                        <button class="btn btn-secondary btn-sm" @onclick="() => CancelarEdicao(produto.Id)">Cancelar</button>
-                    }
-                    else
-                    {
-                        <button class="btn btn-primary btn-sm" @onclick="() => EditarProduto(produto.Id)">Editar</button>
-                        <button class="btn btn-danger btn-sm" @onclick="() => ExcluirProduto(produto.Id)">Excluir</button>
-                    }
-                </td>
-            </tr>
-        }
-    </tbody>
-</table>
+</div>
 
 
 @code {
@@ -262,6 +138,7 @@
     private Produto novoProduto = new Produto();
     private bool exibirFormulario = false;
     private Dictionary<int, bool> editandoProdutos = new();
+    private bool suppressRowEdit = false;
     private List<Categoria> categorias = new();
     private List<DayOfWeek> diasSemana = Enum.GetValues<DayOfWeek>().ToList();
     private Dictionary<int, List<DayOfWeek>> diasSelecionadosPorProduto = new();
@@ -284,12 +161,48 @@
 
         var (todasCategorias, erroCategorias) = await _apiService.GetCategorias(); // ou seu método real
         categorias = todasCategorias;
+
+        // if url contains ?id=NN, open that product in edit mode
+        try
+        {
+            var uri = new Uri(Navigation.Uri);
+            var query = uri.Query;
+            if (!string.IsNullOrEmpty(query))
+            {
+                // remove leading '?'
+                var q = query.StartsWith("?") ? query.Substring(1) : query;
+                var pairs = q.Split('&', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var pair in pairs)
+                {
+                    var parts = pair.Split('=', 2);
+                    if (parts.Length == 2)
+                    {
+                        var key = Uri.UnescapeDataString(parts[0]);
+                        var val = Uri.UnescapeDataString(parts[1]);
+                        if (string.Equals(key, "id", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out var pid))
+                        {
+                            if (filteredProdutos != null && filteredProdutos.Any(p => p.Id == pid))
+                            {
+                                editandoProdutos[pid] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
     }
 
     private void MostrarFormulario()
     {
         novoProduto = new Produto();
         exibirFormulario = true;
+    }
+
+    private void OpenProdutoForEdit(int produtoId)
+    {
+        // navigate to produtos page and open edit for the given id
+        Navigation.NavigateTo($"/produtos?id={produtoId}");
     }
 
     private async Task ClickInput(int produtoId)
@@ -414,6 +327,21 @@
 
     private void EditarProduto(int idProduto)
     {
+        editandoProdutos[idProduto] = true;
+    }
+
+    private void EditRowClicked(int idProduto)
+    {
+        if (suppressRowEdit)
+        {
+            suppressRowEdit = false;
+            return;
+        }
+
+        // toggle edit only when not already performing another action
+        if (editandoProdutos.ContainsKey(idProduto) && editandoProdutos[idProduto])
+            return;
+
         editandoProdutos[idProduto] = true;
     }
 

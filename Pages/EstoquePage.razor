@@ -45,43 +45,75 @@ else
         </table>
     }
 
-    <table class="table">
-        <thead>
-            <tr>
-                @* <th>Código de Barras</th> *@
-                <th>Nome</th>
-                <th>Quantidade</th>
-                <th>Qtd Minima</th>
-                <th>Custo</th>
-                <th>Margem</th>
-                <th>Venda</th> 
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var e in estoquesFiltrados)
-            {
-                <tr>
-                    @* <td>@e.Produto.Barcode</td> *@
-                    <td>@e.Produto.Nome</td>
-                    <td>@e.Quantidade</td>
-                    <td>
-                        <input type="number" class="form-control" style="width: 80px;"
-                               @bind="@e.QuantidadeMinima"
-                               @bind:event="oninput"
-                               @onchange="() => AtualizarEstoque(e)" />
-                    </td>
-                    <td>R$ @e.PrecoCusto?.ToString("F2")</td>
-                    <td>
-                        <input type="number" class="form-control" style="width: 80px;"
-                               @bind="@e.Margem"
-                               @bind:event="oninput"
-                               @onchange="() => AtualizarEstoque(e)" />
-                    </td>
-                    <td>R$ @CalcularPrecoVenda(e)?.ToString("F2")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        @foreach (var e in estoquesFiltrados)
+        {
+            <div class="col">
+                <div class="card h-100 bg-dark text-white" style="">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title">@e.Produto?.Nome</h5>
+                        <div class="mb-2 small text-light">Quantidade: <strong>@e.Quantidade</strong></div>
+
+                        <div class="mb-2 d-flex align-items-center gap-2">
+                            <div>
+                                <label class="form-label small">Quantidade Mínima</label>
+                                <input type="number" class="form-control form-control-sm" style="width:120px" value="@e.QuantidadeMinima" @oninput="@(async (ChangeEventArgs ev) => { if (int.TryParse(ev?.Value?.ToString(), out var v)) { e.QuantidadeMinima = v; } else { e.QuantidadeMinima = null; } })" @onchange="() => AtualizarEstoque(e)" />
+                            </div>
+                            <div class="ms-auto">
+                                <button class="btn btn-sm btn-outline-light" @onclick:stopPropagation="true" @onclick="() => OpenEditPricesModal(e)">Editar preços</button>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2 align-items-center">
+                            <div class="col-auto">
+                                <label class="form-label small">Custo (R$)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" style="width:120px" value="@(e.PrecoCusto?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")" @oninput="@(ev => { if (decimal.TryParse(ev?.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) { e.PrecoCusto = v; e.PrecoVenda = CalcularPrecoVenda(e); } else { e.PrecoCusto = null; } })" />
+                            </div>
+
+                            <div class="col-auto">
+                                <label class="form-label small">Margem (%)</label>
+                                <input type="number" step="1" class="form-control form-control-sm" style="width:120px" value="@(e.Margem?.ToString() ?? "")" @oninput="@(ev => OnMargemInput(e, ev))" @onchange="() => AtualizarEstoque(e)" />
+                            </div>
+
+                            <div class="col">
+                                <label class="form-label small">Venda (R$)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm text-end" value="@(e.PrecoVenda?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? (CalcularPrecoVenda(e)?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? ""))" @oninput="@(ev => OnPrecoVendaInput(e, ev))" @onchange="() => AtualizarEstoque(e)" />
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Edit prices modal *@
+    @if (showEditPriceModal && modalProduct != null)
+    {
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal d-block">
+            <div class="modal-dialog modal-sm mt-5">
+                <div class="modal-content p-3">
+                    <h5 class="fw-bold">Editar Preços - @modalProduct.Nome</h5>
+
+                    <div class="mb-2">
+                        <label class="form-label small">Preço Quente (R$)</label>
+                        <InputNumber class="form-control" step="0.01" @bind-Value="modalProduct.PrecoQuente" />
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small">Preço Gelada (R$)</label>
+                        <InputNumber class="form-control" step="0.01" @bind-Value="modalProduct.PrecoGelada" />
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button class="btn btn-secondary" @onclick="CloseEditPricesModal">Cancelar</button>
+                        <button class="btn btn-primary" @onclick="SalvarPrecosModal">Salvar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
 }
 
@@ -91,6 +123,9 @@ else
     private string _termoPesquisa = "";
     private bool isLoading = true;
     private bool isProcessing = false;
+    private System.Globalization.CultureInfo uiCulture = System.Globalization.CultureInfo.CurrentCulture;
+    private bool showEditPriceModal = false;
+    private Produto? modalProduct = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -105,7 +140,7 @@ else
     }
 
     private List<Estoque> produtosAbaixoMinimo => estoques
-    .Where(e => e.Quantidade < e.QuantidadeMinima)
+    .Where(e => (e.QuantidadeMinima ?? 0) > 0 && e.Quantidade < (e.QuantidadeMinima ?? 0))
     .ToList();
 
 
@@ -128,10 +163,91 @@ else
         return null;
     }
 
+    private void OnMargemInput(Estoque e, ChangeEventArgs ev)
+    {
+        var s = ev?.Value?.ToString();
+        if (int.TryParse(s, out var m))
+        {
+            e.Margem = m;
+            e.PrecoVenda = CalcularPrecoVenda(e);
+        }
+        else
+        {
+            e.Margem = null;
+            e.PrecoVenda = null;
+        }
+    }
+
+    private void OnPrecoVendaInput(Estoque e, ChangeEventArgs ev)
+    {
+        var s = ev?.Value?.ToString();
+        if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var pv))
+        {
+            e.PrecoVenda = pv;
+            // recalc margem if custo available
+            if (e.PrecoCusto.HasValue && e.PrecoCusto.Value > 0)
+            {
+                var margem = (int)Math.Round((pv - e.PrecoCusto.Value) / e.PrecoCusto.Value * 100);
+                e.Margem = margem;
+            }
+        }
+        else
+        {
+            e.PrecoVenda = null;
+        }
+    }
+
     // Você pode salvar no banco chamando sua API (opcional)
     private async Task AtualizarEstoque(Estoque estoque)
     {
         estoque.PrecoVenda = CalcularPrecoVenda(estoque);
         await _apiService.AtualizarEstoque(estoque); // Crie esse método na API se quiser persistir
+    }
+
+    private void NavigateToProduto(int produtoId)
+    {
+        Navigation.NavigateTo($"/produtos?id={produtoId}");
+    }
+
+    private void OpenEditPricesModal(Estoque e)
+    {
+        // clone product to modal instance to avoid immediate changes
+        // open modal with blank values so user doesn't need to delete zeros
+        modalProduct = new Produto
+        {
+            Id = e.Produto.Id,
+            Nome = e.Produto.Nome,
+            PrecoQuente = 0m,
+            PrecoGelada = 0m,
+            CategoriaId = e.Produto.CategoriaId,
+            Barcode = e.Produto.Barcode,
+            UrlImagem = e.Produto.UrlImagem,
+        };
+        showEditPriceModal = true;
+    }
+
+    private void CloseEditPricesModal()
+    {
+        showEditPriceModal = false;
+        modalProduct = null;
+    }
+
+    private async Task SalvarPrecosModal()
+    {
+        if (modalProduct == null) return;
+        var success = await _apiService.AtualizarProduto(modalProduct.Id, modalProduct);
+        if (success)
+        {
+            // refresh local estoque list
+            var (resp, err) = await _apiService.GetEstoque();
+            estoques = resp ?? new List<Estoque>();
+            showEditPriceModal = false;
+            modalProduct = null;
+            StateHasChanged();
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", "Falha ao salvar preços");
+        }
     }
 }

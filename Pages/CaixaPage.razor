@@ -17,17 +17,12 @@
     <h4 class="fw-bold text-white">Produtos</h4>
 
     <div class="row g-3 mb-3">
-        <div class="col-md-6">
+        <div class="col-12">
             <input class="form-control form-control-lg"
-                   placeholder="Pesquisar por nome"
-                   @bind="searchNome"
-                   @oninput="SearchByNome" />
-        </div>
-        <div class="col-md-6">
-            <input class="form-control form-control-lg"
-                   placeholder="Pesquisar código de barras"
-                   @bind="searchBarcode" @bind:event="oninput"
-                   @onkeyup="OnBarcodeKeyUp" />
+                   placeholder="Pesquisar por nome ou código de barras"
+                   value="@searchTerm"
+                   @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
+                   @onkeyup="OnSearchKeyUp" />
             <div class="mt-2">
                 <button class="btn btn-outline-primary mt-2 me-2" @onclick="OpenScanner">Abrir Leitor (câmera)</button>
                 <button class="btn btn-outline-secondary mt-2" @onclick="OpenNativeScanner">Abrir Leitor (app)</button>
@@ -35,37 +30,44 @@
         </div>
     </div>
 
-    <div style="max-height: 480px; overflow-y: auto;">
-        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-6 g-2">
-            @foreach (var Produto in filteredProdutos)
-            {
-                <div class="col">
-                    <div class="card h-100 shadow-sm small" @onclick="() => OpenQuantityModal(Produto)" style="cursor:pointer;">
-                        @if (!string.IsNullOrEmpty(Produto.CaminhoImagem))
-                        {
-                            <div style="height:72px; overflow:hidden; background:#f8f9fa;">
-                                <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="d-flex align-items-center justify-content-center" style="height:72px; background:#f8f9fa;">
-                                <span class="text-muted small">Sem imagem</span>
-                            </div>
-                        }
+    @if (showProductList)
+    {
+        <div style="max-height: 480px; overflow-y: auto;">
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-6 g-2">
+                @foreach (var Produto in filteredProdutos)
+                {
+                    <div class="col">
+                        <div class="card h-100 shadow-sm small" @onclick="() => OpenQuantityModal(Produto)" style="cursor:pointer;">
+                            @if (!string.IsNullOrEmpty(Produto.CaminhoImagem))
+                            {
+                                <div style="height:72px; overflow:hidden; background:#f8f9fa;">
+                            <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
+                                </div>
+                            }
 
-                        <div class="card-body p-1 d-flex flex-column">
-                            <div class="card-title mb-1 text-truncate" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
-                            <div class="text-success mb-1" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
-                           @*  <div class="mt-auto">
-                                <button class="btn btn-sm btn-success w-100" @onclick="() => OpenQuantityModal(Produto)" @onclick:stopPropagation>Adicionar</button>
-                            </div> *@
+    // oninput two-way bind helper
+    private void OnSearchAfter()
+    {
+        _ = InvokeAsync(async () => await SearchProducts(null));
+    }
+
+                            else
+                            {
+                                <div class="d-flex align-items-center justify-content-center" style="height:72px; background:#f8f9fa;">
+                                    <span class="text-muted small">Sem imagem</span>
+                                </div>
+                            }
+
+                            <div class="card-body p-1 d-flex flex-column">
+                                <div class="card-title mb-1 text-truncate" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
+                                <div class="text-success mb-1" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            }
+                }
+            </div>
         </div>
-    </div>
+    }
 </div>
 @* create-from-barcode modal *@
 @if (showCreateProductModal)
@@ -96,14 +98,6 @@
                         <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoGelada" />
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Preço Retirada (opcional)</label>
-                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoRetirar" />
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Preço Entrega (opcional)</label>
-                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoEntrega" />
-                    </div>
-                    <div class="col-md-6 mb-3">
                         <label class="form-label">Preço Custo (opcional)</label>
                         <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoCusto" />
                     </div>
@@ -129,14 +123,25 @@
                 <th>Unit.</th>
                 <th>Qtd</th>
                 <th>Total</th>
-                <th></th>
+                <th class="text-center">
+                    <button class="btn btn-success btn-sm" title="Adicionar item livre" @onclick="AddBlankCartItem">+</button>
+                </th>
             </tr>
         </thead>
         <tbody>
             @foreach (var item in cart)
             {
                 <tr>
-                    <td class="fw-bold">@item.Produto.Nome</td>
+                    <td>
+                        @if (item.Produto == null || item.Produto.Id == 0)
+                        {
+                            <input class="form-control form-control-sm" placeholder="Descrição" @bind="item.Produto.Nome" />
+                        }
+                        else
+                        {
+                            <span class="fw-bold">@item.Produto.Nome</span>
+                        }
+                    </td>
 
                     <td>
                         <input type="number" min="0" step="0.01"
@@ -167,49 +172,105 @@
         Total: R$ @cart.Sum(p => p.Total).ToString("0.00")
     </h3>
 
-    <div class="row g-2 align-items-center">
+    <div class="row g-2 align-items-start">
         <div class="col-md-6">
             <label class="form-label fw-bold">Forma de Pagamento</label>
             <div class="d-flex">
-                <select class="form-select form-select-lg" @bind="formaPagamentoSelecionada">
-                    <option value="">Selecione...</option>
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Credito">Crédito</option>
-                    <option value="Debito">Débito</option>
-                    <option value="Pix">Pix</option>
-                    <option value="Ifood">Ifood</option>
-                </select>
-                <input type="number" step="0.01" class="form-control ms-2" style="max-width:140px;" placeholder="Valor" @bind="pagamento1" />
+                <div class="me-3">
+                    <div class="form-check d-flex flex-column">
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => formaPagamentoSelecionada = "Dinheiro"' />
+                            <label class="form-check-label ms-2">Dinheiro</label>
+                        </div>
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => formaPagamentoSelecionada = "Credito"' />
+                            <label class="form-check-label ms-2">Crédito</label>
+                        </div>
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => formaPagamentoSelecionada = "Debito"' />
+                            <label class="form-check-label ms-2">Débito</label>
+                        </div>
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => formaPagamentoSelecionada = "Pix"' />
+                            <label class="form-check-label ms-2">Pix</label>
+                        </div>
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => formaPagamentoSelecionada = "A Prazo"' />
+                            <label class="form-check-label ms-2">A Prazo</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-fill">
+                    <label class="form-label">Valor (principal)</label>
+                    <input type="number" step="1.00" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="pagamento1" @bind:after="RecalculateSecondary" />
+                    <div class="col-md-6">
+                        @if (formaPagamentoSelecionada == "Dinheiro")
+                        {
+                            <div>
+                                <p class="mt-2 fs-5">
+                                    Troco: <strong>R$ @trocoDinheiro.ToString("0.00")</strong>
+                                </p>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="usar_pag2" @bind="UsarPagamento2" @bind:after="() => { RecalculateSecondary(); }" />
+                        <label class="form-check-label ms-2" for="usar_pag2">Adicionar forma de pagamento 2</label>
+                    </div>
+                </div>
             </div>
         </div>
 
-        @if (formaPagamentoSelecionada == "Dinheiro")
+        @* Data pagamento pra "A Prazo" *@
+        @if (formaPagamentoSelecionada == "A Prazo")
         {
-            <div class="mt-3">
-                <label class="fw-bold">Valor Recebido</label>
-                <InputNumber @bind-Value="valorRecebido"
-                             class="form-control form-control-lg" />
-                <p class="mt-2 fs-5">
-                    Troco: <strong>R$ @troco.ToString("0.00")</strong>
-                </p>
+            <div class="mt-2">
+                <label class="fw-bold">Data de Pagamento (prazo)</label>
+                <InputDate @bind-Value="dataPagamentoPrazo" class="form-control w-auto" />
             </div>
         }
 
-        <div class="col-md-6">
-            <label class="form-label fw-bold">Forma de Pagamento 2 (opcional)</label>
-            <div class="d-flex">
-                <select class="form-select form-select-lg" @bind="formaPagamento2">
-                    <option value="">Nenhuma</option>
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Credito">Crédito</option>
-                    <option value="Debito">Débito</option>
-                    <option value="Pix">Pix</option>
-                    <option value="Ifood">Ifood</option>
-                </select>
-                <input type="number" step="0.01" class="form-control ms-2" style="max-width:140px;" placeholder="Valor" @bind="pagamento2" />
+        
+        @if (UsarPagamento2)
+        {
+            <div class="col-12 mt-2">
+                <label class="form-label fw-bold">Forma de Pagamento 2 (opcional)</label>
+                <div>
+                    <div class="form-check d-flex flex-column">
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(formaPagamento2 == "Credito")' @onclick='() => formaPagamento2 = "Credito"' />
+                            <label class="form-check-label ms-2">Crédito</label>
+                        </div>
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => formaPagamento2 = "Debito"' />
+                            <label class="form-check-label ms-2">Débito</label>
+                        </div>
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => formaPagamento2 = "Pix"' />
+                            <label class="form-check-label ms-2">Pix</label>
+                        </div>
+                        <div class="mb-2">
+                            <input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => formaPagamento2 = "A Prazo"' />
+                            <label class="form-check-label ms-2">A Prazo</label>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <input type="number" step="0.01" class="form-control ms-2" style="max-width:140px;" placeholder="Valor" @bind="pagamento2" disabled="@SecondaryCalculated" />
+                    </div>
+                </div>
             </div>
-        </div>
+        }
     </div>
+
+   
+    @if (formaPagamento2 == "A Prazo")
+    {
+        <div class="mt-2">
+            <label class="fw-bold">Data de Pagamento 2 (prazo)</label>
+            <InputDate @bind-Value="dataPagamentoPrazo2" class="form-control w-auto" />
+        </div>
+    }
 
     
     @* Compact inputs row below cart: vendedor e dados do cliente lado a lado *@
@@ -255,35 +316,39 @@
                     <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
                 </div>
             </div>
-
             <div>
                 <label class="form-label fw-bold">Endereço</label>
                 <input type="text" class="form-control form-control-sm" @bind="entryEndereco" placeholder="Endereço" />
             </div>
+
+            <div class="mt-2">
+                <label class="form-label fw-bold">Observações</label>
+                <input type="text" class="form-control form-control-sm" @bind="observacoes" placeholder="Observações do pedido" />
+            </div>
         </div>
     </div>
 
-    <div class="mt-3">
-        <label class="form-label fw-bold">Status do Pedido</label>
-        <div class="d-flex gap-3 mt-2">
+        <div class="mt-3">
+            <label class="form-label fw-bold">Status do Pedido</label>
+            <div class="d-flex gap-3 mt-2 flex-column">
                 <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" checked='@(PedidoStatus == "Finalizado")' @onchange='() => PedidoStatus = "Finalizado"' />
+                    <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" value="Finalizado" checked='@(PedidoStatus == "Finalizado")' @onclick='() => PedidoStatus = "Finalizado"' />
                     <label class="form-check-label ms-2" for="status_finalizado">Finalizado</label>
                 </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" checked='@(PedidoStatus == "Retirada")' @onchange='() => PedidoStatus = "Retirada"' />
-                <label class="form-check-label ms-2" for="status_retirada">Retirada</label>
-            </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" checked='@(PedidoStatus == "Em entrega")' @onchange='() => PedidoStatus = "Em entrega"' />
-                <label class="form-check-label ms-2" for="status_entrega">Em entrega</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" value="Retirada" checked='@(PedidoStatus == "Retirada")' @onclick='() => PedidoStatus = "Retirada"' />
+                    <label class="form-check-label ms-2" for="status_retirada">Retirada</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" value="Em entrega" checked='@(PedidoStatus == "Em entrega")' @onclick='() => PedidoStatus = "Em entrega"' />
+                    <label class="form-check-label ms-2" for="status_entrega">Em entrega</label>
+                </div>
             </div>
         </div>
-    </div>
 
     <button class="btn btn-success btn-lg w-100 mt-3"
             @onclick="FinalizePurchase"
-            disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada))">
+            disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada) || string.IsNullOrEmpty(pedidoStatus))">
         Finalizar Compra
     </button>
 </div>
@@ -339,6 +404,8 @@
     //c#
     private string searchNome = string.Empty;
     private string searchBarcode = string.Empty;
+    private string searchTerm = string.Empty;
+    private bool showProductList = false;
     private string clienteNome = string.Empty;
     private string vendedorNome = string.Empty;
     private List<Produto> filteredProdutos = new();
@@ -353,6 +420,8 @@
     private string entryTelefone;
     private string entryEndereco;
     private bool imprimirNaCozinha = false;
+    private DateTime? dataPagamentoPrazo;
+    private DateTime? dataPagamentoPrazo2;
 
     private bool showQuantityModal = false;
     private bool showCreateProductModal = false;
@@ -360,13 +429,16 @@
 private Produto selectedProduct;
 private int? selectedQuantity = null;
 private string? selectedTemperatura = null;
+    private string observacoes = string.Empty;
     private bool showDebugImages = false;
     private List<string> debugImageSources = new();
     private string formaPagamento2 = string.Empty;
     private decimal? pagamento1;
     private decimal? pagamento2;
     private List<string> vendedores = new();
-    private string pedidoStatus = "Finalizado";
+    private bool UsarPagamento2 = false;
+    private bool SecondaryCalculated = false;
+    private string pedidoStatus = string.Empty;
     private string PedidoStatus
     {
         get => pedidoStatus;
@@ -374,19 +446,50 @@ private string? selectedTemperatura = null;
         {
             if (pedidoStatus != value)
             {
+                var previousStatus = pedidoStatus;
                 pedidoStatus = value;
-                // update existing cart item prices based on new status if they don't have a temperature selected
-                foreach (var item in cart)
-                {
-                    if (!string.IsNullOrEmpty(item.Temperatura))
-                        continue; // temperature-specific items keep their selected price
 
-                    if (pedidoStatus == "Retirada" && item.Produto.PrecoRetirar > 0)
-                        item.PrecoUnitario = item.Produto.PrecoRetirar;
-                    else if (pedidoStatus == "Em entrega" && item.Produto.PrecoEntrega > 0)
-                        item.PrecoUnitario = item.Produto.PrecoEntrega;
-                    else
-                        item.PrecoUnitario = GetProdutoDisplayPrice(item.Produto);
+                // If changing to 'Em entrega', increase all existing cart items by 0.10
+                if (previousStatus != "Em entrega" && pedidoStatus == "Em entrega")
+                {
+                    foreach (var item in cart)
+                    {
+                        // apply only once
+                        if (!item.DeliverySurchargeApplied)
+                        {
+                            item.PrecoUnitario = Math.Round(item.PrecoUnitario + 0.10m, 2);
+                            item.DeliverySurchargeApplied = true;
+                        }
+                    }
+                }
+
+                // If changing from 'Em entrega' to something else (e.g., Retirada), remove previously applied 0.10
+                if (previousStatus == "Em entrega" && pedidoStatus != "Em entrega")
+                {
+                    foreach (var item in cart)
+                    {
+                        if (item.DeliverySurchargeApplied)
+                        {
+                            item.PrecoUnitario = Math.Round(item.PrecoUnitario - 0.10m, 2);
+                            item.DeliverySurchargeApplied = false;
+                        }
+                    }
+                }
+
+                // When switching to Retirada, prefer PrecoRetirar if available (but keep surcharge logic above)
+                if (pedidoStatus == "Retirada")
+                {
+                    foreach (var item in cart)
+                    {
+                        if (!string.IsNullOrEmpty(item.Temperatura))
+                            continue;
+                        if (item.Produto.PrecoRetirar > 0)
+                        {
+                            // If surcharge already applied, set to PrecoRetirar + surcharge
+                            var basePrice = item.Produto.PrecoRetirar;
+                            item.PrecoUnitario = item.DeliverySurchargeApplied ? Math.Round(basePrice + 0.10m, 2) : basePrice;
+                        }
+                    }
                 }
 
                 StateHasChanged();
@@ -491,9 +594,57 @@ private string? selectedTemperatura = null;
     [JSInvokable]
     public async Task OnBarcodeScanned(string code)
     {
-        searchBarcode = code;
+        searchTerm = code;
+        await SearchProducts(null);
         StateHasChanged();
         await ProcessBarcode(code);
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ProcessBarcode(searchTerm);
+        }
+    }
+
+    private async Task SearchProducts(ChangeEventArgs e)
+    {
+        // unify name or barcode search into single input
+        if (e != null)
+            searchTerm = e.Value?.ToString() ?? string.Empty;
+        else
+        {
+            // when used from JSInvokable or code, searchTerm already set
+        }
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filteredProdutos = new List<Produto>();
+            showProductList = false;
+            return;
+        }
+
+        // attempt exact barcode match first
+        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+        if (todosProdutos == null)
+        {
+            filteredProdutos = new();
+            showProductList = false;
+            return;
+        }
+
+        var byBarcode = todosProdutos.Where(p => !string.IsNullOrWhiteSpace(p.Barcode) && p.Barcode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (byBarcode.Any())
+        {
+            filteredProdutos = byBarcode;
+            showProductList = true;
+            return;
+        }
+
+        // fallback to name search
+        filteredProdutos = todosProdutos.Where(p => p.Nome != null && p.Nome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+        showProductList = filteredProdutos.Any();
     }
 
     private async Task OnBarcodeKeyDown(KeyboardEventArgs e)
@@ -637,7 +788,7 @@ private string? selectedTemperatura = null;
                 Pagamento1 = pagamento1,
                 Pagamento2 = pagamento2,
                 PedidoStatus = pedidoStatus,
-                ValorRecebido = valorRecebido
+                ValorRecebido = valorRecebidoDinheiro
             };
 
             var json = System.Text.Json.JsonSerializer.Serialize(dto);
@@ -667,7 +818,7 @@ private string? selectedTemperatura = null;
             pagamento1 = dto.Pagamento1 ?? pagamento1;
             pagamento2 = dto.Pagamento2 ?? pagamento2;
             pedidoStatus = dto.PedidoStatus ?? pedidoStatus;
-            valorRecebido = dto.ValorRecebido;
+            valorRecebidoDinheiro = dto.ValorRecebido;
 
             // restore cart: we need to fetch products and match ids
             if (dto.Cart != null && dto.Cart.Any())
@@ -738,9 +889,13 @@ void OpenQuantityModal(Produto produto)
 void CloseModal()
 {
     showQuantityModal = false;
+    // clear search so user can type a new search after adding
+    searchTerm = string.Empty;
+    showProductList = false;
+    StateHasChanged();
 }
 
-void ConfirmAddToCart()
+    void ConfirmAddToCart()
 {
     var qty = selectedQuantity ?? 1; // default 1 if user leaves empty
 
@@ -749,27 +904,41 @@ void ConfirmAddToCart()
 
     if (existing == null)
     {
-        var precoUnit = selectedProduct.Preco;
-        // determine price by selected temperature / global pedido status
-        if (!string.IsNullOrEmpty(selectedTemperatura))
-        {
-            if (selectedTemperatura == "Quente" && selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
-            if (selectedTemperatura == "Gelada" && selectedProduct.PrecoGelada > 0) precoUnit = selectedProduct.PrecoGelada;
-        }
-        else
-        {
-            // if pedido status set to Retirada or Em entrega, choose appropriate price
-            if (pedidoStatus == "Retirada" && selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
-            if (pedidoStatus == "Em entrega" && selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
-        }
+            var precoUnit = selectedProduct.Preco;
+            // treat 'Nenhuma' (null) as Quente — prefer PrecoQuente when available
+            var temp = selectedTemperatura ?? "Quente";
+            if (temp == "Quente")
+            {
+                if (selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
+            }
+            else if (temp == "Gelada")
+            {
+                if (selectedProduct.PrecoGelada > 0) precoUnit = selectedProduct.PrecoGelada;
+            }
+            else
+            {
+                // fallback: if order status indicates retirada/entrega, use those prices
+                if (pedidoStatus == "Retirada" && selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
+                if (pedidoStatus == "Em entrega" && selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
+            }
 
-        cart.Add(new CartItem
+        // If current order status is delivery, apply surcharge to the price we add
+        var cartItem = new CartItem
         {
             Produto = selectedProduct,
             Quantidade = qty,
             PrecoUnitario = precoUnit,
-            Temperatura = selectedTemperatura
-        });
+            Temperatura = selectedTemperatura,
+            DeliverySurchargeApplied = false
+        };
+
+        if (pedidoStatus == "Em entrega")
+        {
+            cartItem.PrecoUnitario = Math.Round(cartItem.PrecoUnitario + 0.10m, 2);
+            cartItem.DeliverySurchargeApplied = true;
+        }
+
+        cart.Add(cartItem);
     }
     else
     {
@@ -778,6 +947,10 @@ void ConfirmAddToCart()
     }
 
     showQuantityModal = false;
+    // clear search so user can type a new search after adding
+    searchTerm = string.Empty;
+    showProductList = false;
+    StateHasChanged();
 }
 
 void UpdateCartTotals()
@@ -785,8 +958,57 @@ void UpdateCartTotals()
     StateHasChanged();
 }
 
-    private decimal valorRecebido;
-    private decimal troco => valorRecebido - cart.Sum(p => p.Total);
+    private decimal valorRecebidoDinheiro;
+    private decimal valorRecebidoDinheiro2;
+
+    private decimal trocoDinheiro => ComputeTrocoPrimary();
+    private decimal trocoDinheiro2 => ComputeTrocoSecondary();
+
+    private decimal ComputeTrocoPrimary()
+    {
+        var total = cart.Sum(p => p.Total);
+
+        // Determine how much was paid as primary cash
+        decimal paidPrimary = 0m;
+        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        {
+            paidPrimary = (pagamento1.HasValue && pagamento1.Value > 0) ? pagamento1.Value : valorRecebidoDinheiro;
+        }
+
+        // Determine how much was paid as secondary cash (if any)
+        decimal paidSecondary = 0m;
+        if (UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        {
+            paidSecondary = (pagamento2.HasValue && pagamento2.Value > 0) ? pagamento2.Value : valorRecebidoDinheiro2;
+        }
+
+        // Secondary cash covers up to paidSecondary; remaining amount is covered by primary
+        var remainingForPrimary = Math.Max(0, total - paidSecondary);
+        var assignedToPrimary = Math.Min(paidPrimary, remainingForPrimary);
+
+        var troco = paidPrimary - assignedToPrimary;
+        return Math.Round(troco, 2);
+    }
+
+    private decimal ComputeTrocoSecondary()
+    {
+        var total = cart.Sum(p => p.Total);
+
+        if (!(UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
+            return 0m;
+
+        var paidSecondary = (pagamento2.HasValue && pagamento2.Value > 0) ? pagamento2.Value : valorRecebidoDinheiro2;
+
+        decimal paidPrimary = 0m;
+        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+            paidPrimary = (pagamento1.HasValue && pagamento1.Value > 0) ? pagamento1.Value : valorRecebidoDinheiro;
+
+        var remainingForSecondary = Math.Max(0, total - paidPrimary);
+        var assignedToSecondary = Math.Min(paidSecondary, remainingForSecondary);
+
+        var troco = paidSecondary - assignedToSecondary;
+        return Math.Round(troco, 2);
+    }
 
     private int? NumeroComanda => int.TryParse(clienteNome, out int num) ? num : (int?)null;
 
@@ -946,6 +1168,14 @@ void UpdateCartTotals()
         cart.Remove(Produto);
     }
 
+    private void AddBlankCartItem()
+    {
+        var blank = new Produto { Id = 0, Nome = string.Empty, Preco = 0m, PrecoCusto = 0.01m, CategoriaId = 1 };
+        var item = new CartItem { Produto = blank, Quantidade = 1, PrecoUnitario = 0m };
+        cart.Add(item);
+        StateHasChanged();
+    }
+
     private async Task FinalizePurchase()
     {
         // exigir vendedor preenchido
@@ -953,6 +1183,49 @@ void UpdateCartTotals()
         {
             await ShowAlert("Por favor selecione ou digite o nome do vendedor antes de finalizar a compra.");
             return;
+        }
+
+        // exigir status selecionado
+        if (string.IsNullOrWhiteSpace(pedidoStatus))
+        {
+            await ShowAlert("Por favor selecione o status do pedido antes de finalizar a compra.");
+            return;
+        }
+
+        // If payment is 'A Prazo' require dataPagamentoPrazo, clienteNome and telefone
+        if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!dataPagamentoPrazo.HasValue)
+            {
+                await ShowAlert("Para pagamento a prazo, informe a data de pagamento (prazo).");
+                return;
+            }
+            // require clienteNome and telefone when forma1 is A Prazo
+            if (string.IsNullOrWhiteSpace(clienteNome))
+            {
+                await ShowAlert("Para pagamento a prazo (forma 1), informe o nome do cliente.");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(entryTelefone))
+            {
+                await ShowAlert("Para pagamento a prazo (forma 1), informe o telefone do cliente.");
+                return;
+            }
+        }
+        
+        // If payment 2 is used and is 'A Prazo', require clienteNome and telefone as well
+        if (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(clienteNome))
+            {
+                await ShowAlert("Para pagamento a prazo (forma 2), informe o nome do cliente.");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(entryTelefone))
+            {
+                await ShowAlert("Para pagamento a prazo (forma 2), informe o telefone do cliente.");
+                return;
+            }
         }
         // Build DTO matching backend PedidoDetalheDTO for items
         var itensDto = cart.Select(item => new
@@ -978,6 +1251,9 @@ void UpdateCartTotals()
             FormaPagamento2 = formaPagamento2,
             ValorPago2 = pagamento2,
             Status = pedidoStatus,
+            DataPagamentoPrazo = dataPagamentoPrazo,
+            DataPagamentoPrazo2 = dataPagamentoPrazo2,
+            Observacoes = observacoes,
             Itens = itensDto
         };
 
@@ -1007,11 +1283,61 @@ void UpdateCartTotals()
         }
 
         cart.Clear();
+        // reset payment fields and selections so next sale starts clean
         formaPagamentoSelecionada = string.Empty;
+        formaPagamento2 = string.Empty;
+        // deselect all radio buttons by clearing bound values
+        UsarPagamento2 = false;
+        pagamento1 = null;
+        pagamento2 = null;
+        valorRecebidoDinheiro = 0m;
+        valorRecebidoDinheiro2 = 0m;
+        UsarPagamento2 = false;
+
         clienteNome = string.Empty;
         vendedorNome = string.Empty;
+        // clear radio selections
+        formaPagamentoSelecionada = string.Empty;
+        formaPagamento2 = string.Empty;
+        pedidoStatus = string.Empty;
+        entryTelefone = string.Empty;
+        entryEndereco = string.Empty;
+        observacoes = string.Empty;
+        dataPagamentoPrazo = null;
+        dataPagamentoPrazo2 = null;
+
         StateHasChanged(); // Atualiza a UI
         Console.WriteLine("Compra finalizada!");
+    }
+
+    private void RecalculateSecondary()
+    {
+        try
+        {
+            if (!UsarPagamento2)
+            {
+                SecondaryCalculated = false;
+                return;
+            }
+
+            var total = cart.Sum(p => p.Total);
+
+            // if primary provided, allocate remaining to secondary
+            var primaryValue = pagamento1 ?? 0m;
+
+            var remaining = total - primaryValue;
+            if (remaining <= 0)
+            {
+                pagamento2 = 0m;
+            }
+            else
+            {
+                pagamento2 = Math.Round(remaining, 2);
+            }
+
+            SecondaryCalculated = true;
+        }
+        catch { }
     }
 
     private async Task CreateComanda()

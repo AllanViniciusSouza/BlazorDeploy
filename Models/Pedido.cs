@@ -21,6 +21,14 @@ public class Pedido
     // New fields
     public string? ClienteNome { get; set; }
     public string? VendedorNome { get; set; }
+    // Telefone do cliente (opcional)
+    public string? Telefone { get; set; }
 
     public List<CartItem> Itens { get; set; } = new();
+    // Data de pagamento quando a forma de pagamento for "A Prazo"
+    public DateTime? DataPagamentoPrazo { get; set; }
+    public DateTime? DataPagamentoPrazo2 { get; set; }
+
+    // Observações livres do pedido
+    public string? Observacoes { get; set; }
 }

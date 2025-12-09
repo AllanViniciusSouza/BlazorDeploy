@@ -105,15 +105,27 @@ public class ApiService
         }
     }
 
-    public async Task<(List<InvoiceSummary>?, string? ErrorMessage)> GetLatestInvoices()
+    public async Task<(List<NotaEntradaDto>?, string? ErrorMessage)> GetLatestInvoices()
     {
-        return await GetAsync<List<InvoiceSummary>>("api/invoices/latest");
+        // Alias to the NotasEntrada endpoint - returns notas with itens
+        return await GetAsync<List<NotaEntradaDto>>("api/NotasEntrada");
     }
 
-    public async Task<(List<InvoiceItem>?, string? ErrorMessage)> GetInvoiceItems(string invoiceId)
+    /// <summary>
+    /// Obtém todas as notas de entrada (NotasEntrada) do backend.
+    /// Endpoint: GET api/NotasEntrada
+    /// </summary>
+    public async Task<(List<NotaEntradaDto>?, string? ErrorMessage)> GetNotasEntrada()
     {
-        var endpoint = $"api/invoices/{Uri.EscapeDataString(invoiceId)}/items";
-        return await GetAsync<List<InvoiceItem>>(endpoint);
+        string endpoint = "api/NotasEntrada";
+        return await GetAsync<List<NotaEntradaDto>>(endpoint);
+    }
+
+    public async Task<(List<NotaEntradaItemDto>?, string? ErrorMessage)> GetInvoiceItems(string invoiceId)
+    {
+        // Try to fetch items for a single nota; controller may expose this route
+        var endpoint = $"api/NotasEntrada/{Uri.EscapeDataString(invoiceId)}/itens";
+        return await GetAsync<List<NotaEntradaItemDto>>(endpoint);
     }
 
     public async Task<ApiResponse<bool>> RegistrarUsuario(string nome, string email, 

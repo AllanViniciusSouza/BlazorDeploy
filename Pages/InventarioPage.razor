@@ -6,115 +6,119 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
-<h3>Movimentação de Estoque</h3>
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card p-3 mb-3">
+            <h5>Registrar Movimentação</h5>
 
-<div class="mb-3 position-relative">
-    <label>Produto</label>
-    <input type="text" class="form-control" @bind="produtoBusca" @oninput="FiltrarProdutos" placeholder="Digite o nome do produto" />
+            <label class="form-label">Produto (nome ou código de barras)</label>
+            <input class="form-control mb-2" value="@searchTerm" @oninput="OnProductSearchInput" placeholder="Pesquisar por nome ou código" />
 
-    @if (produtosFiltrados.Any() && !string.IsNullOrWhiteSpace(produtoBusca))
-    {
-        <ul class="list-group position-absolute w-100" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
-            @foreach (var produto in produtosFiltrados)
+            @if (produtosFiltrados.Any() && !string.IsNullOrWhiteSpace(searchTerm))
             {
-                <li class="list-group-item list-group-item-action" @onclick="() => SelecionarProduto(produto)">
-                    @produto.Nome
-                </li>
-            }
-        </ul>
-    }
-</div>
-
-@if (produtoSelecionado != null)
-{
-    <div class="alert alert-info p-2">
-        <strong>Produto Selecionado:</strong> @produtoSelecionado.Nome
-    </div>
-}
-
-<div class="mb-3">
-    <label>Quantidade</label>
-    <input type="number" @bind="movimentacao.Quantidade" class="form-control" />
-</div>
-
-<div class="mb-3">
-    <label>Tipo de Movimentação</label>
-    <select @bind="movimentacao.Tipo" class="form-control">
-        <option value="Compra">Entrada (Compra)</option>
-        <option value="Venda">Saída (Venda)</option>
-    </select>
-</div>
-
-<div class="mb-3">
-    <label>Preço de Custo</label>
-    <input type="number" step="1.00" @bind="movimentacao.PrecoCusto" class="form-control" />
-</div>
-
-<button class="btn btn-primary" @onclick="RegistrarMovimentacao">Registrar</button>
-
-<hr />
-
-<h4>Upload de XML (Notas)</h4>
-<InputFile OnChange="OnFileSelected" accept=".xml" />
-<button class="btn btn-success mt-2" @onclick="UploadXml" disabled="@(!hasSelectedFile || isUploading)">
-    @(isUploading ? "Enviando..." : "Enviar XML")
-</button>
-
-<h5 class="mt-4">Últimas Notas</h5>
-@if (latestInvoices == null)
-{
-    <p>Carregando...</p>
-}
-else if (!latestInvoices.Any())
-{
-    <p>Nenhuma nota encontrada.</p>
-}
-else
-{
-    <ul class="list-group">
-        @foreach (var inv in latestInvoices)
-        {
-            <li class="list-group-item list-group-item-action" style="cursor:pointer" @onclick="() => LoadInvoiceItems(inv.Id, inv.Number)">
-                <div class="d-flex justify-content-between">
-                    <div>@inv.Number</div>
-                    <div>@inv.Date.ToString("yyyy-MM-dd")</div>
+                <div class="list-group mb-2" style="max-height:200px; overflow:auto;">
+                    @foreach (var p in produtosFiltrados)
+                    {
+                        <button class="list-group-item list-group-item-action" @onclick="() => SelecionarProduto(p)">@p.Nome (@p.Barcode)</button>
+                    }
                 </div>
-            </li>
-        }
-    </ul>
-}
-
-@if (selectedItems != null)
-{
-    <h5 class="mt-3">Itens da Nota: @selectedInvoiceNumber</h5>
-    <table class="table table-sm">
-        <thead>
-            <tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Preço Unit.</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var it in selectedItems)
-            {
-                <tr>
-                    <td>@it.Code</td>
-                    <td>@it.Description</td>
-                    <td>@it.Quantity</td>
-                    <td>@it.UnitPrice</td>
-                </tr>
             }
-        </tbody>
-    </table>
-}
 
-@if (!string.IsNullOrEmpty(mensagem))
-{
-    <p class="mt-3">@mensagem</p>
-}
+            @if (produtoSelecionado != null)
+            {
+                <div class="mb-2"><strong>Selecionado:</strong> @produtoSelecionado.Nome</div>
+            }
+
+            <label>Quantidade</label>
+            <input type="number" class="form-control mb-2" @bind="movimentacao.Quantidade" />
+
+            <label>Tipo de Movimentação</label>
+            <select class="form-select mb-2" @bind="movimentacao.Tipo">
+                <option value="Compra">Entrada (Compra)</option>
+                <option value="Venda">Saída (Venda)</option>
+            </select>
+
+            <label>Preço de Custo</label>
+            <input type="number" step="0.01" class="form-control mb-2" @bind="movimentacao.PrecoCusto" />
+
+            <button class="btn btn-primary w-100" @onclick="RegistrarMovimentacao">Registrar</button>
+            @if (!string.IsNullOrEmpty(mensagem))
+            {
+                <div class="mt-2">@mensagem</div>
+            }
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card p-3 mb-3">
+            <h5>Upload de XML (Notas)</h5>
+            <InputFile OnChange="OnFileSelected" accept=".xml" />
+            <div class="mt-2 d-flex gap-2">
+                <button class="btn btn-success" @onclick="UploadXml" disabled="@(!hasSelectedFile || isUploading)">
+                    @(isUploading ? "Enviando..." : "Enviar XML")
+                </button>
+                <button class="btn btn-secondary" @onclick="() => { selectedFile = null; hasSelectedFile = false; }">Limpar</button>
+            </div>
+        </div>
+
+        <div class="card p-3">
+            <h5>Últimas Notas</h5>
+            @if (latestNotas == null)
+            {
+                <p>Carregando...</p>
+            }
+            else if (!latestNotas.Any())
+            {
+                <p>Nenhuma nota encontrada.</p>
+            }
+            else
+            {
+                <div class="row row-cols-1 g-2">
+                    @foreach (var inv in latestNotas)
+                    {
+                        <div class="col">
+                            <div class="card p-2 shadow-sm" style="cursor:pointer;" @onclick="() => LoadInvoiceItems(inv.Id.ToString(), inv.NumeroNota)">
+                                <div class="d-flex justify-content-between">
+                                    <div><strong>@inv.NumeroNota</strong></div>
+                                    <div class="text-muted">@inv.DataEmissao.ToString("yyyy-MM-dd")</div>
+                                </div>
+                                <div class="small text-muted">Fornecedor: @(inv.Fornecedor ?? "-")</div>
+                                <div class="small text-muted">Valor: R$ @inv.ValorTotal.ToString("0.00")</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-12">
+        @if (selectedItems != null)
+        {
+            <h5 class="mt-3">Itens da Nota: @selectedInvoiceNumber</h5>
+            <div class="row row-cols-1 row-cols-md-3 g-3">
+                @foreach (var it in selectedItems)
+                {
+                    <div class="col">
+                        <div class="card p-2">
+                            <div><strong>@(it.ProdutoNome ?? it.Nome ?? "-")</strong></div>
+                            <div>Barcode: @(it.Barcode ?? "-")</div>
+                            <div>Qtd: @it.Quantidade</div>
+                            <div>Preço Custo: R$ @it.PrecoCusto.ToString("0.00")</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
 
 @code {
     private List<Produto> produtos = new();
     private List<Produto> produtosFiltrados = new();
     private MovimentacaoEstoque movimentacao = new();
     private string produtoBusca = "";
+    private string searchTerm = string.Empty;
     private Produto? produtoSelecionado;
     private string mensagem = "";
     private bool isLoading = true;
@@ -122,9 +126,10 @@ else
     private IBrowserFile? selectedFile;
     private bool hasSelectedFile = false;
     private bool isUploading = false;
-    private List<InvoiceSummary>? latestInvoices;
-    private List<InvoiceItem>? selectedItems;
+    private List<NotaEntradaDto>? latestNotas;
+    private List<NotaEntradaItemDto>? selectedItems;
     private string? selectedInvoiceNumber;
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -139,7 +144,9 @@ else
         var (response, errorMessage) = await _apiService.GetTodosProdutos();
         produtos = response ?? new List<Produto>();
 
-        await LoadLatestInvoices();
+        // load notas via novo endpoint
+        var (notas, notasErr) = await _apiService.GetNotasEntrada();
+        latestNotas = notas ?? new List<NotaEntradaDto>();
     }
 
     private void OnFileSelected(InputFileChangeEventArgs e)
@@ -167,25 +174,55 @@ else
 
     private async Task LoadLatestInvoices()
     {
-        var (list, err) = await _apiService.GetLatestInvoices();
-        latestInvoices = list ?? new List<InvoiceSummary>();
+        var (list, err) = await _apiService.GetNotasEntrada();
+        latestNotas = list ?? new List<NotaEntradaDto>();
     }
 
-    private async Task LoadInvoiceItems(string id, string number)
+    private Task LoadInvoiceItems(string id, string number)
     {
-        var (items, err) = await _apiService.GetInvoiceItems(id);
-        selectedItems = items ?? new List<InvoiceItem>();
-        selectedInvoiceNumber = number;
+        if (latestNotas == null)
+            return Task.CompletedTask;
+
+        NotaEntradaDto? nota = null;
+        if (int.TryParse(id, out var iid))
+            nota = latestNotas.FirstOrDefault(n => n.Id == iid || n.NumeroNota == number || n.NumeroNota == id);
+        else
+            nota = latestNotas.FirstOrDefault(n => n.NumeroNota == id || n.NumeroNota == number);
+
+        if (nota != null)
+        {
+            selectedItems = nota.Itens ?? new List<NotaEntradaItemDto>();
+            selectedInvoiceNumber = nota.NumeroNota;
+        }
+
+        return Task.CompletedTask;
     }
 
     private void FiltrarProdutos(ChangeEventArgs e)
     {
         produtoBusca = e.Value?.ToString() ?? "";
 
+        var term = produtoBusca.Trim();
+        if (string.IsNullOrEmpty(term))
+        {
+            produtosFiltrados.Clear();
+            return;
+        }
+
+        // match either name or barcode
         produtosFiltrados = produtos
-            .Where(p => p.Nome.Contains(produtoBusca, StringComparison.OrdinalIgnoreCase))
+            .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(term, StringComparison.OrdinalIgnoreCase))
+                     || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Contains(term, StringComparison.OrdinalIgnoreCase)))
             .Take(10)
             .ToList();
+    }
+
+    private void OnProductSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e?.Value?.ToString() ?? string.Empty;
+        // reuse filter logic
+        produtoBusca = searchTerm;
+        FiltrarProdutos(new ChangeEventArgs { Value = produtoBusca });
     }
 
     private void SelecionarProduto(Produto produto)

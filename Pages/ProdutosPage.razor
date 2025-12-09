@@ -1,37 +1,33 @@
 ﻿@page "/produtos"
 @inject ApiService _apiService
-@inject AuthService AuthService
-@* Using QueryHelpers requires package Microsoft.AspNetCore.WebUtilities; avoid compile-time reference and parse manually below *@
-@* @inject IJSRuntime JS *@
 @inject NavigationManager Navigation
-@* @inject AuthService AuthService *@
+@inject IJSRuntime JS
 
 <PageTitle>Lista de Produtos</PageTitle>
 
-<button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
+<button class="btn btn-primary mb-3" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
 
 @if (exibirFormulario)
 {
     <EditForm Model="novoProduto" OnValidSubmit="AdicionarProduto">
         <DataAnnotationsValidator />
-        <div class="form-group">
+        <div class="form-group mb-2">
             <label for="nome">Nome:</label>
             <InputText id="nome" class="form-control" @bind-Value="novoProduto.Nome" />
             <ValidationMessage For="@(() => novoProduto.Nome)" />
         </div>
-        <div class="row">
-            <div class="col-md-6 mb-3">
+        <div class="row mb-2">
+            <div class="col-md-6">
                 <label class="form-label">Preço Quente</label>
                 <InputNumber class="form-control" @bind-Value="novoProduto.PrecoQuente" step="0.01" />
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6">
                 <label class="form-label">Preço Gelada</label>
                 <InputNumber class="form-control" @bind-Value="novoProduto.PrecoGelada" step="0.01" />
             </div>
         </div>
-        
 
-        <div class="form-group">
+        <div class="form-group mb-2">
             <label for="categoria">Categoria:</label>
             <InputSelect id="categoria" class="form-control" @bind-Value="novoProduto.CategoriaId">
                 <option value="">Selecione...</option>
@@ -42,49 +38,34 @@
             </InputSelect>
         </div>
 
-        <div class="form-group">
+        <div class="form-group mb-3">
             <label for="barcode">Barcode:</label>
             <InputText id="barcode" class="form-control" @bind-Value="novoProduto.Barcode" />
-            <ValidationMessage For="@(() => novoProduto.Barcode)" />
         </div>
 
-        @* dias disponiveis removido do formulario conforme solicitado *@
-
-        <button type="submit" class="btn btn-success">Salvar</button>
+        <button type="submit" class="btn btn-success me-2">Salvar</button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
     </EditForm>
 }
 
-<div class="row">
-    <div class="col-md-6">
-        <label for="searchNome" class="form-label fw-bold">Pesquisar por Nome</label>
-        <input type="text" id="searchNome" class="form-control" @bind="searchNome" @oninput="SearchByNome" placeholder="Digite o nome do produto" />
-    </div>
-
-    <div class="col-md-6">
-        <label for="searchBarcode" class="form-label fw-bold">Pesquisar por Código de Barras</label>
-        <input type="text" id="searchBarcode" class="form-control" @bind="searchBarcode" @oninput="SearchByBarcode" placeholder="Digite o código de barras" />
+<div class="row mb-3">
+    <div class="col-12">
+        <label class="form-label fw-bold">Pesquisar (nome ou código de barras)</label>
+        <input class="form-control" @bind="searchTerm" @oninput="Search" placeholder="Digite nome ou código" />
     </div>
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-    @foreach (var produto in filteredProdutos)
+    @if (filteredProdutos != null)
     {
-        <div class="col">
-            <div class="card bg-dark text-white position-relative" style="cursor:pointer; min-height:120px;" @onclick="() => EditRowClicked(produto.Id)">
-                @* compact card header image *@
-                @if (!string.IsNullOrEmpty(produto.CaminhoImagem))
-                {
-                    <div style="height:64px; overflow:hidden; background:#1e1e1e; display:flex; align-items:center; justify-content:center;">
-                        <img src="@produto.CaminhoImagem" style="width:100%; height:100%; object-fit:cover; display:block;" />
-                    </div>
-                }
+        @foreach (var produto in filteredProdutos)
+        {
+            <div class="col">
+                <div class="card bg-dark text-white h-100 position-relative" style="cursor:pointer;" @onclick="@(() => EditRowClicked(produto.Id))">
+                    @* small delete X in top-right; stopPropagation so clicking it doesn't open edit *@
+                    <button class="btn btn-sm btn-outline-light position-absolute" style="top:6px; right:6px; padding:0.15rem 0.4rem; font-size:0.9rem; line-height:1;" @onclick:stopPropagation="true" @onclick="() => ExcluirProduto(produto.Id)">×</button>
 
-                @* small delete button in top-right to save space *@
-                <button class="btn btn-sm btn-outline-danger position-absolute" style="top:6px; right:6px; z-index:3; padding:0.2rem 0.45rem; font-size:0.85rem;" @onclick:stopPropagation="true" @onclick="() => ExcluirProduto(produto.Id)">×</button>
-
-                <div class="card-body py-1 px-2 small d-flex align-items-start">
-                    <div class="flex-grow-1 pe-2">
+                    <div class="card-body p-2">
                         @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
                         {
                             <InputText class="form-control form-control-sm mb-1" @bind-Value="produto.Nome" @onclick:stopPropagation="true" />
@@ -94,29 +75,22 @@
                                     <option value="@cat.Id">@cat.Nome</option>
                                 }
                             </InputSelect>
+
+                            <div class="d-flex gap-2">
+                                <InputNumber id="@($"precoQ-{produto.Id}")" class="form-control form-control-sm text-end" style="width:110px;" @bind-Value="produto.PrecoQuente" step="0.01" @onclick:stopPropagation="true" />
+                                <InputNumber id="@($"precoG-{produto.Id}")" class="form-control form-control-sm text-end" style="width:110px;" @bind-Value="produto.PrecoGelada" step="0.01" @onclick:stopPropagation="true" />
+                            </div>
                         }
                         else
                         {
                             <div class="fw-bold text-truncate">@produto.Nome</div>
-                            <div class="small text-light text-truncate">@categorias.FirstOrDefault(c => c.Id == produto.CategoriaId)?.Nome</div>
+                            <div class="small text-white-50">@categorias.FirstOrDefault(c => c.Id == produto.CategoriaId)?.Nome</div>
+                            <div class="mt-2"><span class="small text-white-50">Quente:</span> <span class="fw-bold">R$ @produto.PrecoQuente.ToString("0.00")</span></div>
+                            <div class="small"><span class="small text-white-50">Gelada:</span> <span class="fw-bold">R$ @produto.PrecoGelada.ToString("0.00")</span></div>
                         }
                     </div>
 
-                    <div class="text-end" style="min-width:110px;">
-                        @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                        {
-                            <InputNumber class="form-control form-control-sm mb-1 text-end" style="width:100px; display:block;" @bind-Value="produto.PrecoQuente" step="0.01" @onclick:stopPropagation="true" />
-                            <InputNumber class="form-control form-control-sm text-end" style="width:100px; display:block;" @bind-Value="produto.PrecoGelada" step="0.01" @onclick:stopPropagation="true" />
-                        }
-                        else
-                        {
-                            <div><span class="small text-light">Quente:</span> <span class="fw-bold">R$ @produto.PrecoQuente.ToString("0.00")</span></div>
-                            <div class="mt-1"><span class="small text-light">Gelado:</span> <span class="fw-bold">R$ @produto.PrecoGelada.ToString("0.00")</span></div>
-                        }
-                    </div>
-                </div>
-                <div class="card-footer py-1 px-2 border-0 bg-transparent d-flex justify-content-end">
-                    <div @onclick:stopPropagation="true">
+                    <div class="card-footer bg-transparent d-flex justify-content-end">
                         @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
                         {
                             <button class="btn btn-success btn-sm me-1" @onclick:stopPropagation="true" @onclick="() => SalvarEdicao(produto)">Salvar</button>
@@ -125,72 +99,52 @@
                     </div>
                 </div>
             </div>
-        </div>
+        }
     }
 </div>
 
-
 @code {
-    // private List<Produto> produtos;
-    private string searchNome = string.Empty;
-    private string searchBarcode = string.Empty;
+    private string searchTerm = string.Empty;
     private List<Produto> filteredProdutos = new();
+    private List<Categoria> categorias = new();
     private Produto novoProduto = new Produto();
     private bool exibirFormulario = false;
     private Dictionary<int, bool> editandoProdutos = new();
-    private bool suppressRowEdit = false;
-    private List<Categoria> categorias = new();
-    private List<DayOfWeek> diasSemana = Enum.GetValues<DayOfWeek>().ToList();
-    private Dictionary<int, List<DayOfWeek>> diasSelecionadosPorProduto = new();
-    private List<DayOfWeek> diasSelecionadosNovoProduto = new();
-    [Inject] IJSRuntime JS { get; set; }
-
-
 
     protected override async Task OnInitializedAsync()
     {
         var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
-
         if (string.IsNullOrEmpty(nome))
         {
             Navigation.NavigateTo("login");
+            return;
         }
 
-        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-        filteredProdutos = todosProdutos;
+        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+        filteredProdutos = todosProdutos ?? new List<Produto>();
 
-        var (todasCategorias, erroCategorias) = await _apiService.GetCategorias(); // ou seu método real
-        categorias = todasCategorias;
+        var (cats, _) = await _apiService.GetCategorias();
+        categorias = cats ?? new List<Categoria>();
+    }
 
-        // if url contains ?id=NN, open that product in edit mode
-        try
+    private async Task Search(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+
+        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+        var all = todosProdutos ?? new List<Produto>();
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
         {
-            var uri = new Uri(Navigation.Uri);
-            var query = uri.Query;
-            if (!string.IsNullOrEmpty(query))
-            {
-                // remove leading '?'
-                var q = query.StartsWith("?") ? query.Substring(1) : query;
-                var pairs = q.Split('&', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var pair in pairs)
-                {
-                    var parts = pair.Split('=', 2);
-                    if (parts.Length == 2)
-                    {
-                        var key = Uri.UnescapeDataString(parts[0]);
-                        var val = Uri.UnescapeDataString(parts[1]);
-                        if (string.Equals(key, "id", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out var pid))
-                        {
-                            if (filteredProdutos != null && filteredProdutos.Any(p => p.Id == pid))
-                            {
-                                editandoProdutos[pid] = true;
-                            }
-                        }
-                    }
-                }
-            }
+            filteredProdutos = all;
+            return;
         }
-        catch { }
+
+        var term = searchTerm.Trim();
+        filteredProdutos = all
+            .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(term, StringComparison.OrdinalIgnoreCase))
+                     || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Equals(term, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
     }
 
     private void MostrarFormulario()
@@ -199,182 +153,66 @@
         exibirFormulario = true;
     }
 
-    private void OpenProdutoForEdit(int produtoId)
-    {
-        // navigate to produtos page and open edit for the given id
-        Navigation.NavigateTo($"/produtos?id={produtoId}");
-    }
-
-    private async Task ClickInput(int produtoId)
-    {
-        await JS.InvokeVoidAsync("triggerFileInput", $"fileInput-{produtoId}");
-    }
-
-    private async Task OnFotoSelecionada(InputFileChangeEventArgs  e, int produtoId)
-    {
-        var arquivo = e.File;
-
-    using var stream = arquivo.OpenReadStream(5 * 1024 * 1024); // até 5MB
-    await _apiService.EnviarFotoProdutoAsync(produtoId, stream, arquivo.ContentType);
-
-    var novaImagem = $"produto_{produtoId}.jpg?{DateTime.Now.Ticks}"; // força recarregar a imagem
-
-    var produto = filteredProdutos.FirstOrDefault(p => p.Id == produtoId);
-    if (produto != null)
-        produto.UrlImagem = novaImagem;
-    }
-
-    private async Task AdicionarProduto()
-    {
-        // Monta a string DiasDisponiveis
-        if (diasSelecionadosNovoProduto.Count == 7)
-            novoProduto.DiasDisponiveis = "Todos";
-        else
-            novoProduto.DiasDisponiveis = string.Join(",", diasSelecionadosNovoProduto);
-        // Adicionar o novo produto ao serviço ou API
-        await _apiService.AdicionarProdutoAsync(novoProduto);
-        var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-        filteredProdutos = todosProdutos;
-        exibirFormulario = false;
-        diasSelecionadosNovoProduto.Clear();
-    }
-
-    void OnDiaSelecionado(Produto produto, DayOfWeek dia, bool selecionado)
-    {
-        if (!diasSelecionadosPorProduto.ContainsKey(produto.Id))
-        {
-            diasSelecionadosPorProduto[produto.Id] = string.Equals(produto.DiasDisponiveis, "Todos", StringComparison.OrdinalIgnoreCase)
-                ? Enum.GetValues<DayOfWeek>().ToList()
-                : produto.DiasDisponiveis?
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(d => Enum.Parse<DayOfWeek>(d.Trim()))
-                    .ToList() ?? new List<DayOfWeek>();
-        }
-
-        var dias = diasSelecionadosPorProduto[produto.Id];
-
-        if (selecionado && !dias.Contains(dia))
-            dias.Add(dia);
-        else if (!selecionado && dias.Contains(dia))
-            dias.Remove(dia);
-
-        produto.DiasDisponiveis = dias.Count == 7
-            ? "Todos"
-            : string.Join(",", dias.Select(d => d.ToString()));
-    }
-
-
-
     private void Cancelar()
     {
         exibirFormulario = false;
     }
 
-    private async Task SearchByNome(ChangeEventArgs e)
+    private async Task AdicionarProduto()
     {
-        searchBarcode = string.Empty; // Limpa a pesquisa por código de barras
-        searchNome = e.Value.ToString();
-        if (string.IsNullOrWhiteSpace(searchNome))
+        await _apiService.AdicionarProdutoAsync(novoProduto);
+        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+        filteredProdutos = todosProdutos ?? new List<Produto>();
+        exibirFormulario = false;
+    }
+
+    private async Task ExcluirProduto(int id)
+    {
+        bool ok = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este produto?");
+        if (!ok) return;
+        var sucesso = await _apiService.ExcluirProdutoAsync(id);
+        if (sucesso)
         {
-            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-            filteredProdutos = todosProdutos;
+            var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos ?? new List<Produto>();
         }
         else
         {
-            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-            filteredProdutos = todosProdutos
-                                .Where(c => c.Nome.IndexOf(searchNome, StringComparison.OrdinalIgnoreCase) >= 0)
-                                .ToList();
+            await JS.InvokeVoidAsync("alert", "Erro ao excluir o produto.");
         }
     }
 
-    private async Task SearchByBarcode(ChangeEventArgs e)
+    private void EditarProduto(int id)
     {
-        searchNome = string.Empty; // Limpa a pesquisa por nome
-        searchBarcode = e.Value.ToString();
-        if (string.IsNullOrWhiteSpace(searchBarcode))
-        {
-            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-            filteredProdutos = todosProdutos;
-        }
-        else
-        {
-            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-            filteredProdutos = todosProdutos
-                                .Where(c => c.Barcode == searchBarcode)
-                                .ToList();
-        }
+        editandoProdutos[id] = true;
     }
 
-    private async Task ExcluirProduto(int idProduto)
+    private Task EditRowClicked(int id)
     {
-        bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este produto?");
-        if (confirmacao)
-        {
-            bool sucesso = await _apiService.ExcluirProdutoAsync(idProduto);
-            if (sucesso)
-            {
-                var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
-                filteredProdutos = todosProdutos;
-                StateHasChanged();
-            }
-            else
-            {
-                await JS.InvokeVoidAsync("alert", "Erro ao excluir o produto.");
-            }
-        }
-    }
+        if (editandoProdutos.ContainsKey(id) && editandoProdutos[id])
+            return Task.CompletedTask;
 
-    private void EditarProduto(int idProduto)
-    {
-        editandoProdutos[idProduto] = true;
-    }
-
-    private void EditRowClicked(int idProduto)
-    {
-        if (suppressRowEdit)
-        {
-            suppressRowEdit = false;
-            return;
-        }
-
-        // toggle edit only when not already performing another action
-        if (editandoProdutos.ContainsKey(idProduto) && editandoProdutos[idProduto])
-            return;
-
-        editandoProdutos[idProduto] = true;
+        editandoProdutos[id] = true;
+        return Task.CompletedTask;
     }
 
     private async Task SalvarEdicao(Produto produto)
     {
-        bool sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
+        var sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
         if (sucesso)
         {
             editandoProdutos[produto.Id] = false;
-            StateHasChanged();
+            var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos ?? new List<Produto>();
         }
         else
         {
-            await JS.InvokeVoidAsync("alert", "Erro ao atualizar o produto.");
+            await JS.InvokeVoidAsync("alert", "Erro ao atualizar produto.");
         }
     }
 
-    void OnDiaSelecionadoNovoProduto(DayOfWeek dia, bool selecionado)
+    private void CancelarEdicao(int id)
     {
-        if (selecionado)
-        {
-            if (!diasSelecionadosNovoProduto.Contains(dia))
-                diasSelecionadosNovoProduto.Add(dia);
-        }
-        else
-        {
-            diasSelecionadosNovoProduto.Remove(dia);
-        }
-    }
-
-
-    private void CancelarEdicao(int idProduto)
-    {
-        editandoProdutos[idProduto] = false;
+        editandoProdutos[id] = false;
     }
 }

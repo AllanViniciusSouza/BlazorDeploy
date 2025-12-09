@@ -1,19 +1,27 @@
 using System;
+using System.Collections.Generic;
 
 namespace BlazorDeploy.DTOs
 {
-    public class InvoiceSummary
+    public class NotaEntradaDto
     {
-        public string Id { get; set; } = string.Empty;
-        public string Number { get; set; } = string.Empty;
-        public DateTime Date { get; set; }
+        public int Id { get; set; }
+        public string NumeroNota { get; set; } = string.Empty;
+        public DateTime DataEmissao { get; set; }
+        public string? Fornecedor { get; set; }
+        public decimal ValorTotal { get; set; }
+        public List<NotaEntradaItemDto>? Itens { get; set; }
     }
 
-    public class InvoiceItem
+    public class NotaEntradaItemDto
     {
-        public string Code { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public decimal Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
+        public int Id { get; set; }
+        public int NotaEntradaId { get; set; }
+        public int? ProdutoId { get; set; }
+        public string? ProdutoNome { get; set; }
+        public string? Nome { get; set; }
+        public string? Barcode { get; set; }
+        public decimal Quantidade { get; set; }
+        public decimal PrecoCusto { get; set; }
     }
 }

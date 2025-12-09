@@ -45,13 +45,7 @@
                                 </div>
                             }
 
-    // oninput two-way bind helper
-    private void OnSearchAfter()
-    {
-        _ = InvokeAsync(async () => await SearchProducts(null));
-    }
-
-                            else
+                               else
                             {
                                 <div class="d-flex align-items-center justify-content-center" style="height:72px; background:#f8f9fa;">
                                     <span class="text-muted small">Sem imagem</span>
@@ -59,8 +53,12 @@
                             }
 
                             <div class="card-body p-1 d-flex flex-column">
-                                <div class="card-title mb-1 text-truncate" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
-                                <div class="text-success mb-1" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                                <div class="card-title mb-1" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
+                                @if (!string.IsNullOrWhiteSpace(Produto.Detalhe))
+                                {
+                                    <div class="card-text small text-muted" style="white-space:normal;">@Produto.Detalhe</div>
+                                }
+                                <div class="text-success mb-1 mt-2" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
                             </div>
                         </div>
                     </div>

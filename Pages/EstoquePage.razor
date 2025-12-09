@@ -75,9 +75,11 @@ else
                                 <input type="number" step="1" class="form-control form-control-sm" style="width:120px" value="@(e.Margem?.ToString() ?? "")" @oninput="@(ev => OnMargemInput(e, ev))" @onchange="() => AtualizarEstoque(e)" />
                             </div>
 
-                            <div class="col">
-                                <label class="form-label small">Venda (R$)</label>
-                                <input type="number" step="0.01" class="form-control form-control-sm text-end" value="@(e.PrecoVenda?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? (CalcularPrecoVenda(e)?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? ""))" @oninput="@(ev => OnPrecoVendaInput(e, ev))" @onchange="() => AtualizarEstoque(e)" />
+                            <div class="col d-flex">
+                                <div class="flex-grow-1 me-2">
+                                    <label class="form-label small">Venda (R$)</label>
+                                    <input type="number" step="0.01" class="form-control form-control-sm text-end" value="@(e.PrecoVenda?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? (CalcularPrecoVenda(e)?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? ""))" @oninput="@(ev => OnPrecoVendaInput(e, ev))" @onchange="() => AtualizarEstoque(e)" />
+                                </div>
                             </div>
                         </div>
 

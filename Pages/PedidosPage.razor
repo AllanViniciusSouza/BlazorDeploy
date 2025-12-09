@@ -3,6 +3,7 @@
 @inject AuthService AuthService
 @inject NavigationManager Navigation
 @using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
 @inject IJSRuntime JS
 
 <PageTitle>Pedidos</PageTitle>
@@ -13,12 +14,61 @@
     <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
 </div>
 
-<h3 class="mt-4">Total Vendido: R$ @totalVendido.ToString("F2")</h3>
+<div class="mb-3 d-flex align-items-center gap-3">
+    <label class="fw-bold">Filtrar status:</label>
+    <select class="form-select w-auto" @bind="statusFilter">
+        <option value="">Todos</option>
+        <option value="Em entrega">Em entrega</option>
+        <option value="Retirada">Retirada</option>
+        <option value="Finalizado">Finalizados</option>
+        <option value="A Prazo">A prazo</option>
+    </select>
+</div>
+
+    <h3 class="mt-4">Total Vendido: <span class="text-success">R$ @totalVendido.ToString("F2")</span></h3>
 
 @if (pedidosHoje == null || !pedidosHoje.Any())
 {
     <p>Nenhum pedido na data selecionada.</p>
 }
+
+    @* Finalize payment selection modal *@
+    @if (showFinalizeModal)
+    {
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal d-block">
+            <div class="modal-dialog modal-sm mt-5">
+                <div class="modal-content p-3">
+                    <h5 class="fw-bold">Finalizar Pedido #@finalizePedidoId</h5>
+                    <p>Escolha a forma de pagamento:</p>
+                    <div>
+                        <InputRadioGroup class="" @bind-Value="SelectedFormaPagamento">
+                            <div class="form-check">
+                                <InputRadio id="fpDinheiro" class="form-check-input" Value='@("Dinheiro")' />
+                                <label class="form-check-label" for="fpDinheiro">Dinheiro</label>
+                            </div>
+                            <div class="form-check">
+                                <InputRadio id="fpPix" class="form-check-input" Value='@("Pix")' />
+                                <label class="form-check-label" for="fpPix">Pix</label>
+                            </div>
+                            <div class="form-check">
+                                <InputRadio id="fpDebito" class="form-check-input" Value='@("Debito")' />
+                                <label class="form-check-label" for="fpDebito">Debito</label>
+                            </div>
+                            <div class="form-check">
+                                <InputRadio id="fpCredito" class="form-check-input" Value='@("Credito")' />
+                                <label class="form-check-label" for="fpCredito">Credito</label>
+                            </div>
+                        </InputRadioGroup>
+                    </div>
+                    <div class="d-flex justify-content-end mt-3">
+                        <button class="btn btn-secondary me-2" @onclick="() => CloseFinalizeModal(false)">Cancelar</button>
+                        <button class="btn btn-primary" @onclick="ConfirmFinalize">Ok</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
 @* Pedido detail modal *@
 @if (showPedidoModal && currentPedido != null)
@@ -29,6 +79,10 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Pedido #@currentPedido.Id</h5>
+                    @if (isEditingPedido)
+                    {
+                        <button class="btn btn-success ms-2" @onclick="SalvarEdicoes">Salvar</button>
+                    }
                     <button type="button" class="btn-close" @onclick="ClosePedidoModal"></button>
                 </div>
                 <div class="modal-body">
@@ -37,16 +91,52 @@
                             <h5 class="mb-2">Dados do Cliente</h5>
                             <dl class="row small">
                                 <dt class="col-4">Cliente</dt>
-                                <dd class="col-8">@currentPedido.ClienteNome</dd>
+                                <dd class="col-8">
+                                    @if (editingField == "ClienteNome")
+                                    {
+                                        <input class="form-control form-control-sm" @bind="editClienteNome" />
+                                    }
+                                    else
+                                    {
+                                        <span style="cursor:pointer; text-decoration:underline;" @onclick='() => StartEdit("ClienteNome")'>@(string.IsNullOrEmpty(currentPedido?.ClienteNome) ? "(clique para editar)" : currentPedido.ClienteNome)</span>
+                                    }
+                                </dd>
 
                             <dt class="col-4">Telefone</dt>
-                            <dd class="col-8">@currentPedido?.Telefone ?? "-"</dd>
+                            <dd class="col-8">
+                                @if (editingField == "Telefone")
+                                {
+                                    <input class="form-control form-control-sm" @bind="editTelefone" />
+                                }
+                                else
+                                {
+                                    <span style="cursor:pointer; text-decoration:underline;" @onclick='() => StartEdit("Telefone")'>@(string.IsNullOrEmpty(currentPedido?.Telefone) ? "(clique para editar)" : currentPedido.Telefone)</span>
+                                }
+                            </dd>
 
                                 <dt class="col-4">Endereço</dt>
-                                <dd class="col-8 text-truncate">@currentPedido.Endereco</dd>
+                                <dd class="col-8 text-truncate">
+                                    @if (editingField == "Endereco")
+                                    {
+                                        <input class="form-control form-control-sm" @bind="editEndereco" />
+                                    }
+                                    else
+                                    {
+                                        <span style="cursor:pointer; text-decoration:underline;" @onclick='() => StartEdit("Endereco")'>@(string.IsNullOrEmpty(currentPedido?.Endereco) ? "(clique para editar)" : currentPedido.Endereco)</span>
+                                    }
+                                </dd>
 
                                 <dt class="col-4">Observações</dt>
-                                <dd class="col-8">@currentPedido.Observacoes</dd>
+                                <dd class="col-8">
+                                    @if (editingField == "Observacoes")
+                                    {
+                                        <input class="form-control form-control-sm" @bind="editObservacoes" />
+                                    }
+                                    else
+                                    {
+                                        <span style="cursor:pointer; text-decoration:underline;" @onclick='() => StartEdit("Observacoes")'>@(string.IsNullOrEmpty(currentPedido?.Observacoes) ? "(clique para editar)" : currentPedido.Observacoes)</span>
+                                    }
+                                </dd>
                             </dl>
                         </div>
 
@@ -57,7 +147,7 @@
                                 <dd class="col-6">@currentPedido.VendedorNome</dd>
 
                                 <dt class="col-6">Data</dt>
-                                <dd class="col-6">@currentPedido.DataPedido?.ToString("yyyy-MM-dd HH:mm")</dd>
+                                <dd class="col-6">@currentPedido.DataPedido?.ToString("dd/MM/yyyy HH:mm")</dd>
 
                                 <dt class="col-6">Total</dt>
                                 <dd class="col-6">R$ @currentPedido.ValorTotal.ToString("F2")</dd>
@@ -80,11 +170,11 @@
                             @* prazo dates *@
                             @if (currentPedido.DataPagamentoPrazo.HasValue && string.Equals(currentPedido.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase))
                             {
-                                <div class="mt-2 small text-muted">Pagamento (forma 1): @currentPedido.DataPagamentoPrazo.Value.ToString("yyyy-MM-dd")</div>
+                                <div class="mt-2 small text-muted">Pagamento (forma 1): @currentPedido.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy")</div>
                             }
                             @if (currentPedido.DataPagamentoPrazo2.HasValue && string.Equals(currentPedido.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
                             {
-                                <div class="mt-1 small text-muted">Pagamento (forma 2): @currentPedido.DataPagamentoPrazo2.Value.ToString("yyyy-MM-dd")</div>
+                                <div class="mt-1 small text-muted">Pagamento (forma 2): @currentPedido.DataPagamentoPrazo2.Value.ToString("dd/MM/yyyy")</div>
                             }
                         </div>
                     </div>
@@ -151,24 +241,40 @@ else
             Crédito: <strong>R$ @totalCredito.ToString("F2")</strong> |
             Pix: <strong>R$ @totalPix.ToString("F2")</strong> |
             Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong> |
-            Ifood: <strong>R$ @totalIfood.ToString("F2")</strong>
+            A prazo: <strong>R$ @totalAPrazo.ToString("F2")</strong>
         </div>
     }
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-        @foreach (var comanda in pedidosHoje)
+        @foreach (var comanda in pedidosExibidos)
         {
             <div class="col">
-                <div class="card h-100 bg-dark text-white @GetRowClass(comanda)" style="cursor:pointer;" @onclick="() => ShowPedidoModal(comanda.Id)">
+                <div class="card h-100 bg-dark text-white @GetBorderClass(comanda)" style="cursor:pointer;" @onclick="() => ShowPedidoModal(comanda.Id)">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <h5 class="card-title mb-1">@comanda.ClienteNome</h5>
-                                <div class="text-muted small">@comanda.VendedorNome</div>
+                                <h5 class="card-title mb-1">
+                                    @{
+                                        var displayName = (!string.IsNullOrWhiteSpace(comanda.ClienteNome))
+                                            ? comanda.ClienteNome
+                                            : (string.Equals(comanda.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) ? "Avulso" : comanda.ClienteNome);
+
+                                        var hasAPrazo = string.Equals(comanda.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                                                       || string.Equals(comanda.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase);
+                                        var statusText = (string.Equals(comanda.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) && hasAPrazo)
+                                            ? "A prazo"
+                                            : (comanda.Status ?? "");
+                                    }
+                                    @displayName
+                                    <span class="badge @GetStatusBadgeClass(comanda) me-2">@statusText</span>
+                                </h5>
+                                <div class="text-white-50 small">@comanda.VendedorNome</div>
                             </div>
-                            <div class="text-end">
-                                <div class="fs-6">R$ @comanda.ValorTotal.ToString("F2")</div>
-                                <div class="text-muted small">@(comanda.DataPedido?.ToString("HH:mm") ?? "-")</div>
+                        <div class="text-end">
+                                <div class="fs-6 text-success">R$ @comanda.ValorTotal.ToString("F2")</div>
+                                <div class="text-white-50 small">Pagamento: @(comanda.DataPagamentoPrazo.HasValue ? comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy") : "-")</div>
+                                <div class="text-white-50 small">@(comanda.DataPedido?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
+                                @* Finalizar button moved to card actions for alignment *@
                             </div>
                         </div>
 
@@ -179,18 +285,22 @@ else
                         }
                         @if (comanda.DataPagamentoPrazo.HasValue)
                         {
-                            <p class="card-text small">Data Pagamento: @comanda.DataPagamentoPrazo.Value.ToString("yyyy-MM-dd")</p>
+                            <p class="card-text small">Data Pagamento: @comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy")</p>
+                        }
+                        @if (!string.IsNullOrEmpty(comanda.Observacoes))
+                        {
+                            <p class="card-text small">Obs: @comanda.Observacoes</p>
                         }
                         <div class="mt-3 d-flex gap-2">
                             <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ImprimirPedido(comanda.Id)">Imprimir</button>
-                            <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => ToggleDetails(comanda.Id)">@((expanded.Contains(comanda.Id)) ? "Ocultar detalhes" : "Ver detalhes")</button>
+                            <button class="btn btn-sm btn-success" @onclick:stopPropagation="true" @onclick="() => OpenFinalizeModal(comanda.Id)" disabled="@( !(string.Equals(comanda.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                                                                                                    || string.Equals(comanda.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                                                                                                    || string.Equals(comanda.Status, "Retirada", StringComparison.OrdinalIgnoreCase)
+                                                                                                    || string.Equals(comanda.Status, "Em entrega", StringComparison.OrdinalIgnoreCase) ) )">Finalizar Pedido</button>
                             <button class="btn btn-sm btn-danger ms-auto" @onclick:stopPropagation="true" @onclick="() => ConfirmarCancelar(comanda.Id)" disabled="@(string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))">Cancelar</button>
                         </div>
                     </div>
-                    <div class="card-footer bg-transparent border-top-0 small text-muted">
-                        Status: @comanda.Status
-                    </div>
-                </div>
+                     </div>
             </div>
         }
     </div>
@@ -215,6 +325,69 @@ else
 }
 
 @code {
+    private bool isEditingPedido = false;
+    private string? editingField = null;
+    private string? editClienteNome;
+    private string? editTelefone;
+    private string? editEndereco;
+    private string? editObservacoes;
+
+    private void StartEdit(string field)
+    {
+        if (currentPedido == null) return;
+        isEditingPedido = true;
+        editingField = field;
+        editClienteNome = currentPedido.ClienteNome;
+        editTelefone = currentPedido.Telefone;
+        editEndereco = currentPedido.Endereco;
+        editObservacoes = currentPedido.Observacoes;
+    }
+
+    private async Task SalvarEdicoes()
+    {
+        if (currentPedido == null) return;
+
+        var dto = new {
+            ClienteNome = editClienteNome,
+            Telefone = editTelefone,
+            Endereco = editEndereco,
+            Observacoes = editObservacoes
+        };
+
+        var result = await _apiService.AtualizarPedidoParcial(currentPedido.Id, dto);
+        if (!string.IsNullOrEmpty(result.ErrorMessage) || !result.Data)
+        {
+            await JS.InvokeVoidAsync("alert", "Falha ao salvar: " + (result.ErrorMessage ?? ""));
+            return;
+        }
+
+        currentPedido.ClienteNome = editClienteNome;
+        currentPedido.Telefone = editTelefone;
+        currentPedido.Endereco = editEndereco;
+        currentPedido.Observacoes = editObservacoes;
+
+        // also update in list
+        var pedido = pedidosHoje.FirstOrDefault(p => p.Id == currentPedido.Id);
+        if (pedido != null)
+        {
+            pedido.ClienteNome = currentPedido.ClienteNome;
+            pedido.Telefone = currentPedido.Telefone;
+            pedido.Endereco = currentPedido.Endereco;
+            pedido.Observacoes = currentPedido.Observacoes;
+        }
+
+        isEditingPedido = false;
+        editingField = null;
+        await RecomputeTotals();
+        StateHasChanged();
+    }
+    private string statusFilter = string.Empty;
+    private IEnumerable<Pedido> pedidosExibidos => string.IsNullOrEmpty(statusFilter)
+        ? pedidosHoje
+        : pedidosHoje.Where(p => string.Equals(p.Status, statusFilter, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.FormaPagamento, statusFilter, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.FormaPagamento2, statusFilter, StringComparison.OrdinalIgnoreCase));
+
     private List<Pedido> pedidosHoje = new();
     private HashSet<int> expanded = new();
     private Dictionary<int, List<PedidoDetalhe>> detalhes = new();
@@ -225,6 +398,7 @@ else
     private decimal totalPix = 0;
     private decimal totalDinheiro = 0;
     private decimal totalIfood = 0;
+    private decimal totalAPrazo = 0;
 
     private DateTime dataSelecionada = DateTime.Today;
 
@@ -232,6 +406,9 @@ else
     private int cancelPedidoId = 0;
     private bool showPedidoModal = false;
     private Pedido? currentPedido = null;
+    private bool showFinalizeModal = false;
+    private int finalizePedidoId = 0;
+    private string? SelectedFormaPagamento = null;
 
     private string GetRowClass(Pedido p)
     {
@@ -242,6 +419,49 @@ else
         if (string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
             return "table-danger";
         return string.Empty; // normal
+    }
+
+    private string GetStatusBadgeClass(Pedido p)
+    {
+        var status = p?.Status;
+        if (string.IsNullOrWhiteSpace(status))
+            return "bg-secondary text-white";
+
+        // If status is Finalizado but there is still a payment 'A Prazo', show red to indicate attention
+        var hasAPrazo = string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase);
+
+        var s = status.Trim().ToLowerInvariant();
+        if (s == "finalizado" && hasAPrazo)
+            return "bg-danger text-white"; // show red for finalized but still A Prazo
+
+        return s switch
+        {
+            "finalizado" => "bg-success text-white",
+            "retirada" => "bg-warning text-dark",
+            "cancelado" => "bg-danger text-white",
+            "em entrega" => "bg-info text-dark",
+            "a caminho" => "bg-info text-dark",
+            "a prazo" => "bg-primary text-white",
+            _ => "bg-secondary text-white",
+        };
+    }
+
+    private string GetBorderClass(Pedido p)
+    {
+        // keep dark background but add colored left border to indicate status
+        if (p == null) return string.Empty;
+        if (string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase))
+            return "border-start border-4 border-success";
+        if (string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase))
+            return "border-start border-4 border-warning";
+        if (string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+            return "border-start border-4 border-danger";
+        if (string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase))
+            return "border-start border-4 border-info";
+        if (string.Equals(p.Status, "A Prazo", StringComparison.OrdinalIgnoreCase))
+            return "border-start border-4 border-primary";
+        return string.Empty;
     }
 
     private void ConfirmarCancelar(int pedidoId)
@@ -314,7 +534,15 @@ else
     private Task RecomputeTotals()
     {
         var valid = pedidosHoje.Where(c => !string.Equals(c.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
-        totalVendido = valid.Sum(c => c.ValorTotal);
+        // only finalized orders count towards totalVendido
+        // but exclude orders paid 'A Prazo' (either primary or secondary payment)
+        totalVendido = valid
+            .Where(c => string.Equals(c.Status, "Finalizado", StringComparison.OrdinalIgnoreCase)
+                        && !(
+                            string.Equals(c.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(c.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                        ))
+            .Sum(c => c.ValorTotal);
 
         totalDebito = valid
             .Where(c => string.Equals(c.FormaPagamento, "Debito", StringComparison.OrdinalIgnoreCase))
@@ -331,9 +559,14 @@ else
         totalDinheiro = valid
             .Where(c => string.Equals(c.FormaPagamento, "Dinheiro", StringComparison.OrdinalIgnoreCase))
             .Sum(c => c.ValorTotal);
-
         totalIfood = valid
             .Where(c => string.Equals(c.FormaPagamento, "Ifood", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
+
+        // compute A prazo totals: include both FormaPagamento and FormaPagamento2
+        totalAPrazo = valid
+            .Where(c => string.Equals(c.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(c.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
             .Sum(c => c.ValorTotal);
 
         return Task.CompletedTask;
@@ -441,6 +674,100 @@ else
         {
             Console.WriteLine("Erro ao imprimir: " + ex.Message);
             await JS.InvokeVoidAsync("alert", "Erro ao imprimir pedido: " + ex.Message);
+        }
+    }
+
+    private async Task FinalizePedido(int pedidoId)
+    {
+        // Open modal to select payment form for eligible orders
+        var pedido = pedidosHoje.FirstOrDefault(p => p.Id == pedidoId);
+        if (pedido == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Pedido não encontrado.");
+            return;
+        }
+
+        // store id and show modal
+        finalizePedidoId = pedidoId;
+        SelectedFormaPagamento = null;
+        showFinalizeModal = true;
+    }
+
+    private void OpenFinalizeModal(int pedidoId)
+    {
+        finalizePedidoId = pedidoId;
+        SelectedFormaPagamento = null;
+        showFinalizeModal = true;
+    }
+
+    private void CloseFinalizeModal(bool apply)
+    {
+        showFinalizeModal = false;
+        if (!apply)
+        {
+            finalizePedidoId = 0;
+            SelectedFormaPagamento = null;
+        }
+    }
+
+    private async Task ConfirmFinalize()
+    {
+        if (finalizePedidoId == 0)
+            return;
+
+        if (string.IsNullOrEmpty(SelectedFormaPagamento))
+        {
+            await JS.InvokeVoidAsync("alert", "Selecione uma forma de pagamento.");
+            return;
+        }
+
+        try
+        {
+            var dto = new Dictionary<string, object>
+            {
+                ["Status"] = "Finalizado"
+            };
+
+            var pedido = pedidosHoje.FirstOrDefault(p => p.Id == finalizePedidoId);
+            if (pedido == null)
+            {
+                await JS.InvokeVoidAsync("alert", "Pedido não encontrado.");
+                CloseFinalizeModal(false);
+                return;
+            }
+
+            // if original was A Prazo, update the appropriate field, otherwise update FormaPagamento
+            if (string.Equals(pedido.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                dto["FormaPagamento"] = SelectedFormaPagamento;
+            else if (string.Equals(pedido.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                dto["FormaPagamento2"] = SelectedFormaPagamento;
+            else
+                dto["FormaPagamento"] = SelectedFormaPagamento;
+
+            var updateResult = await _apiService.AtualizarPedidoParcial(finalizePedidoId, dto);
+            if (!string.IsNullOrEmpty(updateResult.ErrorMessage) || !updateResult.Data)
+            {
+                await JS.InvokeVoidAsync("alert", "Falha ao finalizar pedido: " + (updateResult.ErrorMessage ?? ""));
+                return;
+            }
+
+            // reflect locally
+            pedido.Status = "Finalizado";
+            if (dto.ContainsKey("FormaPagamento"))
+                pedido.FormaPagamento = dto["FormaPagamento"].ToString();
+            if (dto.ContainsKey("FormaPagamento2"))
+                pedido.FormaPagamento2 = dto["FormaPagamento2"].ToString();
+
+            await RecomputeTotals();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", "Erro ao finalizar pedido: " + ex.Message);
+        }
+        finally
+        {
+            CloseFinalizeModal(true);
         }
     }
 }

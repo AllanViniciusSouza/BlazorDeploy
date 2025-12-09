@@ -39,6 +39,55 @@ public class ApiService
         };
     }
 
+    // Update allowed fields on a pedido. Uses same endpoint PUT api/pedidos/{id}/finalize
+    public async Task<ApiResponse<bool>> AtualizarPedidoParcial(int pedidoId, object dto)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(dto, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PutRequest($"api/pedidos/{pedidoId}/finalize", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao atualizar pedido: {response.StatusCode}");
+                return new ApiResponse<bool> { ErrorMessage = $"Erro ao atualizar pedido: {response.StatusCode}", Data = false };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao atualizar pedido");
+            return new ApiResponse<bool> { ErrorMessage = ex.Message };
+        }
+    }
+
+    // Finaliza um pedido marcando status = "Finalizado" via endpoint PUT api/pedidos/{id}/finalize
+    public async Task<ApiResponse<bool>> FinalizarPedido(int pedidoId)
+    {
+        try
+        {
+            var dto = new { Status = "Finalizado" };
+            var json = JsonSerializer.Serialize(dto, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PutRequest($"api/pedidos/{pedidoId}/finalize", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Erro ao finalizar pedido: {response.StatusCode}");
+                return new ApiResponse<bool> { ErrorMessage = $"Erro ao finalizar pedido: {response.StatusCode}", Data = false };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao finalizar pedido");
+            return new ApiResponse<bool> { ErrorMessage = ex.Message };
+        }
+    }
+
     // Cancel a pedido by id (attempt PUT to an assumed endpoint)
     public async Task<ApiResponse<bool>> CancelarPedido(int pedidoId)
     {

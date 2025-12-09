@@ -4,7 +4,15 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
-<h3>Estoque</h3>
+<div class="d-flex align-items-center justify-content-between mb-2">
+    <h3 class="mb-0">Estoque</h3>
+    <button class="btn btn-sm btn-outline-primary ms-2" title="Abrir leitor (câmera)" @onclick="OpenScanner" aria-label="Abrir leitor de códigos">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M10.5 2a.5.5 0 0 1 .5.5V3h1.5A1.5 1.5 0 0 1 14 4.5v7A1.5 1.5 0 0 1 12.5 13H3.5A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3H5v-.5a.5.5 0 0 1 .5-.5h5zM8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+            <path d="M8 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
+        </svg>
+    </button>
+</div>
 
 <input @bind="_termoPesquisa"
        @bind:event="oninput"
@@ -128,6 +136,26 @@ else
     private System.Globalization.CultureInfo uiCulture = System.Globalization.CultureInfo.CurrentCulture;
     private bool showEditPriceModal = false;
     private Produto? modalProduct = null;
+    private DotNetObjectReference<object>? _dotNetRefEstoque;
+
+    [JSInvokable]
+    public async Task OnBarcodeScanned(string code)
+    {
+        try
+        {
+            _termoPesquisa = code;
+            // trigger UI update and filtering
+            FiltrarEstoques(code);
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task OpenScanner()
+    {
+        _dotNetRefEstoque ??= DotNetObjectReference.Create((object)this);
+        await JS.InvokeVoidAsync("barcodeScanner.start", _dotNetRefEstoque, "barcode-scanner-container");
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -155,6 +183,12 @@ else
             (e.Produto.Barcode?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false)
         )
     ).ToList();
+
+    private void FiltrarEstoques(string term)
+    {
+        _termoPesquisa = term ?? string.Empty;
+        StateHasChanged();
+    }
     
 
     // Cálculo local, para refletir imediatamente na interface

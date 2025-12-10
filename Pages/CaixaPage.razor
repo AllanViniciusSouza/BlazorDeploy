@@ -5,6 +5,7 @@
 @inject IValidator Validator
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components.Web
+@using System.Globalization
 
 @inject NavigationManager Navigation
 
@@ -121,7 +122,12 @@
 
 
 <div class="card shadow-sm p-3 mb-4 bg-dark text-white">
-    <h4 class="fw-bold text-white">Carrinho</h4>
+    <div class="d-flex align-items-center justify-content-between">
+        <h4 class="fw-bold text-white mb-0">Carrinho</h4>
+        <div>
+            <button class="btn btn-sm btn-outline-secondary me-2" @onclick="() => showCartDebug = !showCartDebug">Debug</button>
+        </div>
+    </div>
 
     <table class="table table-bordered table-striped align-middle mt-2">
         <thead class="table-dark">
@@ -135,9 +141,11 @@
                 </th>
             </tr>
         </thead>
-        <tbody>
-            @foreach (var item in cart)
+    <tbody>
+            @for (int i = 0; i < cart.Count; i++)
             {
+                var item = cart[i];
+                var idx = i;
                 <tr>
                     <td>
                         @if (item.Produto == null || item.Produto.Id == 0)
@@ -151,18 +159,18 @@
                     </td>
 
                     <td>
-                        @if (item.PrecoUnitario == 0m)
+                        @if (item.Produto == null || item.Produto.Id == 0)
                         {
-                            <input type="number" min="0" step="0.01"
+                            <input type="text" inputmode="decimal" pattern="[0-9.,]*"
                                    class="form-control form-control-sm text-end"
-                                   value="" @oninput="@(e => OnPrecoUnitarioChanged(item, e))" />
+                                   value="@(idx >= 0 && idx < priceInputs.Count ? priceInputs[idx] : string.Empty)"
+                                   @oninput="@(e => OnPrecoUnitarioTyping(idx, e))"
+                                   @onchange="@(e => OnPrecoUnitarioCommit(idx, e))" />
                         }
                         else
                         {
-                            <input type="number" min="0" step="0.01"
-                                   class="form-control form-control-sm text-end"
-                                   value="@item.PrecoUnitario.ToString("0.00")"
-                                   @oninput="@(e => OnPrecoUnitarioChanged(item, e))" />
+                            <input type="number" step="0.01" class="form-control form-control-sm text-end"
+                                   @bind="cart[idx].PrecoUnitario" @bind:event="oninput" @bind:after="UpdateCartTotals" />
                         }
                     </td>
 
@@ -188,6 +196,18 @@
     <h3 class="text-end mt-3 fw-bold">
         Total: R$ @cart.Sum(p => p.Total).ToString("0.00")
     </h3>
+
+    @if (showCartDebug)
+    {
+        <div class="card mt-2 p-2 bg-white text-dark">
+            <h6>Cart debug</h6>
+            <div class="small">
+                <div>cart.Sum(p => p.Total) = @cart.Sum(p => p.Total).ToString("0.00")</div>
+                <div>items count = @cart.Count</div>
+            </div>
+            <pre style="max-height:200px; overflow:auto;">@System.Text.Json.JsonSerializer.Serialize(cart.Select(c => new { Nome = c.Produto?.Nome, Id = c.Produto?.Id, PrecoUnitario = c.PrecoUnitario, Quantidade = c.Quantidade, Total = c.Total }), new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true })</pre>
+        </div>
+    }
 
     <div class="row g-2 align-items-start">
         <div class="col-md-6">
@@ -431,6 +451,7 @@
     private List<Produto> filteredProdutos = new();
     private List<Produto> maisVendidos = new();
     private List<CartItem> cart = new();
+    private List<string> priceInputs = new();
     private List<ItemComanda> itensComanda = new();
     private int idcomanda;
     private bool isProcessing = false;
@@ -452,6 +473,7 @@ private string? selectedTemperatura = null;
     private string observacoes = string.Empty;
     private bool showDebugImages = false;
     private List<string> debugImageSources = new();
+    private bool showCartDebug = false;
     private string formaPagamento2 = string.Empty;
     private decimal? pagamento1;
     private decimal? pagamento2;
@@ -878,6 +900,7 @@ private string? selectedTemperatura = null;
                 }
 
                 if (newCart.Any()) cart = newCart;
+                SyncPriceInputs();
             }
 
             // remove saved state
@@ -923,8 +946,56 @@ void CloseModal()
     // clear search so user can type a new search after adding
     searchTerm = string.Empty;
     showProductList = false;
+    SyncPriceInputs();
     StateHasChanged();
 }
+
+    private void SyncPriceInputs()
+    {
+        priceInputs = new List<string>(cart.Count);
+        for (int i = 0; i < cart.Count; i++)
+        {
+            priceInputs.Add(cart[i].PrecoUnitario > 0 ? cart[i].PrecoUnitario.ToString("0.00") : string.Empty);
+        }
+    }
+
+    private void EnsurePriceInputsMatchCart()
+    {
+        // make sure priceInputs has exactly one entry per cart item to avoid index errors
+        while (priceInputs.Count < cart.Count)
+        {
+            var idx = priceInputs.Count;
+            priceInputs.Add(idx < cart.Count && cart[idx].PrecoUnitario > 0 ? cart[idx].PrecoUnitario.ToString("0.00") : string.Empty);
+        }
+        while (priceInputs.Count > cart.Count)
+        {
+            priceInputs.RemoveAt(priceInputs.Count - 1);
+        }
+    }
+
+    private bool TryParseDecimalFlexible(string? s, out decimal value)
+    {
+        value = 0m;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        s = s.Trim();
+        // try invariant (dot) first
+        if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
+        {
+            value = v; return true;
+        }
+        // try current culture (comma) second
+        if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.CurrentCulture, out v))
+        {
+            value = v; return true;
+        }
+        // last-resort: replace comma with dot and try
+        var alt = s.Replace(',', '.');
+        if (decimal.TryParse(alt, NumberStyles.Number, CultureInfo.InvariantCulture, out v))
+        {
+            value = v; return true;
+        }
+        return false;
+    }
 
     void ConfirmAddToCart()
 {
@@ -970,17 +1041,20 @@ void CloseModal()
         }
 
         cart.Add(cartItem);
+        SyncPriceInputs();
     }
     else
     {
         // same product and temperature -> increment quantity
         existing.Quantidade += qty;
+        SyncPriceInputs();
     }
 
     showQuantityModal = false;
     // clear search so user can type a new search after adding
     searchTerm = string.Empty;
     showProductList = false;
+    UpdateCartTotals();
     StateHasChanged();
 }
 
@@ -988,6 +1062,12 @@ void UpdateCartTotals()
 {
     EnsurePagamento1State();
     RecalculateSecondary();
+    // debug: log totals so we can see in browser console when this runs
+    try
+    {
+        _ = JS.InvokeVoidAsync("console.log", $"UpdateCartTotals called: cartTotal={cart.Sum(p => p.Total)} items={cart.Count}");
+    }
+    catch { }
     StateHasChanged();
 }
 
@@ -1006,6 +1086,84 @@ private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
     UpdateCartTotals();
 }
 
+    private async Task OnPrecoUnitarioTyping(int index, ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString() ?? string.Empty;
+        EnsurePriceInputsMatchCart();
+        if (index < 0 || index >= cart.Count)
+            return;
+
+        if (index >= 0 && index < priceInputs.Count)
+            priceInputs[index] = s;
+
+        // tolerant parse: if user types trailing separator, append 0 so parsing succeeds
+        var sForParse = s.Trim();
+        if (sForParse.EndsWith(",") || sForParse.EndsWith("."))
+            sForParse += "0";
+
+        if (TryParseDecimalFlexible(sForParse, out var v))
+        {
+            // update model value but DO NOT rewrite the user's typed string while typing
+            cart[index].PrecoUnitario = Math.Round(v, 2);
+            // priceInputs[index] is left as the raw user input to avoid interfering with typing/caret
+        }
+        else if (string.IsNullOrWhiteSpace(s))
+        {
+            cart[index].PrecoUnitario = 0m;
+        }
+
+        UpdateCartTotals();
+        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioTyping idx={index} input='{s}' price={cart[index].PrecoUnitario} total={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
+        StateHasChanged();
+    }
+
+    private async Task OnPrecoUnitarioCommit(int index, ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString();
+        if (index < 0 || index >= cart.Count) return;
+        var item = cart[index];
+
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            item.PrecoUnitario = 0m;
+            if (index >= 0 && index < priceInputs.Count) priceInputs[index] = string.Empty;
+        }
+        else if (TryParseDecimalFlexible(s, out var v))
+        {
+            item.PrecoUnitario = Math.Round(v, 2);
+            if (index >= 0 && index < priceInputs.Count) priceInputs[index] = item.PrecoUnitario.ToString("0.00", CultureInfo.CurrentCulture);
+        }
+
+        UpdateCartTotals();
+        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioCommit idx={index} input='{s}' price={item.PrecoUnitario} total={item.Total} cartTotal={cart.Sum(p => p.Total)}");
+        StateHasChanged();
+    }
+
+    private void OnPriceInputChanged(int index)
+    {
+        EnsurePriceInputsMatchCart();
+        if (index < 0 || index >= cart.Count) return;
+        var s = priceInputs[index] ?? string.Empty;
+        // tolerant parse
+        var sForParse = s.Trim();
+        if (sForParse.EndsWith(",") || sForParse.EndsWith(".")) sForParse += "0";
+        if (TryParseDecimalFlexible(sForParse, out var v))
+        {
+            cart[index].PrecoUnitario = Math.Round(v, 2);
+            // normalize display
+            priceInputs[index] = cart[index].PrecoUnitario.ToString("0.00", CultureInfo.CurrentCulture);
+        }
+        else if (string.IsNullOrWhiteSpace(s))
+        {
+            cart[index].PrecoUnitario = 0m;
+            priceInputs[index] = string.Empty;
+        }
+        UpdateCartTotals();
+        // debug log
+        _ = JS.InvokeVoidAsync("console.log", $"OnPriceInputChanged idx={index} input='{s}' parsed={cart[index].PrecoUnitario} lineTotal={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
+        StateHasChanged();
+    }
+
 private void OnPagamento1Input(ChangeEventArgs e)
 {
     var s = e?.Value?.ToString();
@@ -1013,7 +1171,7 @@ private void OnPagamento1Input(ChangeEventArgs e)
     {
         pagamento1 = null;
     }
-    else if (decimal.TryParse(s, out var v))
+    else if (TryParseDecimalFlexible(s, out var v))
     {
         pagamento1 = Math.Round(v, 2);
     }
@@ -1246,6 +1404,8 @@ private void OnUsarPagamento2Changed()
     {
         cart.Remove(Produto);
         EnsurePagamento1State();
+        SyncPriceInputs();
+        EnsurePriceInputsMatchCart();
         StateHasChanged();
     }
 
@@ -1255,6 +1415,9 @@ private void OnUsarPagamento2Changed()
         var item = new CartItem { Produto = blank, Quantidade = 1, PrecoUnitario = 0m };
         cart.Add(item);
         EnsurePagamento1State();
+        SyncPriceInputs();
+        EnsurePriceInputsMatchCart();
+        UpdateCartTotals();
         StateHasChanged();
     }
 

@@ -124,10 +124,7 @@
 <div class="card shadow-sm p-3 mb-4 bg-dark text-white">
     <div class="d-flex align-items-center justify-content-between">
         <h4 class="fw-bold text-white mb-0">Carrinho</h4>
-        <div>
-            <button class="btn btn-sm btn-outline-secondary me-2" @onclick="() => showCartDebug = !showCartDebug">Debug</button>
-        </div>
-    </div>
+           </div>
 
     <table class="table table-bordered table-striped align-middle mt-2">
         <thead class="table-dark">
@@ -196,18 +193,6 @@
     <h3 class="text-end mt-3 fw-bold">
         Total: R$ @cart.Sum(p => p.Total).ToString("0.00")
     </h3>
-
-    @if (showCartDebug)
-    {
-        <div class="card mt-2 p-2 bg-white text-dark">
-            <h6>Cart debug</h6>
-            <div class="small">
-                <div>cart.Sum(p => p.Total) = @cart.Sum(p => p.Total).ToString("0.00")</div>
-                <div>items count = @cart.Count</div>
-            </div>
-            <pre style="max-height:200px; overflow:auto;">@System.Text.Json.JsonSerializer.Serialize(cart.Select(c => new { Nome = c.Produto?.Nome, Id = c.Produto?.Id, PrecoUnitario = c.PrecoUnitario, Quantidade = c.Quantidade, Total = c.Total }), new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true })</pre>
-        </div>
-    }
 
     <div class="row g-2 align-items-start">
         <div class="col-md-6">
@@ -978,22 +963,58 @@ void CloseModal()
         value = 0m;
         if (string.IsNullOrWhiteSpace(s)) return false;
         s = s.Trim();
-        // try invariant (dot) first
-        if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
+
+        // Normalize common number formats: handle both comma and dot as decimal separators,
+        // and possible thousand separators. Strategy:
+        // - If string contains both '.' and ',', assume the last one is the decimal separator.
+        //   Remove the other characters (thousand separators) and replace the decimal separator with '.'.
+        // - If contains only ',', replace it with '.' and parse with invariant culture.
+        // - Otherwise try invariant parse.
+
+        string normalized = s;
+        bool hasDot = s.IndexOf('.') >= 0;
+        bool hasComma = s.IndexOf(',') >= 0;
+
+        if (hasDot && hasComma)
         {
-            value = v; return true;
+            // Decide which is decimal separator by last index
+            int lastDot = s.LastIndexOf('.');
+            int lastComma = s.LastIndexOf(',');
+            if (lastComma > lastDot)
+            {
+                // comma is decimal separator
+                normalized = s.Replace(".", string.Empty).Replace(',', '.');
+            }
+            else
+            {
+                // dot is decimal separator
+                normalized = s.Replace(",", string.Empty);
+            }
         }
-        // try current culture (comma) second
-        if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.CurrentCulture, out v))
+        else if (hasComma && !hasDot)
         {
-            value = v; return true;
+            // treat comma as decimal separator
+            normalized = s.Replace(',', '.');
         }
-        // last-resort: replace comma with dot and try
-        var alt = s.Replace(',', '.');
-        if (decimal.TryParse(alt, NumberStyles.Number, CultureInfo.InvariantCulture, out v))
+        else
         {
-            value = v; return true;
+            // only dot or neither -> keep as-is
+            normalized = s;
         }
+
+        if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var result))
+        {
+            value = result;
+            return true;
+        }
+
+        // Fallback: try current culture as last resort
+        if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.CurrentCulture, out result))
+        {
+            value = result;
+            return true;
+        }
+
         return false;
     }
 

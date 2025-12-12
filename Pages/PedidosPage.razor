@@ -95,7 +95,7 @@
                                 <dd class="col-8">
                                     @if (editingField == "ClienteNome")
                                     {
-                                        <input class="form-control form-control-sm" @bind="editClienteNome" />
+                                        <input class="form-control form-control-sm" @bind="editClienteNome" @onfocus="CancelScheduledSave" @onblur="ScheduleSaveOnBlur" />
                                     }
                                     else
                                     {
@@ -107,7 +107,7 @@
                             <dd class="col-8">
                                 @if (editingField == "Telefone")
                                 {
-                                    <input class="form-control form-control-sm" @bind="editTelefone" />
+                                    <input class="form-control form-control-sm" @bind="editTelefone" @onfocus="CancelScheduledSave" @onblur="ScheduleSaveOnBlur" />
                                 }
                                 else
                                 {
@@ -119,7 +119,7 @@
                                 <dd class="col-8 text-truncate">
                                     @if (editingField == "Endereco")
                                     {
-                                        <input class="form-control form-control-sm" @bind="editEndereco" />
+                                        <input class="form-control form-control-sm" @bind="editEndereco" @onfocus="CancelScheduledSave" @onblur="ScheduleSaveOnBlur" />
                                     }
                                     else
                                     {
@@ -131,7 +131,7 @@
                                 <dd class="col-8">
                                     @if (editingField == "Observacoes")
                                     {
-                                        <input class="form-control form-control-sm" @bind="editObservacoes" />
+                                        <input class="form-control form-control-sm" @bind="editObservacoes" @onfocus="CancelScheduledSave" @onblur="ScheduleSaveOnBlur" />
                                     }
                                     else
                                     {
@@ -208,8 +208,26 @@
                                                 }
                                             </td>
                                             <td class="align-middle">@it.ProdutoNome</td>
-                                            <td class="text-end align-middle">@it.Quantidade</td>
-                                            <td class="text-end align-middle">R$ @it.ProdutoPreco.ToString("F2")</td>
+                                            <td class="text-end align-middle">
+                                                @if (isEditingPedido)
+                                                {
+                                                    <input type="number" min="1" class="form-control form-control-sm text-end" value="@it.Quantidade" @oninput="@(e => OnEditItemQuantity(currentPedido.Id, it, e))" @onfocus="CancelScheduledSave" @onblur="ScheduleSaveOnBlur" />
+                                                }
+                                                else
+                                                {
+                                                    <span style="cursor:pointer;" @onclick="() => EnableItemEditing()">@it.Quantidade</span>
+                                                }
+                                            </td>
+                                            <td class="text-end align-middle">
+                                                @if (isEditingPedido)
+                                                {
+                                                    <input type="number" step="0.01" class="form-control form-control-sm text-end" value="@it.ProdutoPreco.ToString("F2")" @oninput="@(e => OnEditItemPreco(currentPedido.Id, it, e))" @onfocus="CancelScheduledSave" @onblur="ScheduleSaveOnBlur" />
+                                                }
+                                                else
+                                                {
+                                                    <span style="cursor:pointer;" @onclick="() => EnableItemEditing()">R$ @it.ProdutoPreco.ToString("F2")</span>
+                                                }
+                                            </td>
                                             <td class="text-end align-middle">R$ @it.SubTotal.ToString("F2")</td>
                                         </tr>
                                     }
@@ -225,8 +243,12 @@
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @onclick="ClosePedidoModal">Fechar</button>
-                    <button class="btn btn-primary" @onclick="() => ImprimirPedido(currentPedido.Id)">Imprimir</button>
-                    <button class="btn btn-danger" @onclick="() => ConfirmarCancelar(currentPedido.Id)" disabled="@(string.Equals(currentPedido.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))">Cancelar</button>
+                    @if (!string.Equals(currentPedido.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <button class="btn btn-primary" @onclick="() => ImprimirPedido(currentPedido.Id)">Imprimir</button>
+                        @* Removed the direct "Cancelar" (cancel order) button from the modal footer to avoid accidental cancellations
+                           Use the card-level Cancelar action instead (requires deliberate click). *@
+                    }
                 </div>
             </div>
         </div>
@@ -249,6 +271,12 @@ else
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
         @foreach (var comanda in pedidosExibidos)
         {
+            // show cancelled orders only when viewing today's date
+            if (string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) && dataSelecionada.Date != DateTime.Today)
+            {
+                continue;
+            }
+
             <div class="col">
                 <div class="card h-100 bg-dark text-white @GetBorderClass(comanda)" style="cursor:pointer;" @onclick="() => ShowPedidoModal(comanda.Id)">
                     <div class="card-body">
@@ -293,7 +321,10 @@ else
                             <p class="card-text small">Obs: @comanda.Observacoes</p>
                         }
                         <div class="mt-3 d-flex gap-2">
-                            <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ImprimirPedido(comanda.Id)">Imprimir</button>
+                            @if (!string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ImprimirPedido(comanda.Id)">Imprimir</button>
+                            }
                             @{
                                 var isCancelled = string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase);
                                 var isFinalizado = string.Equals(comanda.Status, "Finalizado", StringComparison.OrdinalIgnoreCase);
@@ -311,7 +342,10 @@ else
                             {
                                 <button class="btn btn-sm btn-success" @onclick:stopPropagation="true" @onclick="() => OpenFinalizeModal(comanda.Id)">Finalizar Pedido</button>
                             }
-                            <button class="btn btn-sm btn-danger ms-auto" @onclick:stopPropagation="true" @onclick="() => ConfirmarCancelar(comanda.Id)" disabled="@(string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))">Cancelar</button>
+                            @if (!string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <button class="btn btn-sm btn-danger ms-auto" @onclick:stopPropagation="true" @onclick="() => ConfirmarCancelar(comanda.Id)">Cancelar</button>
+                            }
                         </div>
                     </div>
                      </div>
@@ -357,6 +391,45 @@ else
         editObservacoes = currentPedido.Observacoes;
     }
 
+    private void EnableItemEditing()
+    {
+        isEditingPedido = true;
+        StateHasChanged();
+    }
+
+    private Pedido? FindPedidoById(int pedidoId)
+    {
+        var p = pedidosPorData.FirstOrDefault(x => x.Id == pedidoId);
+        if (p != null) return p;
+        p = prazoOrders.FirstOrDefault(x => x.Id == pedidoId);
+        if (p != null) return p;
+        return pedidosHoje.FirstOrDefault(x => x.Id == pedidoId);
+    }
+
+    private System.Threading.Timer? _saveTimer;
+
+    private void CancelScheduledSave(FocusEventArgs e)
+    {
+        try { _saveTimer?.Change(System.Threading.Timeout.Infinite, 0); } catch { }
+    }
+
+    private void ScheduleSaveOnBlur(FocusEventArgs e)
+    {
+        // schedule save in 300ms to allow focus moving between inputs without immediate save
+        try
+        {
+            _saveTimer?.Dispose();
+            _saveTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await SalvarEdicoes();
+                });
+            }, null, 300, System.Threading.Timeout.Infinite);
+        }
+        catch { }
+    }
+
     private async Task SalvarEdicoes()
     {
         if (currentPedido == null) return;
@@ -393,16 +466,91 @@ else
         isEditingPedido = false;
         editingField = null;
         await RecomputeTotals();
+        // also persist edited item prices/quantities if any
+        await PersistEditedPedidoItemsIfAny(currentPedido.Id);
         StateHasChanged();
     }
-    private string statusFilter = string.Empty;
-    private IEnumerable<Pedido> pedidosExibidos => string.IsNullOrEmpty(statusFilter)
-        ? pedidosHoje
-        : pedidosHoje.Where(p => string.Equals(p.Status, statusFilter, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(p.FormaPagamento, statusFilter, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(p.FormaPagamento2, statusFilter, StringComparison.OrdinalIgnoreCase));
 
+    private async Task PersistEditedPedidoItemsIfAny(int pedidoId)
+    {
+        if (!detalhes.TryGetValue(pedidoId, out var pdItems) || pdItems == null) return;
+
+        // Build a serializable list of dictionaries instead of anonymous types to avoid System.Text.Json issues
+        var itensDto = pdItems.Select(d => new Dictionary<string, object?> {
+            ["Id"] = d.Id,
+            ["Preco"] = d.ProdutoPreco,
+            ["Quantidade"] = d.Quantidade
+        }).ToList();
+
+        try
+        {
+            // Build DTO matching backend ApiECommerce.DTOs.PedidoUpdateDTO
+            var dto = new Dictionary<string, object?>();
+            dto["Itens"] = itensDto;
+
+            // include payment/date fields if available on the current pedido object
+            var pedido = pedidosPorData.FirstOrDefault(p => p.Id == pedidoId) ?? prazoOrders.FirstOrDefault(p => p.Id == pedidoId) ?? pedidosHoje.FirstOrDefault(p => p.Id == pedidoId);
+            if (pedido != null)
+            {
+                if (!string.IsNullOrEmpty(pedido.FormaPagamento)) dto["FormaPagamento"] = pedido.FormaPagamento;
+                if (!string.IsNullOrEmpty(pedido.FormaPagamento2)) dto["FormaPagamento2"] = pedido.FormaPagamento2;
+                if (pedido.DataPagamentoPrazo.HasValue) dto["DataPagamentoPrazo"] = pedido.DataPagamentoPrazo;
+                if (pedido.DataPagamentoPrazo2.HasValue) dto["DataPagamentoPrazo2"] = pedido.DataPagamentoPrazo2;
+            }
+
+            // Use existing helper which PUTs to api/pedidos/{id}/finalize
+            var result = await _apiService.AtualizarPedidoParcial(pedidoId, dto);
+            if (!string.IsNullOrEmpty(result.ErrorMessage) || !result.Data)
+            {
+                await JS.InvokeVoidAsync("alert", "Falha ao salvar itens do pedido: " + (result.ErrorMessage ?? ""));
+            }
+            else
+            {
+                // Optionally refresh details from server to get recalculated totals
+                try
+                {
+                    var (items, err) = await _apiService.GetPedidoDetalhes(pedidoId);
+                    if (items != null)
+                    {
+                        detalhes[pedidoId] = items;
+                        // update local pedido total if returned via separate endpoint (or rely on Recompute)
+                    }
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao persistir itens editados: " + ex.Message);
+        }
+    }
+    private string statusFilter = string.Empty;
+    // pedidos for the currently selected date (dataSelecionada)
+    private List<Pedido> pedidosPorData = new();
+    // extra: all orders that have a payment marked as 'A Prazo' (may be outside selected date)
+    private List<Pedido> prazoOrders = new();
     private List<Pedido> pedidosHoje = new();
+
+    private IEnumerable<Pedido> pedidosExibidos
+    {
+        get
+        {
+            // prazo orders that are not already included in the date list
+            var prazoOnly = prazoOrders.Where(p => !pedidosPorData.Any(d => d.Id == p.Id));
+
+            if (string.IsNullOrEmpty(statusFilter))
+            {
+                return pedidosPorData.Concat(prazoOnly);
+            }
+
+            var filteredDate = pedidosPorData.Where(p => string.Equals(p.Status, statusFilter, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.FormaPagamento, statusFilter, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.FormaPagamento2, statusFilter, StringComparison.OrdinalIgnoreCase));
+
+            // per requirement: status filter should apply only to the orders of the selected date
+            return filteredDate.Concat(prazoOnly);
+        }
+    }
     private HashSet<int> expanded = new();
     private Dictionary<int, List<PedidoDetalhe>> detalhes = new();
     private decimal totalVendido = 0;
@@ -488,17 +636,28 @@ else
 
     private async Task ShowPedidoModal(int pedidoId)
     {
-        currentPedido = pedidosHoje.FirstOrDefault(p => p.Id == pedidoId);
+        // try to find the pedido in the date list or in prazo orders
+        currentPedido = FindPedidoById(pedidoId);
         // ensure details are loaded before showing modal
         await LoadDetailsIfNeeded(pedidoId);
         showPedidoModal = true;
         StateHasChanged();
     }
 
-    private void ClosePedidoModal()
+    private async Task ClosePedidoModal()
     {
+        // ensure any scheduled save is cancelled and perform save if in edit mode
+        try { _saveTimer?.Change(System.Threading.Timeout.Infinite, 0); } catch { }
+
+        if (isEditingPedido && currentPedido != null)
+        {
+            // await save of edits before closing
+            await SalvarEdicoes();
+        }
+
         showPedidoModal = false;
         currentPedido = null;
+        StateHasChanged();
     }
 
     private async Task ConfirmCancelar()
@@ -603,19 +762,38 @@ else
             Navigation.NavigateTo("login");
             return;
         }
-        // load all pedidos for listing (initial view shows all)
+        // load pedidos for the initial date (today) and prazo orders
         try
         {
-            var (todos, errAll) = await _apiService.GetAllPedidos();
-            if (!string.IsNullOrEmpty(errAll))
+            // fetch pedidos for the selected date (today)
+            var (comandasHoje, errHoje) = await _apiService.GetPedidosPorData(DateTime.Today);
+            if (string.IsNullOrEmpty(errHoje) && comandasHoje != null)
             {
-                Console.WriteLine("Erro ao carregar todos pedidos: " + errAll);
-                pedidosHoje = new List<Pedido>();
+                // exclude cancelled
+                pedidosPorData = comandasHoje.Where(p => !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
             }
             else
             {
-                pedidosHoje = todos ?? new List<Pedido>();
+                pedidosPorData = new List<Pedido>();
             }
+
+            // also fetch all orders that have payment 'A Prazo' (either formaPagamento or formaPagamento2)
+            var (todos, errAll) = await _apiService.GetAllPedidos();
+            if (!string.IsNullOrEmpty(errAll) || todos == null)
+            {
+                prazoOrders = new List<Pedido>();
+            }
+            else
+            {
+                prazoOrders = todos
+                    .Where(p => (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                                && !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            // initial visible list uses pedidosPorData (today) and prazoOrders merged by the property above
+            pedidosHoje = pedidosPorData.ToList();
         }
         catch (Exception ex)
         {
@@ -652,7 +830,25 @@ else
             return;
         }
 
-        pedidosHoje = comandas ?? new List<Pedido>();
+        // for selected date, exclude cancelled
+        pedidosPorData = (comandas ?? new List<Pedido>()).Where(p => !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        // recompute prazoOrders in case they changed
+        try
+        {
+            var (todos, errAll) = await _apiService.GetAllPedidos();
+            if (string.IsNullOrEmpty(errAll) && todos != null)
+            {
+                prazoOrders = todos
+                    .Where(p => (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                                 && !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+        }
+        catch { }
+
+        pedidosHoje = pedidosPorData.ToList();
         await RecomputeTotals();
         StateHasChanged();
     }
@@ -680,7 +876,51 @@ else
         }
 
         expanded.Add(pedidoId);
+        // when details are loaded, ensure we can edit values locally
+        if (detalhes.TryGetValue(pedidoId, out var pdItems) && pdItems != null)
+        {
+            // compute subtotals to ensure UI shows current values
+            foreach (var it in pdItems)
+            {
+                it.SubTotal = Math.Round(it.ProdutoPreco * it.Quantidade, 2);
+            }
+        }
         StateHasChanged();
+    }
+
+    private void OnEditItemQuantity(int pedidoId, PedidoDetalhe detalhe, ChangeEventArgs e)
+    {
+        if (detalhe == null) return;
+        if (int.TryParse(e?.Value?.ToString(), out var q))
+        {
+            detalhe.Quantidade = q;
+            detalhe.SubTotal = Math.Round(detalhe.ProdutoPreco * q, 2);
+            // update parent pedido total locally
+            UpdatePedidoLocalTotal(pedidoId);
+            StateHasChanged();
+        }
+    }
+
+    private void OnEditItemPreco(int pedidoId, PedidoDetalhe detalhe, ChangeEventArgs e)
+    {
+        if (detalhe == null) return;
+        if (decimal.TryParse(e?.Value?.ToString(), NumberStyles.Number, CultureInfo.CurrentCulture, out var p))
+        {
+            detalhe.ProdutoPreco = Math.Round(p, 2);
+            detalhe.SubTotal = Math.Round(detalhe.ProdutoPreco * detalhe.Quantidade, 2);
+            UpdatePedidoLocalTotal(pedidoId);
+            StateHasChanged();
+        }
+    }
+
+    private void UpdatePedidoLocalTotal(int pedidoId)
+    {
+        var pedido = pedidosHoje.FirstOrDefault(p => p.Id == pedidoId) ?? pedidosPorData.FirstOrDefault(p => p.Id == pedidoId);
+        if (pedido == null) return;
+        if (detalhes.TryGetValue(pedidoId, out var pdItems) && pdItems != null)
+        {
+            pedido.ValorTotal = pdItems.Sum(d => d.SubTotal);
+        }
     }
 
     private async Task ImprimirPedido(int pedidoId)

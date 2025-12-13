@@ -959,7 +959,7 @@ else
     private async Task FinalizePedido(int pedidoId)
     {
         // Open modal to select payment form for eligible orders
-        var pedido = pedidosHoje.FirstOrDefault(p => p.Id == pedidoId);
+        var pedido = FindPedidoById(pedidoId);
         if (pedido == null)
         {
             await JS.InvokeVoidAsync("alert", "Pedido não encontrado.");
@@ -1008,7 +1008,7 @@ else
                 ["Status"] = "Finalizado"
             };
 
-            var pedido = pedidosHoje.FirstOrDefault(p => p.Id == finalizePedidoId);
+            var pedido = FindPedidoById(finalizePedidoId);
             if (pedido == null)
             {
                 await JS.InvokeVoidAsync("alert", "Pedido não encontrado.");

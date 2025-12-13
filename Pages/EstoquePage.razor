@@ -23,10 +23,12 @@
 {
     <p>Carregando estoque...</p>
 }
+ 
 else if (estoques.Count == 0)
 {
     <p>Nenhum produto encontrado no estoque.</p>
 }
+ 
 else
 {
     @if (produtosAbaixoMinimo.Any())
@@ -68,7 +70,10 @@ else
                                 <input type="number" class="form-control form-control-sm" style="width:120px" value="@e.QuantidadeMinima" @oninput="@(async (ChangeEventArgs ev) => { if (int.TryParse(ev?.Value?.ToString(), out var v)) { e.QuantidadeMinima = v; } else { e.QuantidadeMinima = null; } })" @onchange="() => AtualizarEstoque(e)" />
                             </div>
                             <div class="ms-auto">
-                                <button class="btn btn-sm btn-outline-light" @onclick:stopPropagation="true" @onclick="() => OpenEditPricesModal(e)">Editar preços</button>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-light" @onclick:stopPropagation="true" @onclick="() => OpenEditPricesModal(e)">Editar preços</button>
+                                    <button class="btn btn-sm btn-outline-primary" @onclick:stopPropagation="true" @onclick="() => OpenInventario(e.Produto.Id)">Inventário</button>
+                                </div>
                             </div>
                         </div>
 
@@ -243,6 +248,11 @@ else
     private void NavigateToProduto(int produtoId)
     {
         Navigation.NavigateTo($"/produtos?id={produtoId}");
+    }
+
+    private void OpenInventario(int produtoId)
+    {
+        Navigation.NavigateTo($"/inventario?produtoId={produtoId}");
     }
 
     private void OpenEditPricesModal(Estoque e)

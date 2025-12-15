@@ -39,6 +39,43 @@ public class ApiService
         };
     }
 
+    // PUT api/pedidos/{id}/finalize -> returns updated order summary { Id, Status, ValorTotal }
+    public async Task<(JsonElement? Data, string? ErrorMessage)> AtualizarPedidoParcialWithResult(int pedidoId, object dto)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(dto, _serializerOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await PutRequest($"api/pedidos/{pedidoId}/finalize", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogError($"Erro ao atualizar pedido: {response.StatusCode} - {body}");
+                return (null, $"Erro ao atualizar pedido: {response.StatusCode}");
+            }
+
+            var responseString = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(responseString)) return (null, null);
+
+            try
+            {
+                using var doc = JsonDocument.Parse(responseString);
+                return (doc.RootElement.Clone(), null);
+            }
+            catch (JsonException je)
+            {
+                _logger.LogError(je, "Falha ao desserializar resposta do finalize");
+                return (null, "Falha ao desserializar resposta do servidor");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao atualizar pedido com retorno");
+            return (null, ex.Message);
+        }
+    }
+
     // Update allowed fields on a pedido. Uses same endpoint PUT api/pedidos/{id}/finalize
     public async Task<ApiResponse<bool>> AtualizarPedidoParcial(int pedidoId, object dto)
     {
@@ -97,9 +134,12 @@ public class ApiService
             var response = await PutRequest($"api/pedidos/{pedidoId}/cancel", content);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError($"Erro ao cancelar pedido: {response.StatusCode}");
-                return new ApiResponse<bool> { ErrorMessage = $"Erro ao cancelar pedido: {response.StatusCode}", Data = false };
+                string body = string.Empty;
+                try { body = await response.Content.ReadAsStringAsync(); } catch { }
+                _logger.LogError("Erro ao cancelar pedido: {Status} - {Body}", response.StatusCode, body);
+                return new ApiResponse<bool> { ErrorMessage = $"Erro ao cancelar pedido: {response.StatusCode} - {body}", Data = false };
             }
+
             return new ApiResponse<bool> { Data = true };
         }
         catch (Exception ex)
@@ -337,6 +377,12 @@ public class ApiService
         {
             await AddAuthorizationHeader();
             var result = await _httpClient.PostAsync(enderecoUrl, content);
+            if (!result.IsSuccessStatusCode)
+            {
+                string body = string.Empty;
+                try { body = await result.Content.ReadAsStringAsync(); } catch { }
+                _logger.LogError("POST {Url} returned {Status} - {Body}", enderecoUrl, result.StatusCode, body);
+            }
             return result;
         }
         catch (Exception ex)
@@ -428,6 +474,12 @@ public class ApiService
         {
             await AddAuthorizationHeader();
             var result = await _httpClient.PutAsync(enderecoUrl, content);
+            if (!result.IsSuccessStatusCode)
+            {
+                string body = string.Empty;
+                try { body = await result.Content.ReadAsStringAsync(); } catch { }
+                _logger.LogError("PUT {Url} returned {Status} - {Body}", enderecoUrl, result.StatusCode, body);
+            }
             return result;
         }
         catch(Exception ex)
@@ -830,9 +882,69 @@ public class ApiService
 
     public async Task<(List<PedidoDetalhe>?, string? ErrorMessage)> GetPedidoDetalhes(int pedidoId)
     {
-        // Backend exposes GET api/Pedidos/Detalhes/{pedidoId}
-        string endpoint = $"api/pedidos/Detalhes/{pedidoId}";
-        return await GetAsync<List<PedidoDetalhe>>(endpoint);
+        // Custom implementation: try to GET and robustly map result to List<PedidoDetalhe>
+        try
+        {
+            await AddAuthorizationHeader();
+            var endereco = BuildUrl($"api/pedidos/Detalhes/{pedidoId}");
+            var resp = await _httpClient.GetAsync(endereco);
+            if (!resp.IsSuccessStatusCode)
+            {
+                if (resp.StatusCode == HttpStatusCode.NotFound) return (new List<PedidoDetalhe>(), null);
+                var err = $"Erro na requisição: {resp.ReasonPhrase}";
+                _logger.LogError(err);
+                return (null, err);
+            }
+
+            var text = await resp.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(text)) return (new List<PedidoDetalhe>(), null);
+
+            // Try direct deserialization first
+            try
+            {
+                var list = JsonSerializer.Deserialize<List<PedidoDetalhe>>(text, _serializerOptions);
+                if (list != null) return (list, null);
+            }
+            catch (JsonException) { /* fallthrough to manual parse */ }
+
+            // Manual parse to tolerate different property names/shapes
+            var results = new List<PedidoDetalhe>();
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    var detalhe = new PedidoDetalhe();
+                    // ProdutoNome can be "ProdutoNome" or "Nome"
+                    if (el.TryGetProperty("ProdutoNome", out var pn) && pn.ValueKind == JsonValueKind.String) detalhe.ProdutoNome = pn.GetString();
+                    else if (el.TryGetProperty("Nome", out var nm) && nm.ValueKind == JsonValueKind.String) detalhe.ProdutoNome = nm.GetString();
+
+                    // ProdutoImagem / CaminhoImagem
+                    if (el.TryGetProperty("ProdutoImagem", out var pimg) && pimg.ValueKind == JsonValueKind.String) detalhe.ProdutoImagem = pimg.GetString();
+                    else if (el.TryGetProperty("CaminhoImagem", out var cimg) && cimg.ValueKind == JsonValueKind.String) detalhe.ProdutoImagem = cimg.GetString();
+
+                    if (el.TryGetProperty("Quantidade", out var q) && q.ValueKind == JsonValueKind.Number) detalhe.Quantidade = q.GetInt32();
+                    else if (el.TryGetProperty("Qtd", out var q2) && q2.ValueKind == JsonValueKind.Number) detalhe.Quantidade = q2.GetInt32();
+
+                    if (el.TryGetProperty("ProdutoPreco", out var pp) && pp.ValueKind == JsonValueKind.Number) detalhe.ProdutoPreco = pp.GetDecimal();
+                    else if (el.TryGetProperty("Preco", out var pp2) && pp2.ValueKind == JsonValueKind.Number) detalhe.ProdutoPreco = pp2.GetDecimal();
+
+                    if (el.TryGetProperty("SubTotal", out var st) && st.ValueKind == JsonValueKind.Number) detalhe.SubTotal = st.GetDecimal();
+                    else if (el.TryGetProperty("ValorTotal", out var vt) && vt.ValueKind == JsonValueKind.Number) detalhe.SubTotal = vt.GetDecimal();
+
+                    if (el.TryGetProperty("Id", out var idp) && idp.ValueKind == JsonValueKind.Number) detalhe.Id = idp.GetInt32();
+
+                    results.Add(detalhe);
+                }
+            }
+
+            return (results, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao obter detalhes do pedido");
+            return (null, ex.Message);
+        }
     }
 
     public async Task<(List<ComandaPorUsuario>?, string? ErrorMessage)> GetComandaPorUsuario(int usuarioId)

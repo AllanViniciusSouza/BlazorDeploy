@@ -48,25 +48,13 @@
                 {
                     <div class="col">
                         <div class="card h-100 shadow-sm small" @onclick="() => OpenQuantityModal(Produto)" style="cursor:pointer;">
-                            @if (!string.IsNullOrEmpty(Produto.CaminhoImagem))
-                            {
-                                <div style="height:72px; overflow:hidden; background:#f8f9fa;">
-                            <img loading="lazy" src="@Produto.CaminhoImagem" onerror="this.onerror=null;this.src='/logo.png'" alt="@Produto.Nome" style="width:100%; height:100%; object-fit:cover; display:block;" />
-                                </div>
-                            }
 
-                               else
-                            {
-                                <div class="d-flex align-items-center justify-content-center" style="height:72px; background:#f8f9fa;">
-                                    <span class="text-muted small">Sem imagem</span>
-                                </div>
-                            }
 
                             <div class="card-body p-1 d-flex flex-column">
                                 <div class="card-title mb-1" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
                                 @if (!string.IsNullOrWhiteSpace(Produto.Detalhe))
                                 {
-                                    <div class="card-text small text-muted" style="white-space:normal;">@Produto.Detalhe</div>
+                                <div class="card-text small text-muted" style="white-space:normal;">@Produto.Detalhe</div>
                                 }
                                 <div class="text-success mb-1 mt-2" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
                             </div>
@@ -401,27 +389,41 @@
     <div class="modal d-block">
         <div class="modal-dialog modal-sm mt-5">
             <div class="modal-content p-4 shadow-lg">
-                <h5 class="fw-bold text-center">Quantidade</h5>
+                <h5 class="fw-bold text-center">@selectedProduct?.Nome</h5>
 
                 <div class="mb-3">
-                    <input type="number" class="form-control form-control-lg text-center"
-                           min="1" @bind="selectedQuantity" />
+                    <input type="text" inputmode="numeric" pattern="[0-9xX]*" class="form-control form-control-lg text-center"
+                           placeholder="Quantidade (ex: 9x24 ou 216)" value="@selectedQuantityBuffer" @oninput="OnQuantityInput" />
+                    <div class="small text-muted mt-1">Quantidade final: @RenderComputedQuantity()</div>
+                </div>
+
+                <div class="mb-2 d-flex flex-wrap gap-2 justify-content-center">
+                    @for (int n = 0; n <= 9; n++)
+                    {
+                        var digit = n; /* capture loop variable to avoid closure issue */
+                        <button class="btn btn-outline-secondary btn-lg" @onclick="() => OnNumericPadClick(digit)">@digit</button>
+                    }
+                    <button class="btn btn-outline-secondary btn-lg" title="Multiplicar (ex: 9x24)" @onclick="OnInsertMultiply">×</button>
+                    <button class="btn btn-outline-danger btn-lg" title="Apagar" @onclick="OnNumericBackspace">⌫</button>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Temperatura</label>
                     <div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="temp" id="temp_none" checked="@(string.IsNullOrEmpty(selectedTemperatura))" @onchange="() => selectedTemperatura = null" />
-                            <label class="form-check-label" for="temp_none">Nenhuma</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_none" checked="@(string.IsNullOrEmpty(selectedTemperatura))" @onchange="() => OnSelectTemperatura(null)" />
+                            <label class="form-check-label ms-2" for="temp_none">Nenhuma</label>
+                            <div class="small text-muted ms-4">Preço: R$ @(GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
                         </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="temp" id="temp_quente" checked='@(selectedTemperatura == "Quente")' @onchange='() => selectedTemperatura = "Quente"' />
-                            <label class="form-check-label" for="temp_quente">Quente</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_quente" checked='@(selectedTemperatura == "Quente")' @onchange='() => OnSelectTemperatura("Quente")' />
+                            <label class="form-check-label ms-2" for="temp_quente">Quente</label>
+                            <div class="small text-muted ms-4">Preço: R$ @(selectedProduct != null && selectedProduct.PrecoQuente > 0 ? selectedProduct.PrecoQuente.ToString("0.00") : GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
                         </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="temp" id="temp_gelada" checked='@(selectedTemperatura == "Gelada")' @onchange='() => selectedTemperatura = "Gelada"' />
-                            <label class="form-check-label" for="temp_gelada">Gelada</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_gelada" checked='@(selectedTemperatura == "Gelada")' @onchange='() => OnSelectTemperatura("Gelada")' />
+                            <label class="form-check-label ms-2" for="temp_gelada">Gelada</label>
+                            <div class="small text-muted ms-4">Preço: R$ @(selectedProduct != null && selectedProduct.PrecoGelada > 0 ? selectedProduct.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
                         </div>
                     </div>
                 </div>
@@ -467,6 +469,7 @@
     private Produto newProductForBarcode = new Produto();
 private Produto selectedProduct;
 private int? selectedQuantity = null;
+private string selectedQuantityBuffer = string.Empty;
 private string? selectedTemperatura = null;
     private string observacoes = string.Empty;
     private bool showDebugImages = false;
@@ -486,52 +489,8 @@ private string? selectedTemperatura = null;
         {
             if (pedidoStatus != value)
             {
-                var previousStatus = pedidoStatus;
                 pedidoStatus = value;
-
-                // If changing to 'Em entrega', increase all existing cart items by 0.10
-                if (previousStatus != "Em entrega" && pedidoStatus == "Em entrega")
-                {
-                    foreach (var item in cart)
-                    {
-                        // apply only once
-                        if (!item.DeliverySurchargeApplied)
-                        {
-                            item.PrecoUnitario = Math.Round(item.PrecoUnitario + 0.10m, 2);
-                            item.DeliverySurchargeApplied = true;
-                        }
-                    }
-                }
-
-                // If changing from 'Em entrega' to something else (e.g., Retirada), remove previously applied 0.10
-                if (previousStatus == "Em entrega" && pedidoStatus != "Em entrega")
-                {
-                    foreach (var item in cart)
-                    {
-                        if (item.DeliverySurchargeApplied)
-                        {
-                            item.PrecoUnitario = Math.Round(item.PrecoUnitario - 0.10m, 2);
-                            item.DeliverySurchargeApplied = false;
-                        }
-                    }
-                }
-
-                // When switching to Retirada, prefer PrecoRetirar if available (but keep surcharge logic above)
-                if (pedidoStatus == "Retirada")
-                {
-                    foreach (var item in cart)
-                    {
-                        if (!string.IsNullOrEmpty(item.Temperatura))
-                            continue;
-                        if (item.Produto.PrecoRetirar > 0)
-                        {
-                            // If surcharge already applied, set to PrecoRetirar + surcharge
-                            var basePrice = item.Produto.PrecoRetirar;
-                            item.PrecoUnitario = item.DeliverySurchargeApplied ? Math.Round(basePrice + 0.10m, 2) : basePrice;
-                        }
-                    }
-                }
-
+                // Only update the status; do not change item prices here
                 StateHasChanged();
             }
         }
@@ -933,6 +892,7 @@ void OpenQuantityModal(Produto produto)
     selectedProduct = produto;
     // start empty so user can type a value without having to delete a default
     selectedQuantity = null;
+    selectedQuantityBuffer = string.Empty;
     // default temperature to null
     selectedTemperatura = null;
     showQuantityModal = true;
@@ -956,6 +916,94 @@ void CloseModal()
             priceInputs.Add(cart[i].PrecoUnitario > 0 ? cart[i].PrecoUnitario.ToString("0.00") : string.Empty);
         }
     }
+
+void OnSelectTemperatura(string? temp)
+{
+    selectedTemperatura = temp;
+    StateHasChanged();
+}
+
+void OnNumericPadClick(int n)
+{
+    // append digit to buffer and update parsed quantity
+    if (selectedQuantityBuffer == "0") selectedQuantityBuffer = string.Empty;
+    selectedQuantityBuffer += n.ToString();
+    if (int.TryParse(selectedQuantityBuffer, out var v)) selectedQuantity = v; else selectedQuantity = null;
+    StateHasChanged();
+}
+
+void OnQuantityInput(ChangeEventArgs e)
+{
+    selectedQuantityBuffer = e?.Value?.ToString() ?? string.Empty;
+    // if buffer represents a multiplication like 9x24, use computed result; otherwise try parse as integer
+    var computed = ComputeQuantityFromBuffer();
+    if (computed > 0)
+    {
+        selectedQuantity = computed;
+    }
+    else if (int.TryParse(selectedQuantityBuffer, out var v))
+    {
+        selectedQuantity = v;
+    }
+    else
+    {
+        selectedQuantity = null;
+    }
+}
+
+void OnInsertMultiply()
+{
+    // insert 'x' if not present, or remove if already the last char
+    if (string.IsNullOrEmpty(selectedQuantityBuffer))
+    {
+        selectedQuantityBuffer = "x";
+    }
+    else
+    {
+        if (selectedQuantityBuffer.EndsWith("x", StringComparison.OrdinalIgnoreCase))
+            selectedQuantityBuffer = selectedQuantityBuffer.Substring(0, selectedQuantityBuffer.Length - 1);
+        else
+            selectedQuantityBuffer += "x";
+    }
+}
+
+int ComputeQuantityFromBuffer()
+{
+    if (string.IsNullOrWhiteSpace(selectedQuantityBuffer)) return 0;
+    var s = selectedQuantityBuffer.Trim();
+    // support formats like "9x24", "9X24", "216"
+    if (s.IndexOf('x') >= 0 || s.IndexOf('X') >= 0)
+    {
+        var parts = s.Split(new[] { 'x', 'X' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out var a) && int.TryParse(parts[1].Trim(), out var b))
+            return a * b;
+        return 0;
+    }
+    if (int.TryParse(s, out var v)) return v;
+    return 0;
+}
+
+string RenderComputedQuantity()
+{
+    var q = ComputeQuantityFromBuffer();
+    return q > 0 ? q.ToString() : "-";
+}
+
+void OnNumericBackspace()
+{
+    if (string.IsNullOrEmpty(selectedQuantityBuffer)) return;
+    selectedQuantityBuffer = selectedQuantityBuffer.Length <= 1 ? string.Empty : selectedQuantityBuffer.Substring(0, selectedQuantityBuffer.Length - 1);
+    // update selectedQuantity from buffer (supports multiplication)
+    var computed = ComputeQuantityFromBuffer();
+    if (computed > 0)
+        selectedQuantity = computed;
+    else if (int.TryParse(selectedQuantityBuffer, out var v))
+        selectedQuantity = v;
+    else
+        selectedQuantity = null;
+
+    StateHasChanged();
+}
 
     private void EnsurePriceInputsMatchCart()
     {
@@ -1033,6 +1081,11 @@ void CloseModal()
 
     void ConfirmAddToCart()
 {
+    // prefer computed quantity from buffer if present
+    var computed = ComputeQuantityFromBuffer();
+    if (computed > 0)
+        selectedQuantity = computed;
+
     var qty = selectedQuantity ?? 1; // default 1 if user leaves empty
 
     // consider product identity + temperatura when merging items
@@ -1068,11 +1121,7 @@ void CloseModal()
             DeliverySurchargeApplied = false
         };
 
-        if (pedidoStatus == "Em entrega")
-        {
-            cartItem.PrecoUnitario = Math.Round(cartItem.PrecoUnitario + 0.10m, 2);
-            cartItem.DeliverySurchargeApplied = true;
-        }
+        // do not modify prices when adding; only change PedidoStatus should alter prices elsewhere
 
         cart.Add(cartItem);
         SyncPriceInputs();

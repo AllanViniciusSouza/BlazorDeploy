@@ -87,9 +87,15 @@
                                 }
                             </InputSelect>
 
-                            <div class="d-flex gap-2">
-                                <InputNumber id="@($"precoQ-{produto.Id}")" class="form-control form-control-sm text-end" style="width:110px;" @bind-Value="produto.PrecoQuente" step="0.01" @onclick:stopPropagation="true" />
-                                <InputNumber id="@($"precoG-{produto.Id}")" class="form-control form-control-sm text-end" style="width:110px;" @bind-Value="produto.PrecoGelada" step="0.01" @onclick:stopPropagation="true" />
+                            <div class="d-flex gap-2 align-items-center">
+                                <div class="input-group" style="width:170px;">
+                                    <span class="input-group-text small">Quente</span>
+                                    <InputNumber id="@($"precoQ-{produto.Id}")" class="form-control form-control-sm text-end" @bind-Value="produto.PrecoQuente" step="0.01" @onclick:stopPropagation="true" />
+                                </div>
+                                <div class="input-group" style="width:170px;">
+                                    <span class="input-group-text small">Gelada</span>
+                                    <InputNumber id="@($"precoG-{produto.Id}")" class="form-control form-control-sm text-end" @bind-Value="produto.PrecoGelada" step="0.01" @onclick:stopPropagation="true" />
+                                </div>
                             </div>
                         }
                         else

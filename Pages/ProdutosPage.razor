@@ -2,21 +2,82 @@
 @inject ApiService _apiService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@using System.Globalization
 
 <PageTitle>Lista de Produtos</PageTitle>
 
 <div id="produtos-barcode-scanner" style="display:none;"></div>
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <button class="btn btn-primary" @onclick="MostrarFormulario">Adicionar Novo Produto</button>
-    <button class="btn btn-sm btn-outline-primary" title="Abrir leitor (câmera)" @onclick="OpenScanner" aria-label="Abrir leitor de códigos">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M10.5 2a.5.5 0 0 1 .5.5V3h1.5A1.5 1.5 0 0 1 14 4.5v7A1.5 1.5 0 0 1 12.5 13H3.5A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3H5v-.5a.5.5 0 0 1 .5-.5h5z"/>
-            <path d="M8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
-            <path d="M8 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
-        </svg>
-    </button>
+<div class="d-flex align-items-center justify-content-end mb-3">
+    <div class="d-flex align-items-center">
+        <button class="btn btn-success btn-sm me-2" title="Adicionar novo produto" @onclick="MostrarFormulario" aria-label="Adicionar produto">+</button>
+        <button class="btn btn-sm btn-outline-primary" title="Abrir leitor (câmera)" @onclick="OpenScanner" aria-label="Abrir leitor de códigos">
+            <!-- camera icon (rounded camera) -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M10.5 3a.5.5 0 0 1 .416.223L11.9 4.7H13.5A1.5 1.5 0 0 1 15 6.2v5.6A1.5 1.5 0 0 1 13.5 13.3H2.5A1.5 1.5 0 0 1 1 11.8V6.2A1.5 1.5 0 0 1 2.5 4.7H4.1l.984-1.477A.5.5 0 0 1 5.5 3h5z"/>
+                <path d="M8 6.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 8a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
+            </svg>
+        </button>
+    </div>
 </div>
+
+@* Brand / Size / Flavor quick filters similar to CaixaPage *@
+@if (marcas != null && marcas.Any())
+{
+    <div class="mb-3">
+        <label class="form-label fw-bold">Marcas</label>
+        <div class="d-flex flex-wrap gap-2">
+            @if (string.IsNullOrEmpty(selectedMarca))
+            {
+                @foreach (var m in marcas)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectMarca(m)">@m</button>
+                }
+            }
+            else
+            {
+                <button class="btn btn-sm btn-primary">@selectedMarca</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectMarca(null)">Limpar</button>
+            }
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(selectedMarca) && sizesForMarca != null && sizesForMarca.Any())
+{
+    <div class="mb-3">
+        <label class="form-label fw-bold">Tamanhos para @selectedMarca</label>
+        <div class="d-flex flex-wrap gap-2">
+            @if (string.IsNullOrEmpty(selectedSize))
+            {
+                @foreach (var s in sizesForMarca)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectSize(s)">@s</button>
+                }
+            }
+            else
+            {
+                <button class="btn btn-sm btn-primary">@selectedSize</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectSize(null)">Limpar</button>
+            }
+        </div>
+    </div>
+}
+
+@if (flavorsForSelection != null && flavorsForSelection.Any())
+{
+    <div class="mb-3">
+        <label class="form-label fw-bold">Sabores para @selectedMarca @selectedSize</label>
+        <div class="d-flex flex-wrap gap-2">
+            @foreach (var f in flavorsForSelection)
+            {
+                var flavorLocal = f; 
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectFlavor(flavorLocal)">@f</button>
+            }
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ClearFlavors()">Limpar</button>
+        </div>
+    </div>
+}
 
 @if (exibirFormulario)
 {
@@ -59,12 +120,15 @@
     </EditForm>
 }
 
-<div class="row mb-3">
-    <div class="col-12">
-        <label class="form-label fw-bold">Pesquisar (nome ou código de barras)</label>
-        <input class="form-control" @bind="searchTerm" @oninput="Search" placeholder="Digite nome ou código" />
+@if (string.IsNullOrEmpty(selectedMarca))
+{
+    <div class="row mb-3">
+        <div class="col-12">
+            <label class="form-label fw-bold">Pesquisar (nome ou código de barras)</label>
+            <input class="form-control" @bind="searchTerm" @oninput="Search" placeholder="Digite nome ou código" />
+        </div>
     </div>
-</div>
+}
 
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
     @if (filteredProdutos != null)
@@ -90,22 +154,46 @@
                             <div class="d-flex gap-2 align-items-center">
                                 <div class="input-group" style="width:170px;">
                                     <span class="input-group-text small">Quente</span>
-                                    <InputNumber id="@($"precoQ-{produto.Id}")" class="form-control form-control-sm text-end" @bind-Value="produto.PrecoQuente" step="0.01" @onclick:stopPropagation="true" />
+                                    <input id="@($"precoQ-{produto.Id}")" class="form-control form-control-sm text-end" value="@(editPrecoQuenteInputs.ContainsKey(produto.Id) ? editPrecoQuenteInputs[produto.Id] : string.Empty)" @oninput="@(e => OnEditPrecoQuenteInput(produto.Id, e))" @onclick:stopPropagation="true" />
+                                    <div class="small text-white-50 mt-1">Atual: R$ @produto.PrecoQuente.ToString("0.00")</div>
                                 </div>
                                 <div class="input-group" style="width:170px;">
                                     <span class="input-group-text small">Gelada</span>
-                                    <InputNumber id="@($"precoG-{produto.Id}")" class="form-control form-control-sm text-end" @bind-Value="produto.PrecoGelada" step="0.01" @onclick:stopPropagation="true" />
+                                    <input id="@($"precoG-{produto.Id}")" class="form-control form-control-sm text-end" value="@(editPrecoGeladaInputs.ContainsKey(produto.Id) ? editPrecoGeladaInputs[produto.Id] : string.Empty)" @oninput="@(e => OnEditPrecoGeladaInput(produto.Id, e))" @onclick:stopPropagation="true" />
+                                    <div class="small text-white-50 mt-1">Atual: R$ @produto.PrecoGelada.ToString("0.00")</div>
                                 </div>
                             </div>
                         }
                         else
                         {
-                            <div class="fw-bold text-truncate">@produto.Nome</div>
-                            <div class="small text-white-50">@categorias.FirstOrDefault(c => c.Id == produto.CategoriaId)?.Nome</div>
-                            <div class="mt-2"><span class="small text-white-50">Quente:</span> <span class="fw-bold">R$ @produto.PrecoQuente.ToString("0.00")</span></div>
-                            <div class="small"><span class="small text-white-50">Gelada:</span> <span class="fw-bold">R$ @produto.PrecoGelada.ToString("0.00")</span></div>
+                            <div class="d-flex flex-column">
+                                <div>
+                                    <div class="fw-bold" style="white-space:normal; word-break:break-word; font-size:0.95rem;">
+                                        @produto.Nome
+                                        @if (!string.IsNullOrWhiteSpace(produto.Barcode))
+                                        {
+                                            <span class="text-white-50" style="font-size:0.85rem; margin-left:6px;">- @produto.Barcode</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="small text-white-50">@categorias.FirstOrDefault(c => c.Id == produto.CategoriaId)?.Nome</div>
+
+                                <div class="d-flex gap-3 mt-2 align-items-end">
+                                    <div>
+                                        <div class="small text-white-50">Quente</div>
+                                        <div class="fw-bold">R$ @produto.PrecoQuente.ToString("0.00")</div>
+                                    </div>
+                                    <div>
+                                        <div class="small text-white-50">Gelada</div>
+                                        <div class="fw-bold">R$ @produto.PrecoGelada.ToString("0.00")</div>
+                                    </div>
+                                </div>
+                            </div>
                         }
                     </div>
+
+                    @* removed duplicate barcode overlay; barcode now shown inline with name *@
 
                     <div class="card-footer bg-transparent d-flex justify-content-end">
                         @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
@@ -158,10 +246,250 @@
 
     private string searchTerm = string.Empty;
     private List<Produto> filteredProdutos = new();
+    private List<string> marcas = new();
+    private string? selectedMarca = null;
+    private List<string> sizesForMarca = new();
+    private string? selectedSize = null;
+    private List<string> flavorsForSelection = new();
+    private Dictionary<string, Produto> flavorToProduct = new(StringComparer.OrdinalIgnoreCase);
+    private List<Produto> allProdutos = new();
+    
+    private void PopulateMarcasFromProdutos(List<Produto> produtos)
+    {
+        var known = new[] { "Brahma", "Skol", "Antarctica", "Original", "Xereta", "Coca Cola", "Coca-Cola", "Fanta", "Heineken", "Budweiser", "Red Bull", "Gaterade", "Petra", "Pepsi",
+        "Sukita", "Corona", "Tubaina", "Lacta", "Eisenbahn", "Baianinha", "Chapinha", "Askov", "Stella", "Monster", "Amstel", "Red label", "Del valle", "Sprite", "Fanta", "Imperio", "Baly",
+        "Crystal", "Gorillaz" };
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in produtos)
+        {
+            var txt = (p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty);
+            foreach (var k in known)
+            {
+                if (!found.Contains(k) && txt.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0)
+                    found.Add(k);
+            }
+        }
+        // normalize certain brand variants (e.g. "Coca Cola" / "Coca-Cola" -> "Coca-cola")
+        if (found.Remove("Coca Cola") | found.Remove("Coca-Cola"))
+        {
+            found.Add("Coca-cola");
+        }
+        marcas = found.OrderBy(m => m).ToList();
+    }
+
+    // return true if the given text contains the brand, accepting orthographic variants
+    private bool BrandMatch(string text, string brand)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(brand)) return false;
+
+        string NormalizeForMatch(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            // lowercase, remove diacritics, normalize separators to space
+            var lower = s.ToLowerInvariant();
+            var formD = lower.Normalize(System.Text.NormalizationForm.FormD);
+            var sb = new System.Text.StringBuilder();
+            foreach (var ch in formD)
+            {
+                var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
+                if (cat != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            }
+            var cleaned = sb.ToString();
+            cleaned = cleaned.Replace('\u00A0', ' ');
+            cleaned = cleaned.Replace('-', ' ');
+            cleaned = cleaned.Replace('_', ' ');
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, "\\s+", " ").Trim();
+            return cleaned;
+        }
+
+        var nText = NormalizeForMatch(text);
+        var nBrand = NormalizeForMatch(brand);
+        if (nText.Contains(nBrand, StringComparison.OrdinalIgnoreCase)) return true;
+
+        // also check without any separators: e.g. "cocacola" in "coca cola"
+        var noSepText = nText.Replace(" ", string.Empty);
+        var noSepBrand = nBrand.Replace(" ", string.Empty);
+        if (!string.IsNullOrEmpty(noSepBrand) && noSepText.Contains(noSepBrand, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return false;
+    }
+
+    private void OnSelectMarca(string? marca)
+    {
+        selectedMarca = marca;
+        // clear dependent selections whenever brand changes
+        sizesForMarca.Clear();
+        selectedSize = null;
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+
+        // filter product grid immediately for this brand
+        if (string.IsNullOrEmpty(marca))
+        {
+            // reset to all
+            filteredProdutos = allProdutos.ToList();
+            return;
+        }
+
+        var sizes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in allProdutos)
+        {
+            if (BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
+            {
+                var s = ExtractSizeFromName(p.Nome) ?? ExtractSizeFromName(p.Detalhe);
+                if (!string.IsNullOrEmpty(s)) sizes.Add(s);
+            }
+        }
+        if (!sizes.Any()) sizes.UnionWith(new[] { "600ml", "350ml", "1L", "2L", "269ml", "dose" });
+        sizesForMarca = sizes.OrderBy(s => s).ToList();
+
+        // filter product grid to this brand
+        filteredProdutos = allProdutos.Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca)).ToList();
+    }
+
+    private string? ExtractSizeFromName(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        var lower = text.ToLowerInvariant();
+        var candidates = new[] { "600ml", "350ml", "269ml", "1l", "2l", "500ml", "dose", "300ml", "250ml", "200ml", "330ml", "330 ml", "2000ml", "20g", "1kg", "35g", "880ml", "1.5L", "473ml",
+        "275ml", "355ml" };
+        foreach (var c in candidates)
+        {
+            if (lower.Contains(c)) return c.ToUpperInvariant();
+        }
+        return null;
+    }
+
+    private bool TryParseDecimalFlexible(string? s, out decimal value)
+    {
+        value = 0m;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        s = s.Trim();
+
+        string normalized = s;
+        bool hasDot = s.IndexOf('.') >= 0;
+        bool hasComma = s.IndexOf(',') >= 0;
+
+        if (hasDot && hasComma)
+        {
+            int lastDot = s.LastIndexOf('.');
+            int lastComma = s.LastIndexOf(',');
+            if (lastComma > lastDot)
+            {
+                normalized = s.Replace(".", string.Empty).Replace(',', '.');
+            }
+            else
+            {
+                normalized = s.Replace(",", string.Empty);
+            }
+        }
+        else if (hasComma && !hasDot)
+        {
+            normalized = s.Replace(',', '.');
+        }
+
+        if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var result))
+        {
+            value = result;
+            return true;
+        }
+
+        if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.CurrentCulture, out result))
+        {
+            value = result;
+            return true;
+        }
+
+        return false;
+    }
+
+    private string? ExtractFlavorFromName(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        var lower = text.ToLowerInvariant();
+        var candidates = new[] { "uva", "maçã", "maca", "laranja", "limão", "limao", "morango", "abacaxi", "cajú", "caju", "guaraná", "guarana",
+        "cola", "baunilha", "chocolate", "melancia", "morango-maracuja", "zero", "sem açúcar", "maracuja", "Limonada", "Tanjerina", "black", "Tradicional", "Tropical", "maca verde",
+        "f vermelhas", "manga", "morango e pêssego", "Maça verde", "Mango loco", "Pipeline" };
+        foreach (var c in candidates)
+        {
+            if (lower.Contains(c)) return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(c.Replace("ç","c"));
+        }
+        return null;
+    }
+
+    private void OnSelectSize(string? size)
+    {
+        selectedSize = size;
+        // clear flavor selection when size changes
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+
+        // if no size selected -> show brand products
+        if (string.IsNullOrEmpty(size))
+        {
+            filteredProdutos = allProdutos.Where(p => ((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)).IndexOf(selectedMarca ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            return;
+        }
+
+        // collect flavors for brand+size and filter products to brand+size
+        var flavors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var brandAndSize = allProdutos.Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+            && (((p.Nome ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0))).ToList();
+
+        foreach (var p in brandAndSize)
+        {
+            var f = ExtractFlavorFromName(p.Nome) ?? ExtractFlavorFromName(p.Detalhe);
+            if (!string.IsNullOrEmpty(f)) flavors.Add(f);
+        }
+
+        flavorsForSelection = flavors.OrderBy(f => f).ToList();
+
+        // populate flavor->product map for quick lookup (first match)
+        flavorToProduct.Clear();
+        foreach (var f in flavorsForSelection)
+        {
+            var match = brandAndSize.FirstOrDefault(p => (((p.Nome ?? string.Empty).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
+                || ((p.Detalhe ?? string.Empty).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)));
+            if (match != null && !flavorToProduct.ContainsKey(f))
+                flavorToProduct[f] = match;
+            else if (match == null)
+            {
+                // try matching flavor against normalized brand variants as well
+                var altFlavor = f.Replace('-', ' ');
+                match = brandAndSize.FirstOrDefault(p => (((p.Nome ?? string.Empty).IndexOf(altFlavor, StringComparison.OrdinalIgnoreCase) >= 0)
+                    || ((p.Detalhe ?? string.Empty).IndexOf(altFlavor, StringComparison.OrdinalIgnoreCase) >= 0)));
+                if (match != null && !flavorToProduct.ContainsKey(f))
+                    flavorToProduct[f] = match;
+            }
+        }
+
+        // set filtered products to brand+size
+        filteredProdutos = brandAndSize;
+    }
+
+    private void OnSelectFlavor(string flavor)
+    {
+        if (string.IsNullOrEmpty(flavor)) return;
+        if (!flavorToProduct.TryGetValue(flavor, out var prod)) return;
+        // filter products for current brand + size + flavor
+        filteredProdutos = allProdutos.Where(p => ((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)).IndexOf(selectedMarca ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0
+            && (((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0))
+            && (((p.Nome ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0))).ToList();
+    }
+
+    private void ClearFlavors()
+    {
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+    }
     private List<Categoria> categorias = new();
     private Produto novoProduto = new Produto();
     private bool exibirFormulario = false;
     private Dictionary<int, bool> editandoProdutos = new();
+    // temporary input buffers for editing prices so inputs can start empty
+    private Dictionary<int, string> editPrecoQuenteInputs = new();
+    private Dictionary<int, string> editPrecoGeladaInputs = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -174,6 +502,8 @@
 
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos ?? new List<Produto>();
+        allProdutos = filteredProdutos;
+        PopulateMarcasFromProdutos(allProdutos);
 
         var (cats, _) = await _apiService.GetCategorias();
         categorias = cats ?? new List<Categoria>();
@@ -237,25 +567,65 @@
     private void EditarProduto(int id)
     {
         editandoProdutos[id] = true;
+        // initialize temp inputs empty so user types fresh values
+        editPrecoQuenteInputs[id] = string.Empty;
+        editPrecoGeladaInputs[id] = string.Empty;
     }
 
     private Task EditRowClicked(int id)
     {
         if (editandoProdutos.ContainsKey(id) && editandoProdutos[id])
             return Task.CompletedTask;
-
         editandoProdutos[id] = true;
+        // initialize temp inputs empty when entering edit mode via row click
+        editPrecoQuenteInputs[id] = string.Empty;
+        editPrecoGeladaInputs[id] = string.Empty;
         return Task.CompletedTask;
     }
 
     private async Task SalvarEdicao(Produto produto)
     {
+        // If user typed new prices in the temporary inputs, apply them to the model before saving
+        if (editPrecoQuenteInputs.TryGetValue(produto.Id, out var precoQStr) && !string.IsNullOrWhiteSpace(precoQStr))
+        {
+            if (TryParseDecimalFlexible(precoQStr, out var precoQ))
+                produto.PrecoQuente = Math.Round(precoQ, 2);
+        }
+
+        if (editPrecoGeladaInputs.TryGetValue(produto.Id, out var precoGStr) && !string.IsNullOrWhiteSpace(precoGStr))
+        {
+            if (TryParseDecimalFlexible(precoGStr, out var precoG))
+                produto.PrecoGelada = Math.Round(precoG, 2);
+        }
+
         var sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
         if (sucesso)
         {
             editandoProdutos[produto.Id] = false;
-            var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-            filteredProdutos = todosProdutos ?? new List<Produto>();
+
+            // If no brand filter is active, refresh full list from server.
+            // Otherwise update the local collections so we don't fetch everything unnecessarily.
+            if (string.IsNullOrEmpty(selectedMarca))
+            {
+                var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+                filteredProdutos = todosProdutos ?? new List<Produto>();
+                allProdutos = filteredProdutos;
+                PopulateMarcasFromProdutos(allProdutos);
+            }
+            else
+            {
+                // update item in allProdutos
+                var ai = allProdutos.FindIndex(p => p.Id == produto.Id);
+                if (ai >= 0) allProdutos[ai] = produto;
+
+                // update item in filteredProdutos
+                var fi = filteredProdutos.FindIndex(p => p.Id == produto.Id);
+                if (fi >= 0) filteredProdutos[fi] = produto;
+            }
+
+            // clear temp inputs for this produto
+            if (editPrecoQuenteInputs.ContainsKey(produto.Id)) editPrecoQuenteInputs.Remove(produto.Id);
+            if (editPrecoGeladaInputs.ContainsKey(produto.Id)) editPrecoGeladaInputs.Remove(produto.Id);
         }
         else
         {
@@ -266,5 +636,20 @@
     private void CancelarEdicao(int id)
     {
         editandoProdutos[id] = false;
+        // clear temp inputs when cancelling
+        if (editPrecoQuenteInputs.ContainsKey(id)) editPrecoQuenteInputs.Remove(id);
+        if (editPrecoGeladaInputs.ContainsKey(id)) editPrecoGeladaInputs.Remove(id);
+    }
+
+    private void OnEditPrecoQuenteInput(int produtoId, ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString() ?? string.Empty;
+        editPrecoQuenteInputs[produtoId] = s;
+    }
+
+    private void OnEditPrecoGeladaInput(int produtoId, ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString() ?? string.Empty;
+        editPrecoGeladaInputs[produtoId] = s;
     }
 }

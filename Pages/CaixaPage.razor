@@ -28,17 +28,71 @@
 
     <div class="row g-3 mb-3">
         <div class="col-12">
-            <input class="form-control form-control-lg"
-                   placeholder="Pesquisar por nome ou código de barras"
-                   value="@searchTerm"
-                   @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
-                   @onkeyup="OnSearchKeyUp" />
-           @*  <div class="mt-2">
-                <button class="btn btn-outline-primary mt-2 me-2" @onclick="OpenScanner">Abrir Leitor (câmera)</button>
-                <button class="btn btn-outline-secondary mt-2" @onclick="OpenNativeScanner">Abrir Leitor (app)</button>
-            </div> *@
+            @if (string.IsNullOrEmpty(selectedMarca))
+            {
+                <input class="form-control form-control-lg"
+                       placeholder="Pesquisar por nome ou código de barras"
+                       value="@searchTerm"
+                       @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
+                       @onkeyup="OnSearchKeyUp" />
+            }
         </div>
     </div>
+
+    @* Brand quick-filter cards *@
+    @if (marcas != null && marcas.Any())
+    {
+        <div class="mb-3">
+            <label class="form-label fw-bold">Marcas</label>
+            <div class="d-flex flex-wrap gap-2">
+                @if (string.IsNullOrEmpty(selectedMarca))
+                {
+                    @foreach (var m in marcas)
+                    {
+                        <button class="btn btn-sm btn-outline-light" @onclick="() => OnSelectMarca(m)">@m</button>
+                    }
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-primary">@selectedMarca</button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectMarca(null)">Limpar</button>
+                }
+            </div>
+        </div>
+    }
+
+    @* Size options for selected brand *@
+    @if (!string.IsNullOrEmpty(selectedMarca) && sizesForMarca != null && sizesForMarca.Any())
+    {
+        <div class="mb-3">
+            <label class="form-label fw-bold">Opções para @selectedMarca</label>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var size in sizesForMarca)
+                {
+                    <div class="card p-2 bg-dark text-white" style="min-width:140px; cursor:pointer;" @onclick="() => OnSelectSize(size)">
+                        <div class="fw-bold">@size</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* Flavor cards shown after selecting size (if available) *@
+    @if (flavorsForSelection != null && flavorsForSelection.Any())
+    {
+        <div class="mb-3">
+            <label class="form-label fw-bold">Sabores para @selectedMarca @selectedSize</label>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var f in flavorsForSelection)
+                {
+                    <div class="card p-2 bg-dark text-white" style="min-width:120px; cursor:pointer;" @onclick="() => OnSelectFlavor(f)">
+                        <div class="fw-bold">@f</div>
+                    </div>
+                }
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ClearFlavors()">Limpar</button>
+            </div>
+        </div>
+    }
 
     @if (showProductList)
     {
@@ -47,16 +101,19 @@
                 @foreach (var Produto in filteredProdutos)
                 {
                     <div class="col">
-                        <div class="card h-100 shadow-sm small" @onclick="() => OpenQuantityModal(Produto)" style="cursor:pointer;">
-
-
-                            <div class="card-body p-1 d-flex flex-column">
-                                <div class="card-title mb-1" title="@Produto.Nome" style="font-size:0.85rem;">@Produto.Nome</div>
-                                @if (!string.IsNullOrWhiteSpace(Produto.Detalhe))
-                                {
-                                <div class="card-text small text-muted" style="white-space:normal;">@Produto.Detalhe</div>
-                                }
-                                <div class="text-success mb-1 mt-2" style="font-size:0.75rem;">R$ @(GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                    <div class="card h-100 shadow-sm small" style="cursor:pointer;">
+                            <div class="card-body p-1 d-flex flex-column" @onclick="() => OpenQuantityModal(Produto)">
+                                <div class="card-title mb-1" title="@Produto.Nome" style="font-size:0.95rem; white-space:normal;">@Produto.Nome</div>
+                                <div class="d-flex gap-2 mt-2 align-items-end">
+                                    <div class="text-center">
+                                        <div class="small text-white-50">Quente</div>
+                                        <div class="fw-bold">R$ @(Produto.PrecoQuente > 0 ? Produto.PrecoQuente.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="small text-white-50">Gelado</div>
+                                        <div class="fw-bold">R$ @(Produto.PrecoGelada > 0 ? Produto.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -449,6 +506,265 @@
     private string clienteNome = string.Empty;
     private string vendedorNome = string.Empty;
     private List<Produto> filteredProdutos = new();
+    private List<string> marcas = new();
+    private string? selectedMarca = null;
+    private List<string> sizesForMarca = new();
+    private List<Produto> allProdutos = new();
+    private string? selectedSize = null;
+    private List<string> flavorsForSelection = new();
+    private Dictionary<string, Produto> flavorToProduct = new(StringComparer.OrdinalIgnoreCase);
+
+    private void PopulateMarcasFromProdutos(List<Produto> produtos)
+    {
+        // crude brand list by scanning product.Nome/Detalhe
+        var known = new[] { "Brahma", "Skol", "Antarctica", "Original", "Xereta", "Coca Cola", "Coca-Cola", "Fanta", "Heineken", "Budweiser", "Red Bull", "Gaterade", "Petra", "Pepsi",
+        "Sukita", "Corona", "Tubaina", "Lacta", "Eisenbahn", "Baianinha", "Chapinha", "Askov", "Stella", "Monster", "Amstel", "Red label", "Del valle", "Sprite", "Fanta", "Imperio", "Baly",
+        "Crystal", "Gorillaz"};
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in produtos)
+        {
+            var txt = (p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty);
+            foreach (var k in known)
+            {
+                if (!found.Contains(k) && txt.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0)
+                    found.Add(k);
+            }
+        }
+        // normalize certain brand variants (e.g. "Coca Cola" / "Coca-Cola" -> "Coca-cola")
+        if (found.Remove("Coca Cola") | found.Remove("Coca-Cola"))
+        {
+            found.Add("Coca-cola");
+        }
+        marcas = found.OrderBy(m => m).ToList();
+    }
+
+    // return true if the given text contains the brand, accepting orthographic variants
+    private bool BrandMatch(string text, string brand)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(brand)) return false;
+
+        string NormalizeForMatch(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var lower = s.ToLowerInvariant();
+            var formD = lower.Normalize(System.Text.NormalizationForm.FormD);
+            var sb = new System.Text.StringBuilder();
+            foreach (var ch in formD)
+            {
+                var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
+                if (cat != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            }
+            var cleaned = sb.ToString();
+            cleaned = cleaned.Replace('\u00A0', ' ');
+            cleaned = cleaned.Replace('-', ' ');
+            cleaned = cleaned.Replace('_', ' ');
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, "\\s+", " ").Trim();
+            return cleaned;
+        }
+
+        var nText = NormalizeForMatch(text);
+        var nBrand = NormalizeForMatch(brand);
+        if (nText.Contains(nBrand, StringComparison.OrdinalIgnoreCase)) return true;
+
+        var noSepText = nText.Replace(" ", string.Empty);
+        var noSepBrand = nBrand.Replace(" ", string.Empty);
+        if (!string.IsNullOrEmpty(noSepBrand) && noSepText.Contains(noSepBrand, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return false;
+    }
+
+    private void OnSelectMarca(string? marca)
+    {
+        selectedMarca = marca;
+        sizesForMarca.Clear();
+        // if clearing brand, reset dependent UI (sizes, flavors, products)
+        if (string.IsNullOrEmpty(marca))
+        {
+            selectedSize = null;
+            flavorsForSelection.Clear();
+            flavorToProduct.Clear();
+            filteredProdutos = new List<Produto>();
+            showProductList = false;
+            return;
+        }
+
+        // collect sizes from product names like '600ml', '350ml', '1L', '2L', 'dose'
+        var sizes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in allProdutos ?? new List<Produto>())
+        {
+            if (BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
+            {
+                var s = ExtractSizeFromName(p.Nome) ?? ExtractSizeFromName(p.Detalhe);
+                if (!string.IsNullOrEmpty(s)) sizes.Add(s);
+            }
+        }
+
+        // add some common sizes if nothing found
+        if (!sizes.Any())
+        {
+            sizes.UnionWith(new[] { "600ml", "350ml", "1L", "2L", "269ml", "dose" });
+        }
+
+        sizesForMarca = sizes.OrderBy(s => s).ToList();
+
+        // set filtered products to this brand
+        filteredProdutos = (allProdutos ?? new List<Produto>())
+            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
+            .ToList();
+        showProductList = filteredProdutos.Any();
+    }
+
+    private Produto? FindProductForBrandAndSize(string marca, string size)
+    {
+        return (allProdutos ?? new List<Produto>()).FirstOrDefault(p =>
+            BrandMatch(((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)), marca)
+            && (((p.Nome ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0))
+        );
+    }
+
+    private string? ExtractSizeFromName(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        // simple regex-like checks
+        var lower = text.ToLowerInvariant();
+        var candidates = new[] { "600ml", "350ml", "269ml", "1l", "2l", "500ml", "dose", "300ml", "250ml", "200ml", "330ml", "330 ml", "2000ml", "20g", "1kg", "35g", "880ml", "1.5L", "473ml",
+        "275ml", "355ml"};
+        foreach (var c in candidates)
+        {
+            if (lower.Contains(c)) return c.ToUpperInvariant();
+        }
+        return null;
+    }
+
+    private void OnSelectSize(Produto? produto)
+    {
+        // When user selects a size card we want to check if there are flavor variants for this brand+size.
+        // If flavors exist show flavor cards; otherwise open quantity modal for the product (quick add).
+        selectedSize = null;
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+
+        if (produto == null)
+            return;
+
+        // determine size string by inspecting product name/detail (fallback to previously selected size heuristics)
+        selectedSize = ExtractSizeFromName(produto.Nome) ?? ExtractSizeFromName(produto.Detalhe);
+
+        // collect flavors for same brand and size
+        if (!string.IsNullOrEmpty(selectedMarca))
+        {
+            foreach (var p in allProdutos ?? new List<Produto>())
+            {
+                if (!BrandMatch(((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)), selectedMarca ?? string.Empty))
+                    continue;
+
+                // match size
+                var s = ExtractSizeFromName(p.Nome) ?? ExtractSizeFromName(p.Detalhe);
+                if (string.IsNullOrEmpty(selectedSize) || string.IsNullOrEmpty(s) || !string.Equals(s, selectedSize, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var f = ExtractFlavorFromName(p.Nome) ?? ExtractFlavorFromName(p.Detalhe);
+                if (!string.IsNullOrEmpty(f) && !flavorToProduct.ContainsKey(f))
+                {
+                    flavorToProduct[f] = p;
+                    flavorsForSelection.Add(f);
+                }
+            }
+        }
+
+        if (flavorsForSelection.Any())
+        {
+            // show flavor cards (UI reads flavorsForSelection)
+            StateHasChanged();
+            return;
+        }
+
+        // no flavors -> proceed to modal for the selected product
+        OpenQuantityModal(produto);
+        selectedQuantity = 1;
+        selectedQuantityBuffer = "1";
+    }
+
+    // overload for clicking a size card when we only have the size string
+    private void OnSelectSize(string size)
+    {
+        selectedSize = size;
+        // filter products by brand+size
+        filteredProdutos = (allProdutos ?? new List<Produto>())
+            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+                && (((p.Nome ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0)))
+            .ToList();
+
+        showProductList = filteredProdutos.Any();
+
+        // repopulate flavors (only if there are any)
+        var flavors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in filteredProdutos)
+        {
+            var f = ExtractFlavorFromName(p.Nome) ?? ExtractFlavorFromName(p.Detalhe);
+            if (!string.IsNullOrEmpty(f)) flavors.Add(f);
+        }
+        flavorsForSelection = flavors.Any() ? flavors.OrderBy(f => f).ToList() : new List<string>();
+        flavorToProduct.Clear();
+        foreach (var f in flavorsForSelection)
+        {
+            var match = filteredProdutos.FirstOrDefault(p => (((p.Nome ?? string.Empty).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
+                || ((p.Detalhe ?? string.Empty).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)));
+            if (match != null && !flavorToProduct.ContainsKey(f)) flavorToProduct[f] = match;
+        }
+    }
+
+    private void OnSelectFlavor(string flavor)
+    {
+        if (string.IsNullOrEmpty(flavor)) return;
+        // filter products for current brand + size + flavor
+        filteredProdutos = (allProdutos ?? new List<Produto>())
+            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+                && (string.IsNullOrEmpty(selectedSize) || ((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0))
+                && (((p.Nome ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0)))
+            .ToList();
+
+        // do not open modal when selecting a flavor — only filter products
+        // keep flavor buttons visible until user clears
+        showProductList = filteredProdutos.Any();
+        StateHasChanged();
+    }
+
+    private void ClearFlavors()
+    {
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+        // when clearing flavors, if a size is selected, keep filteredProdutos to brand+size
+        if (!string.IsNullOrEmpty(selectedMarca) && !string.IsNullOrEmpty(selectedSize))
+        {
+            filteredProdutos = (allProdutos ?? new List<Produto>())
+                .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+                    && (((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0)))
+                .ToList();
+        }
+        else if (!string.IsNullOrEmpty(selectedMarca))
+        {
+            filteredProdutos = (allProdutos ?? new List<Produto>())
+                .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private string? ExtractFlavorFromName(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        var lower = text.ToLowerInvariant();
+        var candidates = new[] { "uva", "maçã", "maca", "laranja", "limão", "limao", "morango", "abacaxi", "cajú", "caju", "guaraná", "guarana", 
+        "cola", "baunilha", "chocolate", "melancia", "morango-maracuja", "zero", "sem açúcar", "maracuja", "Limonada", "Tanjerina", "black", "Tradicional", "Tropical", "maca verde",
+        "f vermelhas", "manga", "morango e pêssego", "Maça verde", "Mango loco", "Pipeline" };
+        foreach (var c in candidates)
+        {
+            if (lower.Contains(c)) return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(c.Replace("ç","c"));
+        }
+        return null;
+    }
     private List<Produto> maisVendidos = new();
     private List<CartItem> cart = new();
     private List<string> priceInputs = new();
@@ -1367,6 +1683,11 @@ private void OnUsarPagamento2Changed()
 
         var (produtosMaisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
         filteredProdutos = produtosMaisVendidos ?? new List<Produto>();
+
+        // load all products once for brand/size quick filters
+        var (all, errAll) = await _apiService.GetTodosProdutos();
+        allProdutos = all ?? new List<Produto>();
+        PopulateMarcasFromProdutos(allProdutos);
 
         // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
         if (vendedores == null || !vendedores.Any())

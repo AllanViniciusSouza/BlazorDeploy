@@ -29,12 +29,14 @@
 
 <div class="mb-3 d-flex align-items-center gap-3">
     <label class="fw-bold">Filtrar status:</label>
-    <div class="btn-group" role="group" aria-label="Filtro status">
-        <button class="btn btn-outline-secondary @(string.IsNullOrEmpty(statusFilter) ? "active" : "")" @onclick='() => SetStatusFilter(string.Empty)'>Todos</button>
-        <button class="btn btn-outline-primary @(statusFilter == "Em entrega" ? "active" : "")" @onclick='() => SetStatusFilter("Em entrega")'>Em entrega</button>
-        <button class="btn btn-outline-warning @(statusFilter == "Retirada" ? "active" : "")" @onclick='() => SetStatusFilter("Retirada")'>Retirada</button>
-        <button class="btn btn-outline-info @(statusFilter == "A Prazo" ? "active" : "")" @onclick='() => SetStatusFilter("A Prazo")'>A Prazo</button>
-        <button class="btn btn-outline-success @(statusFilter == "Finalizado" ? "active" : "")" @onclick='() => SetStatusFilter("Finalizado")'>Finalizado</button>
+    <div>
+        <select class="form-select form-select-sm" style="min-width:180px;" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" value="@statusFilter">
+            <option value="">Todos</option>
+            <option value="Em entrega">Em entrega</option>
+            <option value="Retirada">Retirada</option>
+            <option value="A Prazo">A Prazo</option>
+            <option value="Finalizado">Finalizado</option>
+        </select>
     </div>
 </div>
 

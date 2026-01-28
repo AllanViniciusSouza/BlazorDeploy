@@ -277,9 +277,8 @@
                 </div>
                     <div class="flex-fill">
                     <label class="form-label">Valor (principal)</label>
-                    <input type="number" step="1.00" class="form-control" style="max-width:220px;" placeholder="Valor"
-                           value="@(pagamento1.HasValue ? pagamento1.Value.ToString("0.00") : string.Empty)"
-                           @oninput="@(e => OnPagamento1Input(e))"
+                    <input type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor"
+                           @bind="Pagamento1Text"
                            disabled="@(!UsarPagamento2)" />
                     <div class="col-md-6">
                         @if (formaPagamentoSelecionada == "Dinheiro")
@@ -361,17 +360,17 @@
                     @foreach (var v in vendedores)
                     {
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => vendedorNome = v" checked="@(vendedorNome == v)" />
+                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => OnVendedorSelected(v)" checked="@(vendedorNome == v)" />
                             <label class="form-check-label ms-2" for="v_@v">@v</label>
                         </div>
                     }
 
                     <div class="form-check mt-1">
-                        <input class="form-check-input" type="radio" name="vendedor" id="v_outro" @onchange="() => vendedorNome = string.Empty" checked="@(!string.IsNullOrEmpty(vendedorNome) && !vendedores.Contains(vendedorNome))" />
+                        <input class="form-check-input" type="radio" name="vendedor" id="v_outro" @onchange="() => OnOtherVendedorSelected()" checked="@isOtherVendedorSelected" />
                         <label class="form-check-label ms-2" for="v_outro">Outro</label>
                     </div>
 
-                    @if (string.IsNullOrEmpty(vendedorNome) || !vendedores.Contains(vendedorNome))
+                    @if (isOtherVendedorSelected)
                     {
                         <input class="form-control form-control-sm mt-1" @bind="vendedorNome" placeholder="Digite o nome do vendedor" />
                     }
@@ -422,18 +421,16 @@
             </div>
         </div>
 
-    <button class="btn btn-success btn-lg w-100 mt-3"
-            @onclick="FinalizePurchase"
-            disabled="@(!cart.Any() || string.IsNullOrEmpty(formaPagamentoSelecionada) || string.IsNullOrEmpty(pedidoStatus) || isProcessing)">
-        @if (isProcessing)
-        {
-            <span>Processando...</span>
-        }
-        else
-        {
+    @if (cart.Any() && !string.IsNullOrEmpty(formaPagamentoSelecionada) && !string.IsNullOrEmpty(pedidoStatus) && !isProcessing)
+    {
+        <button class="btn btn-success btn-lg w-100 mt-3" @onclick="FinalizePurchase">
             <span>Finalizar Compra</span>
-        }
-    </button>
+        </button>
+    }
+    else
+    {
+        <div class="mt-3"></div>
+    }
 </div>
 
 
@@ -795,9 +792,11 @@ private string? selectedTemperatura = null;
     private decimal? pagamento1;
     private decimal? pagamento2;
     private List<string> vendedores = new();
+    private bool isOtherVendedorSelected = false;
+    private string pagamento1Text = string.Empty;
     private bool UsarPagamento2 = false;
     private bool SecondaryCalculated = false;
-    private string pedidoStatus = string.Empty;
+    private string pedidoStatus = "Finalizado";
     private string PedidoStatus
     {
         get => pedidoStatus;
@@ -814,6 +813,36 @@ private string? selectedTemperatura = null;
     
     private void SelectVendedor(string nome) => vendedorNome = nome;
     private void SelectStatus(string status) => pedidoStatus = status;
+
+    private void OnVendedorSelected(string v)
+    {
+        vendedorNome = v;
+        isOtherVendedorSelected = false;
+    }
+
+    private void OnOtherVendedorSelected()
+    {
+        vendedorNome = string.Empty;
+        isOtherVendedorSelected = true;
+    }
+
+    private string Pagamento1Text
+    {
+        get => pagamento1Text;
+        set
+        {
+            pagamento1Text = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(pagamento1Text))
+            {
+                pagamento1 = null;
+            }
+            else if (TryParseDecimalFlexible(pagamento1Text, out var v))
+            {
+                pagamento1 = Math.Round(v, 2);
+            }
+            RecalculateSecondary();
+        }
+    }
 
     // scanner interop fields moved into code-behind section
     private DotNetObjectReference<object>? _dotNetRef;
@@ -1193,6 +1222,7 @@ private string? selectedTemperatura = null;
         if (!UsarPagamento2)
         {
             pagamento1 = Math.Round(cart.Sum(p => p.Total), 2);
+            pagamento1Text = pagamento1.HasValue ? pagamento1.Value.ToString("0.00", CultureInfo.CurrentCulture) : string.Empty;
         }
         // if UsarPagamento2 is true, do not overwrite user input
     }
@@ -1563,20 +1593,21 @@ private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
         StateHasChanged();
     }
 
-private void OnPagamento1Input(ChangeEventArgs e)
-{
-    var s = e?.Value?.ToString();
-    if (string.IsNullOrWhiteSpace(s))
+    private void OnPagamento1Input(ChangeEventArgs e)
     {
-        pagamento1 = null;
-    }
-    else if (TryParseDecimalFlexible(s, out var v))
-    {
-        pagamento1 = Math.Round(v, 2);
-    }
+        var s = e?.Value?.ToString() ?? string.Empty;
+        pagamento1Text = s;
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            pagamento1 = null;
+        }
+        else if (TryParseDecimalFlexible(s, out var v))
+        {
+            pagamento1 = Math.Round(v, 2);
+        }
 
-    RecalculateSecondary();
-}
+        RecalculateSecondary();
+    }
 
 private void OnUsarPagamento2Changed()
 {
@@ -1692,8 +1723,18 @@ private void OnUsarPagamento2Changed()
         // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
         if (vendedores == null || !vendedores.Any())
         {
-            vendedores = new List<string> { "Ronaldo", "Neno", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
+            vendedores = new List<string> { "Ronaldo", "Nathan", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
         }
+        try
+        {
+            var last = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastVendedor");
+            if (!string.IsNullOrEmpty(last))
+            {
+                vendedorNome = last;
+                isOtherVendedorSelected = !vendedores.Contains(vendedorNome);
+            }
+        }
+        catch { }
     }
 
     private async Task BuscarSugestoesComanda(ChangeEventArgs e)
@@ -1944,7 +1985,11 @@ private void OnUsarPagamento2Changed()
         UsarPagamento2 = false;
 
         clienteNome = string.Empty;
+        // persist last vendedor
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastVendedor", vendedorNome ?? string.Empty); } catch { }
+        // reset vendedor and set default back to last or Finalizado
         vendedorNome = string.Empty;
+        pedidoStatus = "Finalizado";
         // clear radio selections
         formaPagamentoSelecionada = string.Empty;
         formaPagamento2 = string.Empty;

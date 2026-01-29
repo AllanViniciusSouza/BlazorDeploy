@@ -5,6 +5,18 @@
 
 <h3>Gerenciar Caixa</h3>
 
+<!-- Current caixa value (top-right) -->
+<div class="position-fixed" style="top:12px; right:12px; z-index:2000;">
+    <div class="card p-2 shadow-sm text-end" style="min-width:200px;">
+        <div class="small text-muted">Caixa atual</div>
+        <div class="fw-bold fs-5">R$ @currentCaixa.ToString("0.00")</div>
+        @if (caixaAberto != null)
+        {
+            <div class="small text-muted">Aberto em @caixaAberto.DataAbertura.ToString("g")</div>
+        }
+    </div>
+</div>
+
 @if (carregando)
 {
     <p>Carregando status do caixa...</p>
@@ -27,6 +39,26 @@ else if (caixaAberto == null)
 
         <button class="btn btn-success" type="submit">Abrir Caixa</button>
     </EditForm>
+
+    <div class="card mt-3 p-3">
+        <h5>Registrar Retirada do Caixa</h5>
+        <div class="mb-2">
+            <label>Valor</label>
+            <InputNumber @bind-Value="retiradaValor" class="form-control" step="0.01" />
+        </div>
+        <div class="mb-2">
+            <label>Descrição</label>
+            <InputText @bind-Value="retiradaDescricao" class="form-control" />
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-danger" @onclick="RegistrarRetiradaAsync" disabled="@(isRegistrandoRetirada || retiradaValor <= 0)">Registrar Retirada</button>
+            <button class="btn btn-secondary" @onclick="LimparRetirada">Limpar</button>
+        </div>
+        @if (!string.IsNullOrEmpty(retiradaMensagem))
+        {
+            <div class="mt-2 text-muted">@retiradaMensagem</div>
+        }
+    </div>
 }
 else
 {
@@ -96,6 +128,15 @@ else
     private string mensagem;
     private bool carregando = true;
 
+    // current caixa computed value
+    private decimal currentCaixa = 0m;
+
+    // retirada fields
+    private decimal retiradaValor = 0m;
+    private string retiradaDescricao = string.Empty;
+    private bool isRegistrandoRetirada = false;
+    private string retiradaMensagem = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
@@ -120,10 +161,109 @@ else
             }
 
             carregando = false;
+            // compute current caixa value after loading
+            await ComputeCurrentCaixaAsync();
         }
         catch (Exception ex)
         {
             mensagem = $"Erro ao carregar: {ex.Message}";
+        }
+    }
+
+    private async Task ComputeCurrentCaixaAsync()
+    {
+        // default to zero
+        currentCaixa = 0m;
+        try
+        {
+            if (caixaAberto == null) return;
+
+            // start with abertura value
+            currentCaixa = caixaAberto.ValorAbertura;
+
+            // fetch vendas em dinheiro desde a abertura
+            var since = caixaAberto.DataAbertura;
+            (List<Pedido>? pedidos, string? err) = await _apiService.GetPedidosPorData(since.Date);
+            if (pedidos != null)
+            {
+                // include only pedidos after abertura time
+                var vendasEmDinheiro = pedidos
+                    .Where(p => p.DataPedido.HasValue && p.DataPedido.Value >= since)
+                    .Where(p => string.Equals(p.FormaPagamento, "Dinheiro", StringComparison.OrdinalIgnoreCase) || string.Equals(p.FormaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.ValorPago1 ?? 0m + (p.ValorPago2 ?? 0m));
+
+                currentCaixa += vendasEmDinheiro;
+            }
+
+            // subtract previously recorded retiradas (Despesas categoria 'Caixa'?)
+            (List<BlazorDeploy.Models.Despesas>? despesas, string? dex) = await _apiService.GetDespesasAsync();
+            if (despesas != null)
+            {
+                var retiradas = despesas
+                    .Where(d => d.Data >= since && string.Equals(d.Categoria, "Caixa", StringComparison.OrdinalIgnoreCase))
+                    .Sum(d => d.Valor);
+
+                currentCaixa -= retiradas;
+            }
+        }
+        catch { }
+    }
+
+    private void LimparRetirada()
+    {
+        retiradaValor = 0m;
+        retiradaDescricao = string.Empty;
+        retiradaMensagem = string.Empty;
+    }
+
+    private async Task RegistrarRetiradaAsync()
+    {
+        if (caixaAberto == null)
+        {
+            retiradaMensagem = "Nenhum caixa aberto.";
+            return;
+        }
+
+        if (retiradaValor <= 0)
+        {
+            retiradaMensagem = "Informe um valor válido.";
+            return;
+        }
+
+        isRegistrandoRetirada = true;
+        try
+        {
+            var desp = new BlazorDeploy.Models.Despesas
+            {
+                Data = DateTime.Now,
+                Descricao = retiradaDescricao ?? "Retirada de caixa",
+                Categoria = "Caixa",
+                FormaPagamento = "Dinheiro",
+                Valor = retiradaValor,
+                Parcelas = 1,
+                Observacao = retiradaDescricao
+            };
+
+            var res = await _apiService.AdicionarDespesaAsync(desp);
+            if (res.Data)
+            {
+                retiradaMensagem = "Retirada registrada com sucesso.";
+                // recompute caixa
+                await ComputeCurrentCaixaAsync();
+                LimparRetirada();
+            }
+            else
+            {
+                retiradaMensagem = "Falha ao registrar retirada: " + res.ErrorMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            retiradaMensagem = "Erro: " + ex.Message;
+        }
+        finally
+        {
+            isRegistrandoRetirada = false;
         }
     }
 

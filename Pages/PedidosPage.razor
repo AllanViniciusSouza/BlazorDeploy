@@ -27,6 +27,9 @@
     <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
 </div>
 
+<!-- Refresh button (top-right) -->
+<button class="btn btn-outline-secondary position-fixed" style="top:12px; right:12px; z-index:2000;" @onclick="RefreshPageAsync" title="Atualizar página">⟳</button>
+
 <div class="mb-3 d-flex align-items-center gap-3">
     <label class="fw-bold">Filtrar status:</label>
     <div>
@@ -1211,6 +1214,19 @@ else
         pedidosHoje = pedidosPorData.ToList();
         await RecomputeTotals();
         StateHasChanged();
+    }
+
+    private async Task RefreshPageAsync()
+    {
+        try
+        {
+            // re-run the search for the current selected date
+            await BuscarPedidosPorData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao atualizar página: " + ex.Message);
+        }
     }
 
     private async Task ToggleDetails(int pedidoId)

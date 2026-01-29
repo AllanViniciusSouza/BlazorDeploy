@@ -599,17 +599,30 @@
         }
 
         var sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
-        if (sucesso)
+            if (sucesso)
         {
             editandoProdutos[produto.Id] = false;
 
             // If no brand filter is active, refresh full list from server.
-            // Otherwise update the local collections so we don't fetch everything unnecessarily.
+            // Preserve current searchTerm so the user's filter remains active after save.
             if (string.IsNullOrEmpty(selectedMarca))
             {
                 var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-                filteredProdutos = todosProdutos ?? new List<Produto>();
-                allProdutos = filteredProdutos;
+                allProdutos = todosProdutos ?? new List<Produto>();
+
+                if (string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    filteredProdutos = allProdutos.ToList();
+                }
+                else
+                {
+                    var term = searchTerm.Trim();
+                    filteredProdutos = allProdutos
+                        .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(term, StringComparison.OrdinalIgnoreCase))
+                                 || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+                }
+
                 PopulateMarcasFromProdutos(allProdutos);
             }
             else

@@ -36,6 +36,78 @@
                        @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
                        @onkeyup="OnSearchKeyUp" />
             }
+
+@* Numeric keypad overlay *@
+<div id="numeric-keypad" class="position-fixed" style="display:none; z-index:1050; right:20px; bottom:120px;" onmousedown="event.preventDefault();">
+    <div class="card p-2 shadow-lg" style="width:220px;">
+        <div class="d-grid gap-2" style="grid-template-columns: repeat(3, 1fr);">
+            @for (int n = 1; n <= 9; n++)
+            {
+                <button class="btn btn-secondary" type="button" @onclick="@(() => OnKeypadClick(n.ToString()))">@n</button>
+            }
+            <button class="btn btn-secondary" type="button" @onclick="@(() => OnKeypadClick("."))">.</button>
+            <button class="btn btn-secondary" type="button" @onclick="@(() => OnKeypadClick("0"))">0</button>
+            <button class="btn btn-danger" type="button" @onclick="OnKeypadBackspace">⌫</button>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+            <button class="btn btn-outline-primary" @onclick="OnKeypadOk">OK</button>
+            <button class="btn btn-outline-secondary" @onclick="HideNumericKeypad">Fechar</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _activeKeypadTarget = null;
+    private DotNetObjectReference<object>? _dotRefForKeypad;
+
+    private async Task ShowNumericKeypadAsync(string elementId)
+    {
+        _activeKeypadTarget = elementId;
+        await JS.InvokeVoidAsync("numericKeypad.show", elementId);
+    }
+
+    private async Task HideNumericKeypad()
+    {
+        _activeKeypadTarget = null;
+        await JS.InvokeVoidAsync("numericKeypad.hide");
+    }
+
+    private async Task HideNumericKeypadWithDelay(FocusEventArgs e)
+    {
+        // delay to allow click on keypad buttons
+        await Task.Delay(150);
+        if (!string.IsNullOrEmpty(_activeKeypadTarget))
+        {
+            // if still active, keep it; otherwise hide
+        }
+        else
+        {
+            await HideNumericKeypad();
+        }
+    }
+
+    private async Task OnKeypadClick(string key)
+    {
+        if (string.IsNullOrEmpty(_activeKeypadTarget)) return;
+        await JS.InvokeVoidAsync("numericKeypad.insert", _activeKeypadTarget, key);
+    }
+
+    private async Task OnKeypadBackspace()
+    {
+        if (string.IsNullOrEmpty(_activeKeypadTarget)) return;
+        await JS.InvokeVoidAsync("numericKeypad.backspace", _activeKeypadTarget);
+    }
+
+    private async Task OnKeypadOk()
+    {
+        await HideNumericKeypad();
+        // trigger change event to update Blazor binding
+        if (!string.IsNullOrEmpty(_activeKeypadTarget))
+        {
+            await JS.InvokeVoidAsync("numericKeypad.commit", _activeKeypadTarget);
+        }
+    }
+}
         </div>
     </div>
 
@@ -175,7 +247,7 @@
         <thead class="table-dark">
             <tr>
                 <th>Produto</th>
-                <th>Unit.</th>
+                <th>Valor Unit.</th>
                 <th>Qtd</th>
                 <th>Total</th>
                 <th class="text-center">&nbsp;</th>
@@ -205,23 +277,26 @@
                     <td>
                         @if (item.Produto == null || item.Produto.Id == 0)
                         {
-                            <input type="text" inputmode="decimal" pattern="[0-9.,]*"
+                            <input id="price_@idx" type="text" inputmode="decimal" pattern="[0-9.,]*"
                                    class="form-control form-control-sm text-end"
                                    value="@(idx >= 0 && idx < priceInputs.Count ? priceInputs[idx] : string.Empty)"
                                    @oninput="@(e => OnPrecoUnitarioTyping(idx, e))"
-                                   @onchange="@(e => OnPrecoUnitarioCommit(idx, e))" />
+                                   @onchange="@(e => OnPrecoUnitarioCommit(idx, e))"
+                                   @onfocus='@(() => ShowNumericKeypadAsync("price_" + idx))' @onblur="HideNumericKeypadWithDelay" />
                         }
                         else
                         {
-                            <input type="number" step="0.01" class="form-control form-control-sm text-end"
-                                   @bind="cart[idx].PrecoUnitario" @bind:event="oninput" @bind:after="UpdateCartTotals" />
+                            <input id="price_@idx" type="number" step="0.01" class="form-control form-control-sm text-end"
+                                   @bind="cart[idx].PrecoUnitario" @bind:event="oninput" @bind:after="UpdateCartTotals"
+                                   @onfocus='@(() => ShowNumericKeypadAsync("price_" + idx))' @onblur="HideNumericKeypadWithDelay" />
                         }
                     </td>
 
                     <td>
-                        <input type="number" min="1"
+                        <input id="qty_@idx" type="number" min="1"
                                class="form-control form-control-sm text-center"
-                               @bind="item.Quantidade" @bind:after="UpdateCartTotals" />
+                               @bind="item.Quantidade" @bind:after="UpdateCartTotals"
+                               @onfocus='@(() => ShowNumericKeypadAsync("qty_" + idx))' @onblur="HideNumericKeypadWithDelay" />
                     </td>
 
                     <td class="fw-bold">R$ @item.Total.ToString("0.00")</td>
@@ -243,102 +318,94 @@
         </tbody>
     </table>
 
-    <h3 class="text-end mt-3 fw-bold">
-        Total: R$ @cart.Sum(p => p.Total).ToString("0.00")
-    </h3>
+    <div class="row align-items-start">
+        <div class="col-md-8">
+            @* left column kept for cart table (already rendered above) *@
+        </div>
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-end">
+                <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @cart.Sum(p => p.Total).ToString("0.00")</h3>
+                @if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+                {
+                    var troco = trocoDinheiro;
+                    var trocoClass = troco > 0 ? "text-danger" : "text-white";
+                    <h5 class="fw-bold mb-1 text-end @trocoClass" style="font-size:1.05rem;">
+                        Troco: R$ @troco.ToString("0.00")
+                    </h5>
+                }
+            </div>
 
-    <div class="row g-2 align-items-start">
-        <div class="col-md-6">
-            <label class="form-label fw-bold">Forma de Pagamento</label>
-            <div class="d-flex">
-                <div class="me-3">
-                    <div class="form-check d-flex flex-column">
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => formaPagamentoSelecionada = "Dinheiro"' />
-                            <label class="form-check-label ms-2">Dinheiro</label>
-                        </div>
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => formaPagamentoSelecionada = "Credito"' />
-                            <label class="form-check-label ms-2">Crédito</label>
-                        </div>
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => formaPagamentoSelecionada = "Debito"' />
-                            <label class="form-check-label ms-2">Débito</label>
-                        </div>
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => formaPagamentoSelecionada = "Pix"' />
-                            <label class="form-check-label ms-2">Pix</label>
-                        </div>
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => formaPagamentoSelecionada = "A Prazo"' />
-                            <label class="form-check-label ms-2">A Prazo</label>
+            <div class="card p-2 bg-transparent border-0">
+                <label class="form-label fw-bold text-white">Forma de Pagamento</label>
+                <div class="d-flex w-100">
+                    <div class="me-3">
+                        <div class="form-check d-flex flex-column">
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => formaPagamentoSelecionada = "Dinheiro"' /><label class="form-check-label ms-2 text-white">Dinheiro</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => formaPagamentoSelecionada = "Credito"' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => formaPagamentoSelecionada = "Debito"' /><label class="form-check-label ms-2 text-white">Débito</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => formaPagamentoSelecionada = "Pix"' /><label class="form-check-label ms-2 text-white">Pix</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => formaPagamentoSelecionada = "A Prazo"' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
                         </div>
                     </div>
-                </div>
                     <div class="flex-fill">
-                    <label class="form-label">Valor (principal)</label>
-                    <input type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor"
-                           @bind="Pagamento1Text"
-                           disabled="@(!UsarPagamento2)" />
-                    <div class="col-md-6">
-                        @if (formaPagamentoSelecionada == "Dinheiro")
-                        {
-                            <div>
-                                <p class="mt-2 fs-5">
-                                    Troco: <strong>R$ @trocoDinheiro.ToString("0.00")</strong>
-                                </p>
-                            </div>
-                        }
-                    </div>
-
-                    <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="usar_pag2" @bind="UsarPagamento2" @bind:after="OnUsarPagamento2Changed" />
-                        <label class="form-check-label ms-2" for="usar_pag2">Adicionar forma de pagamento 2</label>
+                        <label class="form-label text-white">Valor (principal)</label>
+                        <input id="pag1_input" type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!UsarPagamento2) && !string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus='@(() => ShowNumericKeypadAsync("pag1_input"))' @onblur="HideNumericKeypadWithDelay" />
+                        <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="usar_pag2" @bind="UsarPagamento2" @bind:after="OnUsarPagamento2Changed" /><label class="form-check-label ms-2 text-white" for="usar_pag2">Adicionar forma de pagamento 2</label></div>
                     </div>
                 </div>
+
+                @if (formaPagamentoSelecionada == "A Prazo")
+                {
+                    <div class="mt-2"><label class="fw-bold">Data de Pagamento (prazo)</label><InputDate @bind-Value="dataPagamentoPrazo" class="form-control w-auto" /></div>
+                }
+
+                @if (UsarPagamento2)
+                {
+                    <div class="mt-3">
+                        <label class="form-label fw-bold text-white">Forma de Pagamento 2 (opcional)</label>
+                        <div class="d-flex align-items-start">
+                            <div class="form-check d-flex flex-column me-2">
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(formaPagamento2 == "Credito")' @onclick='() => formaPagamento2 = "Credito"' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => formaPagamento2 = "Debito"' /><label class="form-check-label ms-2 text-white">Débito</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => formaPagamento2 = "Pix"' /><label class="form-check-label ms-2 text-white">Pix</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => formaPagamento2 = "A Prazo"' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
+                            </div>
+                            <div class="ms-2">
+                                <input type="number" step="0.01" class="form-control" style="max-width:140px;" placeholder="Valor" @bind="pagamento2" disabled="@SecondaryCalculated" />
+                            </div>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
+    </div>
 
-        @* Data pagamento pra "A Prazo" *@
-        @if (formaPagamentoSelecionada == "A Prazo")
-        {
-            <div class="mt-2">
-                <label class="fw-bold">Data de Pagamento (prazo)</label>
-                <InputDate @bind-Value="dataPagamentoPrazo" class="form-control w-auto" />
-            </div>
-        }
+            <!-- Vendedores: moved here to sit between payment and client input -->
+            <div class="mt-3">
+                <label class="form-label fw-bold text-white">Vendedor</label>
+                <div class="d-flex flex-wrap gap-2">
+                    @if (vendedores != null && vendedores.Any())
+                    {
+                        @foreach (var v in vendedores)
+                        {
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_@v" @onchange="() => OnVendedorSelected(v)" checked="@(vendedorNome == v)" />
+                                <label class="form-check-label ms-1 text-white" for="v_inline_@v">@v</label>
+                            </div>
+                        }
 
-        
-        @if (UsarPagamento2)
-        {
-            <div class="col-12 mt-2">
-                <label class="form-label fw-bold">Forma de Pagamento 2 (opcional)</label>
-                <div>
-                    <div class="form-check d-flex flex-column">
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(formaPagamento2 == "Credito")' @onclick='() => formaPagamento2 = "Credito"' />
-                            <label class="form-check-label ms-2">Crédito</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_outro" @onchange="() => OnOtherVendedorSelected()" checked="@isOtherVendedorSelected" />
+                            <label class="form-check-label ms-1 text-white" for="v_inline_outro">Outro</label>
                         </div>
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => formaPagamento2 = "Debito"' />
-                            <label class="form-check-label ms-2">Débito</label>
-                        </div>
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => formaPagamento2 = "Pix"' />
-                            <label class="form-check-label ms-2">Pix</label>
-                        </div>
-                        <div class="mb-2">
-                            <input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => formaPagamento2 = "A Prazo"' />
-                            <label class="form-check-label ms-2">A Prazo</label>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <input type="number" step="0.01" class="form-control ms-2" style="max-width:140px;" placeholder="Valor" @bind="pagamento2" disabled="@SecondaryCalculated" />
-                    </div>
+
+                        @if (isOtherVendedorSelected)
+                        {
+                            <input class="form-control form-control-sm mt-2" style="max-width:220px;" @bind="vendedorNome" placeholder="Digite o nome do vendedor" />
+                        }
+                    }
                 </div>
             </div>
-        }
-    </div>
 
    
     @if (formaPagamento2 == "A Prazo")
@@ -350,61 +417,32 @@
     }
 
     
-    @* Compact inputs row below cart: vendedor e dados do cliente lado a lado *@
+    @* Compact input row: cliente (vendedor moved above) *@
     <div class="d-flex gap-3 mt-3">
-        <div style="flex:1; max-width:380px;">
-            <label class="form-label fw-bold">Vendedor</label>
+        <div style="flex:1; display:flex; gap:8px; flex-direction:column;">
             <div>
-                @if (vendedores != null && vendedores.Any())
-                {
-                    @foreach (var v in vendedores)
-                    {
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="vendedor" id="v_@v" @onchange="() => OnVendedorSelected(v)" checked="@(vendedorNome == v)" />
-                            <label class="form-check-label ms-2" for="v_@v">@v</label>
-                        </div>
-                    }
-
-                    <div class="form-check mt-1">
-                        <input class="form-check-input" type="radio" name="vendedor" id="v_outro" @onchange="() => OnOtherVendedorSelected()" checked="@isOtherVendedorSelected" />
-                        <label class="form-check-label ms-2" for="v_outro">Outro</label>
-                    </div>
-
-                    @if (isOtherVendedorSelected)
-                    {
-                        <input class="form-control form-control-sm mt-1" @bind="vendedorNome" placeholder="Digite o nome do vendedor" />
-                    }
-                }
-                else
-                {
-                    <input type="text" class="form-control form-control-sm" @bind="vendedorNome" placeholder="Vendedor" />
-                }
-            </div>
-        </div>
-
-        <div style="flex:2; display:flex; gap:8px; flex-direction:column;">
-            <div>
-                <label class="form-label fw-bold">Cliente</label>
-                <input type="text" class="form-control form-control-sm" @bind="clienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome cliente" />
-            </div>
-            <div>
-                <label class="form-label fw-bold">Telefone</label>
-                <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
-            </div>
-            <div>
-                <label class="form-label fw-bold">Endereço</label>
-                <input type="text" class="form-control form-control-sm" @bind="entryEndereco" placeholder="Endereço" />
+                <input type="text" class="form-control form-control-sm" @bind="clienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome do cliente" />
             </div>
 
-            <div class="mt-2">
-                <label class="form-label fw-bold">Observações</label>
+            @* Telefone e Endereço aparecem apenas quando pagamento for A Prazo (forma 1) ou formaPagamento2 for A Prazo *@
+            @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
+            {
+                <div>
+                    <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
+                </div>
+                <div>
+                    <input type="text" class="form-control form-control-sm" @bind="entryEndereco" placeholder="Endereço" />
+                </div>
+            }
+
+            <div>
                 <input type="text" class="form-control form-control-sm" @bind="observacoes" placeholder="Observações do pedido" />
             </div>
         </div>
     </div>
 
-        <div class="mt-3">
-            <label class="form-label fw-bold">Status do Pedido</label>
+    <div class="mt-3">
+        <label class="form-label fw-bold">Status do Pedido</label>
             <div class="d-flex gap-3 mt-2">
                 <div class="form-check form-check-inline">
                     <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" value="Finalizado" checked='@(PedidoStatus == "Finalizado")' @onclick='() => PedidoStatus = "Finalizado"' />
@@ -1589,7 +1627,7 @@ private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
         }
         UpdateCartTotals();
         // debug log
-        _ = JS.InvokeVoidAsync("console.log", $"OnPriceInputChanged idx={index} input='{s}' parsed={cart[index].PrecoUnitario} lineTotal={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
+        _ = JS.InvokeVoidAsync($"console.log", $"OnPriceInputChanged idx={index} input='{s}' parsed={cart[index].PrecoUnitario} lineTotal={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
         StateHasChanged();
     }
 
@@ -1733,6 +1771,16 @@ private void OnUsarPagamento2Changed()
                 vendedorNome = last;
                 isOtherVendedorSelected = !vendedores.Contains(vendedorNome);
             }
+            // restore last used primary payment form if present
+            try
+            {
+                var lastFp = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastFormaPagamento1");
+                if (!string.IsNullOrEmpty(lastFp))
+                {
+                    formaPagamentoSelecionada = lastFp;
+                }
+            }
+            catch { }
         }
         catch { }
     }
@@ -1966,7 +2014,7 @@ private void OnUsarPagamento2Changed()
             {
                 ProdutoId = item.Produto.Id,
                 Tipo = TipoMovimentacao.Venda,
-                Quantidade = item.Quantidade,
+                Quantidade = 1,
                 DataMovimentacao = DateTime.Now
             };
             await _apiService.MovimentarEstoqueAsync(movimentacao);
@@ -1974,6 +2022,8 @@ private void OnUsarPagamento2Changed()
 
         cart.Clear();
         // reset payment fields and selections so next sale starts clean
+        // remember last primary formaPagamentoSelecionada and persist it
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastFormaPagamento1", formaPagamentoSelecionada ?? string.Empty); } catch { }
         formaPagamentoSelecionada = string.Empty;
         formaPagamento2 = string.Empty;
         // deselect all radio buttons by clearing bound values

@@ -40,6 +40,110 @@
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
 
+    <script>
+        window.numericKeypad = {
+            _target: null,
+            show: function (elementId) {
+                var keypad = document.getElementById('numeric-keypad');
+                if (!keypad) return;
+                var el = document.getElementById(elementId);
+                if (!el) {
+                    keypad.style.display = 'block';
+                    this._target = elementId;
+                    return;
+                }
+                // position keypad near the input
+                keypad.style.display = 'block';
+                keypad.style.right = '';
+                keypad.style.bottom = '';
+                var rect = el.getBoundingClientRect();
+                var kpRect = keypad.getBoundingClientRect();
+                var top = rect.top + window.scrollY - kpRect.height - 8; // above
+                if (top < 8) top = rect.bottom + window.scrollY + 8; // below if not enough space
+                var left = rect.left + window.scrollX;
+                // keep inside viewport
+                if (left + kpRect.width > window.innerWidth - 8) left = window.innerWidth - kpRect.width - 8;
+                if (left < 8) left = 8;
+                keypad.style.position = 'absolute';
+                keypad.style.left = left + 'px';
+                keypad.style.top = top + 'px';
+                this._target = elementId;
+            },
+            hide: function () {
+                var keypad = document.getElementById('numeric-keypad');
+                if (!keypad) return;
+                keypad.style.display = 'none';
+                this._target = null;
+                // reset to fixed defaults
+                keypad.style.position = 'fixed';
+                keypad.style.left = '';
+                keypad.style.top = '';
+            },
+            _setCaret: function (el, pos) {
+                try {
+                    if (el.setSelectionRange) {
+                        el.setSelectionRange(pos, pos);
+                    }
+                } catch (e) { }
+            },
+            insert: function (elementId, ch) {
+                try {
+                    ch = String(ch);
+                    var el = document.getElementById(elementId);
+                    if (!el) return;
+                    el.focus();
+                    console.log('numericKeypad.insert -> target=', elementId, 'ch=', ch, 'valueBefore=', el.value);
+                    // insert at caret (selectionStart may be null for type=number in some browsers)
+                    var start = (typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
+                    var end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : start;
+                    var val = el.value || '';
+                    var newVal = val.substring(0, start) + ch + val.substring(end);
+                    el.value = newVal;
+                    var newPos = start + ch.length;
+                    this._setCaret(el, newPos);
+                    // dispatch both input and change to ensure Blazor bindings pick up the new value
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('numericKeypad.insert -> valueAfter=', el.value);
+                } catch (e) {
+                    console.error('numericKeypad.insert error', e);
+                }
+            },
+            backspace: function (elementId) {
+                try {
+                    var el = document.getElementById(elementId);
+                    if (!el) return;
+                    el.focus();
+                    console.log('numericKeypad.backspace -> target=', elementId, 'valueBefore=', el.value);
+                    var start = (typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
+                    var end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : start;
+                    var val = el.value || '';
+                    if (start === end && start > 0) {
+                        // remove previous char
+                        var newVal = val.substring(0, start - 1) + val.substring(end);
+                        el.value = newVal;
+                        this._setCaret(el, start - 1);
+                    } else if (start !== end) {
+                        // remove selection
+                        var newVal = val.substring(0, start) + val.substring(end);
+                        el.value = newVal;
+                        this._setCaret(el, start);
+                    }
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('numericKeypad.backspace -> valueAfter=', el.value);
+                } catch (e) {
+                    console.error('numericKeypad.backspace error', e);
+                }
+            },
+            commit: function (elementId) {
+                var el = document.getElementById(elementId);
+                if (!el) return;
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        };
+    </script>
+
     <script>navigator.serviceWorker.register('service-worker.js');</script>
 </body>
 

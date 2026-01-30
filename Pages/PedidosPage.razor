@@ -19,6 +19,10 @@
         .pedido-card { max-width: 100%; min-height: 120px; }
         .pedido-card .card-body { padding: .375rem; }
     }
+    /* Prevent fixed right summary from overlapping content on larger screens */
+    @@media (min-width: 768px) {
+        .main-layout.content { padding-right: 300px; }
+    }
 </style>
 
 <div class="d-flex align-items-center mb-3">
@@ -32,7 +36,7 @@
 
 <div class="mb-3 d-flex align-items-center gap-3">
     <label class="fw-bold">Filtrar status:</label>
-    <div>
+    <div class="new-class">
         <select class="form-select form-select-sm" style="min-width:180px;" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" value="@statusFilter">
             <option value="">Todos</option>
             <option value="Em entrega">Em entrega</option>
@@ -41,9 +45,26 @@
             <option value="Finalizado">Finalizado</option>
         </select>
     </div>
+
+    @* Remove inline summary shown earlier for small screens; replaced by fixed card on the right. *@
 </div>
 
-    <h3 class="mt-4">Total Vendido: <span class="text-success">R$ @totalVendido.ToString("F2")</span></h3>
+    <!-- Right-side summary card (shows on md+) -->
+    <div class="d-none d-md-block position-fixed" style="top:56px; right:12px; width:260px; z-index:2000;">
+        <div class="card shadow-sm p-3">
+            <div class="small text-muted">Total Vendido</div>
+            <div class="fw-bold fs-5 text-success">R$ @totalVendido.ToString("F2")</div>
+            <hr />
+            <div class="small text-muted mb-2">Resumo por Forma de Pagamento</div>
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2">Dinheiro<br /><strong>R$ @totalDinheiro.ToString("F2")</strong></li>
+                <li class="mb-2">Débito<br /><strong>R$ @totalDebito.ToString("F2")</strong></li>
+                <li class="mb-2">Crédito<br /><strong>R$ @totalCredito.ToString("F2")</strong></li>
+                <li class="mb-2">Pix<br /><strong>R$ @totalPix.ToString("F2")</strong></li>
+                <li class="mb-0">A prazo<br /><strong>R$ @totalAPrazo.ToString("F2")</strong></li>
+            </ul>
+        </div>
+    </div>
 
 @if (pedidosHoje == null || !pedidosHoje.Any())
 {
@@ -314,18 +335,6 @@
 }
 else
 {
-    @if (pedidosHoje.Count > 0)
-    {
-        <div class="alert alert-info">
-            <strong>Resumo por Forma de Pagamento:</strong><br />
-            Débito: <strong>R$ @totalDebito.ToString("F2")</strong> |
-            Crédito: <strong>R$ @totalCredito.ToString("F2")</strong> |
-            Pix: <strong>R$ @totalPix.ToString("F2")</strong> |
-            Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong> |
-            A prazo: <strong>R$ @totalAPrazo.ToString("F2")</strong>
-        </div>
-    }
-
     <div>
         @* Build groups in requested order and render separators *@
         @{
@@ -674,6 +683,8 @@ else
             </div>
         }
     </div>
+
+    
 
     @* Confirm cancel modal *@
     @if (showCancelModal)

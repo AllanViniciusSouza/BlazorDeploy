@@ -41,14 +41,68 @@
     <script src="_framework/blazor.webassembly.js"></script>
 
     <script>
+        // keyHandler: expose F1 handler that calls .NET OnF1Key via DotNetObjectReference
+        (function () {
+            var dotNetRefF1 = null;
+            function f1Handler(e) {
+                try {
+                    if (e.key === 'F1') {
+                        e.preventDefault();
+                        if (dotNetRefF1) {
+                            try { dotNetRefF1.invokeMethodAsync('OnF1Key'); } catch (ex) { }
+                        }
+                    }
+                } catch (ex) { }
+            }
+
+            window.keyHandler = {
+                addF1Handler: function (dref) {
+                    try {
+                        dotNetRefF1 = dref;
+                        window.addEventListener('keydown', f1Handler);
+                    } catch (e) { }
+                },
+                removeF1Handler: function () {
+                    try {
+                        window.removeEventListener('keydown', f1Handler);
+                        dotNetRefF1 = null;
+                    } catch (e) { }
+                }
+            };
+        })();
+
         // Global ESC handler registration for Blazor pages
         (function () {
             var dotRef = null;
             function onKeyDown(e) {
-                if (e.key === 'Escape') {
-                    if (dotRef) {
-                        try { dotRef.invokeMethodAsync('OnEscapePressed'); } catch { }
+                try {
+                    // Always handle Escape: hide numeric keypad and notify .NET
+                    if (e.key === 'Escape') {
+                        try { if (window.numericKeypad && typeof window.numericKeypad.hide === 'function') window.numericKeypad.hide(); } catch (ex) { }
+                        if (dotRef) {
+                            try { dotRef.invokeMethodAsync('OnEscapePressed'); } catch { }
+                        }
+                        return;
                     }
+                } catch (ex) { }
+
+                try {
+                    // ignore other keys when typing in inputs/textareas/selects
+                    var tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toUpperCase() : '';
+                    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return;
+                } catch (ex) { }
+
+                // detect plus: main keyboard '+' (Shift+'='), Numpad add
+                var isPlus = false;
+                try {
+                    if (e.key === '+') isPlus = true;
+                    if (e.code === 'NumpadAdd') isPlus = true;
+                    if (e.key === 'Add') isPlus = true;
+                    if (e.key === '=' && e.shiftKey) isPlus = true;
+                } catch (ex) { }
+
+                if (isPlus && dotRef) {
+                    try { dotRef.invokeMethodAsync('OnPlusPressed'); } catch { }
                 }
             }
             window.addGlobalEscHandler = function (dref) {
@@ -63,6 +117,17 @@
                     dotRef = null;
                 } catch { }
             };
+        // helper to focus the last blank descricao textarea (prefer the most recently added)
+        window.focusFirstBlankDescricao = function () {
+            try {
+                var els = document.querySelectorAll("textarea[placeholder='Descrição']");
+                if (els && els.length) {
+                    var el = els[els.length - 1];
+                    el.focus();
+                    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { }
+                }
+            } catch (e) { }
+        };
         })();
 
         window.numericKeypad = {
@@ -113,7 +178,8 @@
             insert: function (elementId, ch) {
                 try {
                     ch = String(ch);
-                    var el = document.getElementById(elementId);
+                    var targetId = elementId || this._target;
+                    var el = document.getElementById(targetId);
                     if (!el) return;
                     el.focus();
                     console.log('numericKeypad.insert -> target=', elementId, 'ch=', ch, 'valueBefore=', el.value);
@@ -149,7 +215,8 @@
             },
             backspace: function (elementId) {
                 try {
-                    var el = document.getElementById(elementId);
+                    var targetId = elementId || this._target;
+                    var el = document.getElementById(targetId);
                     if (!el) return;
                     el.focus();
                     console.log('numericKeypad.backspace -> target=', elementId, 'valueBefore=', el.value);
@@ -192,7 +259,8 @@
                 }
             },
             commit: function (elementId) {
-                var el = document.getElementById(elementId);
+                var targetId = elementId || this._target;
+                var el = document.getElementById(targetId);
                 if (!el) return;
                 // commit should trigger change so two-way bindings that listen on change update
                 el.dispatchEvent(new Event('change', { bubbles: true }));

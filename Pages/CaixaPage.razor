@@ -30,7 +30,7 @@
         <div class="col-12">
             @if (string.IsNullOrEmpty(selectedMarca))
             {
-                <input class="form-control form-control-lg"
+                <input id="searchInput" class="form-control form-control-lg"
                        placeholder="Pesquisar por nome ou código de barras"
                        value="@searchTerm"
                        @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
@@ -45,11 +45,11 @@
         <div class="d-grid gap-2" style="grid-template-columns: repeat(3, 1fr);">
             @for (int n = 1; n <= 9; n++)
             {
-                <button class="btn btn-secondary" type="button" @onclick="@(() => OnKeypadClick(n.ToString()))">@n</button>
+                <button class="btn btn-secondary" type="button" onclick="numericKeypad.insert(null, '@n')">@n</button>
             }
-            <button class="btn btn-secondary" type="button" @onclick="@(() => OnKeypadClick("."))">.</button>
-            <button class="btn btn-secondary" type="button" @onclick="@(() => OnKeypadClick("0"))">0</button>
-            <button class="btn btn-danger" type="button" @onclick="OnKeypadBackspace">⌫</button>
+            <button class="btn btn-secondary" type="button" onclick="numericKeypad.insert(null, '.')">.</button>
+            <button class="btn btn-secondary" type="button" onclick="numericKeypad.insert(null, '0')">0</button>
+            <button class="btn btn-danger" type="button" onclick="numericKeypad.backspace(null)">⌫</button>
         </div>
         <div class="d-flex justify-content-between mt-2">
             <button class="btn btn-outline-primary" @onclick="OnKeypadOk">OK</button>
@@ -62,6 +62,7 @@
     private string _activeKeypadTarget = null;
     private DotNetObjectReference<object>? _dotRefForKeypad;
     private DotNetObjectReference<object>? _escDotRef;
+    private bool focusSearchRequested = false;
 
     private async Task OnWindowKeyDown(KeyboardEventArgs e)
     {
@@ -81,12 +82,18 @@
             ClearAllFilters();
             StateHasChanged();
         }
-        else if (e.Key == "+")
+        else
         {
-            AddBlankCartItem();
-            await Task.Delay(50);
-            try { await JS.InvokeVoidAsync("eval", "document.querySelector('textarea[placeholder=\\'Descrição\\']')?.focus()"); } catch { }
-            StateHasChanged();
+            // accept '+' from main keyboard (shift+'='), numpad or Add key
+            var isPlus = e.Key == "+" || e.Code == "NumpadAdd" || e.Key == "Add" || (e.Key == "=" && e.ShiftKey);
+            if (isPlus)
+            {
+                await AddBlankCartItem();
+                // allow render then focus description
+                await Task.Delay(50);
+                try { await JS.InvokeVoidAsync("focusFirstBlankDescricao"); } catch { }
+                StateHasChanged();
+            }
         }
     }
 
@@ -111,6 +118,14 @@
                 await JS.InvokeVoidAsync("addGlobalEscHandler", _escDotRef);
             }
             catch { }
+            // request focus for search input on first render
+            focusSearchRequested = true;
+        }
+
+        if (focusSearchRequested)
+        {
+            focusSearchRequested = false;
+            try { await JS.InvokeVoidAsync("eval", "document.getElementById('searchInput')?.focus()"); } catch { }
         }
     }
 
@@ -119,7 +134,19 @@
     {
         // called from global JS handler
         ClearAllFilters();
+        try { await JS.InvokeVoidAsync("numericKeypad.hide"); } catch { }
         await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnPlusPressed()
+    {
+        // add blank item and focus description
+        await AddBlankCartItem();
+        await InvokeAsync(async () => {
+            StateHasChanged();
+            try { await JS.InvokeVoidAsync("focusFirstBlankDescricao"); } catch { }
+        });
     }
 
     public async ValueTask DisposeAsync()
@@ -384,7 +411,7 @@
             <!-- add-row: keeps the add-blank-item button always below the last cart row -->
             <tr>
                 <td colspan="5" class="text-center">
-                    <button class="btn btn-success btn-sm" title="Adicionar item livre" @onclick="AddBlankCartItem">+</button>
+                    <button class="btn btn-success btn-sm" title="Adicionar item livre" @onclick="AddBlankCartItemAndFocus">+</button>
                 </td>
             </tr>
         </tbody>
@@ -2016,7 +2043,7 @@ private void OnUsarPagamento2Changed()
         StateHasChanged();
     }
 
-    private void AddBlankCartItem()
+    private async Task AddBlankCartItem()
     {
         var blank = new Produto { Id = 0, Nome = string.Empty, Preco = 0m, PrecoCusto = 0.01m, CategoriaId = 1 };
         var item = new CartItem { Produto = blank, Quantidade = 1, PrecoUnitario = 0m };
@@ -2026,6 +2053,17 @@ private void OnUsarPagamento2Changed()
         EnsurePriceInputsMatchCart();
         UpdateCartTotals();
         StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private async Task AddBlankCartItemAndFocus()
+    {
+        await AddBlankCartItem();
+        // give Blazor a moment to render the new row
+        await Task.Delay(30);
+        try {
+            await JS.InvokeVoidAsync("focusFirstBlankDescricao");
+        } catch { }
     }
 
     private async Task FinalizePurchase()

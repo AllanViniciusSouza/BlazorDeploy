@@ -1,5 +1,6 @@
 ﻿using BlazorDeploy.DTOs;
 using BlazorDeploy.Models;
+using BlazorDeploy.Shared;
 using BlazorDeploy.Pages;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.Logging;
@@ -28,15 +29,22 @@ public class ApiService
 
     JsonSerializerOptions _serializerOptions;
 
-    public ApiService(HttpClient httpClient, ILogger<ApiService> logger, IJSRuntime jsRuntime)
+        public ApiService(HttpClient httpClient, ILogger<ApiService> logger, IJSRuntime jsRuntime)
     {
         _httpClient = httpClient;
         _logger = logger;
         _jsRuntime = jsRuntime;
         _serializerOptions = new JsonSerializerOptions
         {
-            PropertyNameCaseInsensitive = true
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
+            // Add custom DateTime converter to better handle server date strings
+            try
+            {
+                _serializerOptions.Converters.Add(new DateTimeJsonConverter());
+            }
+            catch { }
     }
 
     // PUT api/pedidos/{id}/finalize -> returns updated order summary { Id, Status, ValorTotal }
@@ -1469,7 +1477,22 @@ public class ApiService
     {
         try
         {
-            var json = JsonSerializer.Serialize(despesa, _serializerOptions);
+            // build payload with PascalCase property names to match server entity binding
+            var payload = new Dictionary<string, object?>
+            {
+                ["Data"] = despesa.Data, // DateTime will be serialized with converter if present
+                ["Descricao"] = despesa.Descricao,
+                ["Categoria"] = despesa.Categoria,
+                ["FormaPagamento"] = despesa.FormaPagamento,
+                ["Valor"] = despesa.Valor,
+                ["Parcelas"] = despesa.Parcelas,
+                ["Observacao"] = despesa.Observacao,
+                ["UsuarioId"] = despesa.UsuarioId
+            };
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            try { await _jsRuntime.InvokeVoidAsync("console.log", "AdicionarDespesa JSON:", json); } catch { }
+            try { _logger.LogInformation("AdicionarDespesa JSON: {json}", json); } catch { }
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var response = await PostRequest("api/Despesas", content);
@@ -1493,8 +1516,74 @@ public class ApiService
 
     public async Task<(List<Despesas>?, string? ErrorMessage)> GetDespesasAsync()
     {
-        string endpoint = $"api/Despesas";
-        return await GetAsync<List<Despesas>>(endpoint);
+        string endpoint = BuildUrl($"api/Despesas");
+        try
+        {
+            await AddAuthorizationHeader();
+            var resp = await _httpClient.GetAsync(endpoint);
+            if (!resp.IsSuccessStatusCode)
+            {
+                if (resp.StatusCode == HttpStatusCode.NotFound) return (new List<Despesas>(), null);
+                var err = $"Erro na requisição: {resp.ReasonPhrase}";
+                _logger.LogError(err);
+                return (null, err);
+            }
+
+            var text = await resp.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(text)) return (new List<Despesas>(), null);
+
+            var list = new List<Despesas>();
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    try
+                    {
+                        var d = new Despesas();
+                        if (el.TryGetProperty("id", out var pid) && pid.ValueKind == JsonValueKind.Number) d.Id = pid.GetInt32();
+                        // dataSelecionada may be present
+                        if (el.TryGetProperty("dataSelecionada", out var pdate) && pdate.ValueKind == JsonValueKind.String)
+                        {
+                            var s = pdate.GetString();
+                            if (!string.IsNullOrEmpty(s))
+                            {
+                                // parse preserving offset if present; prefer RoundtripKind
+                                if (DateTime.TryParse(s, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+                                {
+                                    d.Data = parsed;
+                                }
+                                else if (DateTime.TryParse(s, out parsed))
+                                {
+                                    d.Data = DateTime.SpecifyKind(parsed, DateTimeKind.Local);
+                                }
+                            }
+                        }
+
+                        if (el.TryGetProperty("descricao", out var pdesc) && pdesc.ValueKind == JsonValueKind.String) d.Descricao = pdesc.GetString();
+                        if (el.TryGetProperty("categoria", out var pc) && pc.ValueKind == JsonValueKind.String) d.Categoria = pc.GetString();
+                        if (el.TryGetProperty("formaPagamento", out var pf) && pf.ValueKind == JsonValueKind.String) d.FormaPagamento = pf.GetString();
+                        if (el.TryGetProperty("valor", out var pv) && pv.ValueKind == JsonValueKind.Number) d.Valor = pv.GetDecimal();
+                        if (el.TryGetProperty("parcelas", out var pp) && pp.ValueKind == JsonValueKind.Number) d.Parcelas = pp.GetInt32();
+                        if (el.TryGetProperty("observacao", out var po) && po.ValueKind == JsonValueKind.String) d.Observacao = po.GetString();
+                        if (el.TryGetProperty("usuarioId", out var pu) && pu.ValueKind == JsonValueKind.Number) d.UsuarioId = pu.GetInt32();
+
+                        list.Add(d);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Falha ao parsear item de despesa");
+                    }
+                }
+            }
+
+            return (list, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao obter despesas");
+            return (null, ex.Message);
+        }
     }
 
     public async Task<(List<ProdutoCardapio>?, string? ErrorMessage)> GetProdutosCardapio()

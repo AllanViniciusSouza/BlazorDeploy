@@ -8,62 +8,79 @@
     Despesas
 </h4>
 
-<button class="btn btn-primary" @onclick="MostrarFormulario">
-    Adicionar Nova Despesa
-</button>
+@if (!exibirFormulario)
+{
+    <div class="text-center my-3">
+        <button class="btn btn-success btn-lg rounded-circle" style="width:56px;height:56px;font-size:24px;" @onclick="MostrarFormularioAsync" aria-label="Adicionar nova despesa">+</button>
+    </div>
+}
 
 @if (exibirFormulario)
 {
     <EditForm Model="novaDespesa" OnValidSubmit="SalvarDespesa">
         <DataAnnotationsValidator/>
+        @if (!string.IsNullOrEmpty(formError))
+        {
+            <div class="alert alert-danger">@formError</div>
+        }
         <div class="form-group">
-            <label for="data">Data:</label>
-            <InputDate id="data" class="form-control" @bind-Value="novaDespesa.Data" />
+            <InputDate id="data" class="form-control" @bind-Value="novaDespesa.Data" placeholder="Data" />
             <ValidationMessage For="@(() => novaDespesa.Data)" />
         </div>
         <div class="form-group">
-            <label for="Descricao">Descricao:</label>
-            <InputText id="descricao" class="form-control" @bind-Value="novaDespesa.Descricao" />
-            <ValidationMessage For="@(() => novaDespesa.Descricao)" />
+            <InputText id="descricao" class="form-control" @bind-Value="novaDespesa.Descricao" placeholder="Descrição" />
+            @if (submitted && string.IsNullOrWhiteSpace(novaDespesa.Descricao))
+            {
+                <div class="text-danger small">Descrição é obrigatório.</div>
+            }
         </div>
         <div class="form-group">
-            <label for="categoria">Categoria:</label>
-            <InputSelect id="categoria" class="form-control" @bind-Value="novaDespesa.Categoria">
-            <option value="">Selecione a Categoria</option>
-                <option value="GastosFixos">Gastos Fixos</option>
-                <option value="Funcionario">Funcionário</option>
-                <option value="Mercadoria">Mercadoria</option>
-                <option value="Infraestrutura">Infraestrutura</option>
-            </InputSelect>
+            <div class="mb-1">Categoria</div>
+            @foreach (var cat in categorias)
+            {
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="categoria" id="cat-@cat" value="@cat" @onclick="() => novaDespesa.Categoria = cat" checked="@(novaDespesa.Categoria == cat)" />
+                    <label class="form-check-label" for="cat-@cat">@cat</label>
+                </div>
+            }
             <ValidationMessage For="@(() => novaDespesa.Categoria)" />
         </div>
         <div class="form-group">
-            <label for="formapagamento">Forma Pagamento:</label>
-            <InputSelect id="formapagamento" class="form-control" @bind-Value="novaDespesa.FormaPagamento">
-                <option value="">Selecione a Forma de Pagamento</option>
-                <option value="Dinheiro">Dinheiro</option>
-                <option value="Credito">Crédito</option>
-                <option value="Debito">Débito</option>
-                <option value="Pix">Pix</option>
-            </InputSelect>
+            <div class="mb-1">Forma de pagamento</div>
+            @foreach (var fm in formasPagamento)
+            {
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="formaPagamento" id="fp-@fm" value="@fm" @onclick="() => novaDespesa.FormaPagamento = fm" checked="@(novaDespesa.FormaPagamento == fm)" />
+                    <label class="form-check-label" for="fp-@fm">@fm</label>
+                </div>
+            }
             <ValidationMessage For="@(() => novaDespesa.FormaPagamento)" />
-        </div>
-         <div class="form-group">
-            <label for="valor">Valor:</label>
-            <InputNumber id="valor" class="form-control" @bind-Value="novaDespesa.Valor" />
-            <ValidationMessage For="@(() => novaDespesa.Valor)" />
+            @if (submitted && string.IsNullOrWhiteSpace(novaDespesa.FormaPagamento))
+            {
+                <div class="text-danger small">Forma de pagamento é obrigatório.</div>
+            }
         </div>
         <div class="form-group">
-            <label for="parcelas">Parcelas:</label>
-            <InputNumber id="parcelas" class="form-control" @bind-Value="novaDespesa.Parcelas" />
+            <input id="valor" type="number" step="0.01" inputmode="decimal" class="form-control" placeholder="Valor"
+                   value="@(novaDespesa.Valor == 0m ? string.Empty : novaDespesa.Valor.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+                   @oninput="@(e => OnValorInput(e))" />
+            <ValidationMessage For="@(() => novaDespesa.Valor)" />
+            @if (submitted && novaDespesa.Valor <= 0m)
+            {
+                <div class="text-danger small">Valor deve ser maior que zero.</div>
+            }
+        </div>
+        <div class="form-group">
+            <input id="parcelas" type="number" class="form-control" placeholder="Parcelas"
+                   value="@(novaDespesa.Parcelas == 0 ? string.Empty : novaDespesa.Parcelas.ToString())"
+                   @oninput="@(e => OnParcelasInput(e))" />
             <ValidationMessage For="@(() => novaDespesa.Parcelas)" />
         </div>
         <div class="form-group">
-            <label for="observacao">Observação:</label>
-            <InputText id="observacao" class="form-control" @bind-Value="novaDespesa.Observacao" />
+            <InputText id="observacao" class="form-control" @bind-Value="novaDespesa.Observacao" placeholder="Observação" />
             <ValidationMessage For="@(() => novaDespesa.Observacao)" />
         </div>
-        <button type="submit" class="btn btn-success">
+        <button type="submit" class="btn btn-success" disabled="@(!IsFormValid())">
             Salvar
         </button>
         <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
@@ -91,7 +108,13 @@
             @foreach (var despesa in filteredDespesas.OrderByDescending(c => c.Data))
             {
                 <tr>
-                    <td>@despesa.Data.ToString("g")</td>
+        <td>
+            @{
+                // Show human-friendly date
+                var display = DateTime.SpecifyKind(despesa.Data, DateTimeKind.Unspecified);
+            }
+            <div>@display.ToString("g")</div>
+        </td>
                     <td>@despesa.Descricao</td>
                     <td>@despesa.Categoria</td>
                     <td>@despesa.FormaPagamento</td>
@@ -111,6 +134,12 @@
     private Despesas novaDespesa = new Despesas();
     private bool exibirFormulario = false;
     private List<Despesas> filteredDespesas = new();
+    private List<string> categorias = new() { "GastosFixos", "Funcionario", "Mercadoria", "Infraestrutura", "Caixa" };
+    private List<string> formasPagamento = new() { "Dinheiro", "Credito", "Debito", "Pix" };
+    private ElementReference descricaoRef;
+    private bool focusDescricaoRequested = false;
+    private bool submitted = false;
+    private string formError = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -122,24 +151,56 @@
         }
 
         var (todasDespesas, errorMessage) = await _apiService.GetDespesasAsync();
-        filteredDespesas = todasDespesas;
+        // Do not force-kind or convert dates here. Display the server value as-is
+        // to avoid double-conversion issues. If server provides UTC, it should
+        // set Kind appropriately or the API should return an ISO string with Z.
+        filteredDespesas = todasDespesas ?? new List<Despesas>();
     }
 
-    private void MostrarFormulario()
+    private async Task MostrarFormularioAsync()
     {
         novaDespesa = new Despesas(); //criando um objeto
         exibirFormulario = true;
+        focusDescricaoRequested = true;
+        // allow render to complete, focus will be performed in OnAfterRenderAsync
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+        if (focusDescricaoRequested && exibirFormulario)
+        {
+            focusDescricaoRequested = false;
+            try
+            {
+                await JS.InvokeVoidAsync("eval", "document.getElementById('descricao')?.focus()");
+            }
+            catch { }
+            StateHasChanged();
+        }
     }
 
     private async Task SalvarDespesa()
     {
+        submitted = true;
+        formError = string.Empty;
+        if (!IsFormValid())
+        {
+            formError = "Preencha os campos obrigatórios.";
+            return;
+        }
         int totalParcelas = Math.Max(novaDespesa.Parcelas, 1); // Garante pelo menos 1
+        // combine selected date with current time so we send a full timestamp (UTC)
+        var selectedDate = novaDespesa.Data.Date;
+        var nowUtc = DateTime.UtcNow.TimeOfDay;
 
         for (int i = 0; i < totalParcelas; i++)
         {
+            var nowLocal = DateTime.Now;
             var copia = new Despesas
             {
-                Data = novaDespesa.Data.AddMonths(i),
+                // use local current time so server receives valid timestamp
+                Data = nowLocal,
                 Descricao = novaDespesa.Descricao + (totalParcelas > 1 ? $" (Parcela {i + 1}/{totalParcelas})" : ""),
                 Categoria = novaDespesa.Categoria,
                 FormaPagamento = novaDespesa.FormaPagamento,
@@ -159,5 +220,26 @@
     private void Cancelar()
     {
         exibirFormulario = false;
+    }
+
+    private void OnValorInput(ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString() ?? string.Empty;
+        if (decimal.TryParse(s, out var v)) novaDespesa.Valor = v;
+    }
+
+    private void OnParcelasInput(ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString() ?? string.Empty;
+        if (int.TryParse(s, out var v)) novaDespesa.Parcelas = v;
+    }
+
+    private bool IsFormValid()
+    {
+        if (string.IsNullOrWhiteSpace(novaDespesa.Descricao)) return false;
+        if (string.IsNullOrWhiteSpace(novaDespesa.Categoria)) return false;
+        if (string.IsNullOrWhiteSpace(novaDespesa.FormaPagamento)) return false;
+        if (novaDespesa.Valor <= 0m) return false;
+        return true;
     }
 }

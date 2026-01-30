@@ -1,11 +1,42 @@
 ﻿@inherits LayoutComponentBase
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <div class="page">
     <div class="sidebar">
         <NavMenu />
        
     </div>
+
+@code {
+    private DotNetObjectReference<MainLayout>? _dotRefForF1;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _dotRefForF1 = DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("keyHandler.addF1Handler", _dotRefForF1);
+            }
+            catch { }
+        }
+    }
+
+    [JSInvokable]
+    public Task OnF1Key()
+    {
+        Navigation.NavigateTo("/");
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("keyHandler.removeF1Handler"); } catch { }
+        try { _dotRefForF1?.Dispose(); } catch { }
+    }
+}
 
     <main>
 @*         <div class="top-row px-4">

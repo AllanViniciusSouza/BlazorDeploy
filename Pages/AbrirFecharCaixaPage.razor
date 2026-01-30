@@ -14,6 +14,30 @@
         {
             <div class="small text-muted">Aberto em @caixaAberto.DataAbertura.ToString("g")</div>
         }
+    
+    @* show retirar only when caixa is open *@
+    @if (caixaAberto != null)
+    {
+        <div class="card mt-3 p-3">
+            <h5>Registrar Retirada do Caixa</h5>
+            <div class="mb-2">
+                <label>Valor</label>
+                <InputNumber @bind-Value="retiradaValor" class="form-control" step="0.01" />
+            </div>
+            <div class="mb-2">
+                <label>Descrição</label>
+                <InputText @bind-Value="retiradaDescricao" class="form-control" />
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-danger" @onclick="RegistrarRetiradaAsync" disabled="@(isRegistrandoRetirada || retiradaValor <= 0)">Registrar Retirada</button>
+                <button class="btn btn-secondary" @onclick="LimparRetirada">Limpar</button>
+            </div>
+            @if (!string.IsNullOrEmpty(retiradaMensagem))
+            {
+                <div class="mt-2 text-muted">@retiradaMensagem</div>
+            }
+        </div>
+    }
     </div>
 </div>
 
@@ -40,32 +64,7 @@ else if (caixaAberto == null)
         <button class="btn btn-success" type="submit">Abrir Caixa</button>
     </EditForm>
 
-    <div class="card mt-3 p-3">
-        <h5>Registrar Retirada do Caixa</h5>
-        @if (caixaAberto != null)
-        {
-            <div class="mb-2">
-                <label>Valor</label>
-                <InputNumber @bind-Value="retiradaValor" class="form-control" step="0.01" />
-            </div>
-            <div class="mb-2">
-                <label>Descrição</label>
-                <InputText @bind-Value="retiradaDescricao" class="form-control" />
-            </div>
-            <div class="d-flex gap-2">
-                <button class="btn btn-danger" @onclick="RegistrarRetiradaAsync" disabled="@(isRegistrandoRetirada || retiradaValor <= 0)">Registrar Retirada</button>
-                <button class="btn btn-secondary" @onclick="LimparRetirada">Limpar</button>
-            </div>
-            @if (!string.IsNullOrEmpty(retiradaMensagem))
-            {
-                <div class="mt-2 text-muted">@retiradaMensagem</div>
-            }
-        }
-        else
-        {
-            <div class="text-muted">Abra o caixa para registrar retiradas.</div>
-        }
-    </div>
+    @* Registrar Retirada do Caixa appears only when caixa is open *@
 
     
 }
@@ -139,6 +138,8 @@ else
 
     // current caixa computed value
     private decimal currentCaixa = 0m;
+    // when caixa is closed, preserve last closed value until next open
+    private decimal lastClosedCaixaValue = 0m;
 
     // retirada fields
     private decimal retiradaValor = 0m;
@@ -167,11 +168,29 @@ else
             {
                 caixas = resultado;
                 caixaAberto = caixas.FirstOrDefault(c => c.DataFechamento == null);
+                if (caixaAberto == null)
+                {
+                    // no open caixa: keep last closed value for display
+                    var lastClosed = caixas.OrderByDescending(c => c.DataAbertura).FirstOrDefault(c => c.DataFechamento != null);
+                    if (lastClosed != null && lastClosed.ValorFechamento.HasValue)
+                    {
+                        lastClosedCaixaValue = lastClosed.ValorFechamento.Value;
+                        currentCaixa = lastClosedCaixaValue;
+                    }
+                }
+                else
+                {
+                    // when there is an open caixa, prefill the fecharDto with current caixa value (will be updated after ComputeCurrentCaixaAsync)
+                    fecharDto.ValorFechamento = caixaAberto.ValorAbertura;
+                }
             }
 
             carregando = false;
-            // compute current caixa value after loading
-            await ComputeCurrentCaixaAsync();
+            // compute current caixa value after loading only if there's an open caixa
+            if (caixaAberto != null)
+            {
+                await ComputeCurrentCaixaAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -190,8 +209,12 @@ else
             // start with abertura value
             currentCaixa = caixaAberto.ValorAbertura;
 
+            // prefill fecharDto with the computed current caixa value
+            fecharDto.ValorFechamento = currentCaixa;
+
             // fetch vendas em dinheiro desde a abertura
             var since = caixaAberto.DataAbertura;
+            var sinceUtc = since.ToUniversalTime();
             (List<Pedido>? pedidos, string? err) = await _apiService.GetPedidosPorData(since.Date);
             if (pedidos != null)
             {
@@ -208,12 +231,20 @@ else
             (List<BlazorDeploy.Models.Despesas>? despesas, string? dex) = await _apiService.GetDespesasAsync();
             if (despesas != null)
             {
+                // allow small clock skew: include despesas a few seconds before abertura
+                var sinceCutoffUtc = sinceUtc.AddSeconds(-10);
                 var retiradas = despesas
-                    .Where(d => d.Data >= since && string.Equals(d.Categoria, "Caixa", StringComparison.OrdinalIgnoreCase))
+                    .Where(d => (d.Data.ToUniversalTime() >= sinceCutoffUtc)
+                                && string.Equals(d.Categoria, "Caixa", StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(d.FormaPagamento, "Dinheiro", StringComparison.OrdinalIgnoreCase))
                     .Sum(d => d.Valor);
 
+                // subtract only cash-form despesas since caixa opening
                 currentCaixa -= retiradas;
             }
+            // after final calculation, update the fechar DTO so input shows the current caixa
+            fecharDto.ValorFechamento = currentCaixa;
+            StateHasChanged();
         }
         catch { }
     }
@@ -253,12 +284,14 @@ else
                 Observacao = retiradaDescricao
             };
 
-            var res = await _apiService.AdicionarDespesaAsync(desp);
+                var res = await _apiService.AdicionarDespesaAsync(desp);
             if (res.Data)
             {
                 retiradaMensagem = "Retirada registrada com sucesso.";
-                // recompute caixa
-                await ComputeCurrentCaixaAsync();
+                // reload server state so despesas are reflected in computation
+                await Task.Delay(200);
+                await CarregarStatusCaixa();
+                StateHasChanged();
                 LimparRetirada();
             }
             else
@@ -297,8 +330,11 @@ else
         {
             await _apiService.FecharCaixaAsync(caixaAberto.Id, fecharDto);
             mensagem = "Caixa fechado com sucesso!";
+            // preserve the last closed value locally so UI shows it until next open
+            lastClosedCaixaValue = fecharDto.ValorFechamento;
             fecharDto = new();
             caixaAberto = null;
+            // reload status (this will not overwrite currentCaixa because no open caixa exists)
             await CarregarStatusCaixa();
         }
         catch (Exception ex)

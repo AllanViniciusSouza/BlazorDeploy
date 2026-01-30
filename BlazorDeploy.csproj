@@ -28,10 +28,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Shared\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Content Update="wwwroot\appconfig.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

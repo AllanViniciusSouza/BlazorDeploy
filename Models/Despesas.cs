@@ -1,10 +1,13 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
+using BlazorDeploy.Shared;
 
 namespace BlazorDeploy.Models
 {
     public class Despesas
     {
         public int Id { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("dataSelecionada")]
         public DateTime Data { get; set; } = DateTime.Today;
         public string Descricao { get; set; } = string.Empty;
         public string Categoria { get; set; } = string.Empty;

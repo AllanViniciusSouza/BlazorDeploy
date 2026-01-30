@@ -14,7 +14,7 @@
 @* compact vendor + client inputs shown at bottom (rendered near cart) *@
 
 
-    <div class="card shadow-sm p-3 mb-4 bg-dark text-white">
+    <div class="card shadow-sm p-3 mb-4 bg-dark text-white" @onkeydown:window="OnWindowKeyDown">
     <div class="d-flex align-items-center justify-content-between mb-2">
         <h4 class="fw-bold text-white mb-0">Produtos</h4>
         <button class="btn btn-sm btn-outline-primary ms-2" title="Abrir Leitor (câmera)" @onclick="OpenScanner" aria-label="Abrir leitor de códigos">
@@ -36,6 +36,8 @@
                        @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
                        @onkeyup="OnSearchKeyUp" />
             }
+
+@* keyboard handlers moved into @code block to avoid rendering as text *@
 
 @* Numeric keypad overlay *@
 <div id="numeric-keypad" class="position-fixed" style="display:none; z-index:1050; right:20px; bottom:120px;" onmousedown="event.preventDefault();">
@@ -59,6 +61,76 @@
 @code {
     private string _activeKeypadTarget = null;
     private DotNetObjectReference<object>? _dotRefForKeypad;
+    private DotNetObjectReference<object>? _escDotRef;
+
+    private async Task OnWindowKeyDown(KeyboardEventArgs e)
+    {
+        // ignore when user is focused inside an input/textarea/select
+        string activeTag = string.Empty;
+        try
+        {
+            activeTag = (await JS.InvokeAsync<string>("eval", "(document.activeElement && document.activeElement.tagName) || ''"))?.ToUpperInvariant() ?? string.Empty;
+        }
+        catch { }
+
+        if (activeTag == "INPUT" || activeTag == "TEXTAREA" || activeTag == "SELECT" || activeTag == "OPTION")
+            return;
+
+        if (e.Key == "Escape")
+        {
+            ClearAllFilters();
+            StateHasChanged();
+        }
+        else if (e.Key == "+")
+        {
+            AddBlankCartItem();
+            await Task.Delay(50);
+            try { await JS.InvokeVoidAsync("eval", "document.querySelector('textarea[placeholder=\\'Descrição\\']')?.focus()"); } catch { }
+            StateHasChanged();
+        }
+    }
+
+    private void ClearAllFilters()
+    {
+        selectedMarca = null;
+        selectedSize = null;
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+        searchTerm = string.Empty;
+        filteredProdutos = maisVendidos ?? new();
+        showProductList = filteredProdutos.Any();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _escDotRef ??= DotNetObjectReference.Create((object)this);
+                await JS.InvokeVoidAsync("addGlobalEscHandler", _escDotRef);
+            }
+            catch { }
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnEscapePressed()
+    {
+        // called from global JS handler
+        ClearAllFilters();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("removeGlobalEscHandler");
+        }
+        catch { }
+        try { _escDotRef?.Dispose(); } catch { }
+    }
 
     private async Task ShowNumericKeypadAsync(string elementId)
     {
@@ -459,7 +531,7 @@
             </div>
         </div>
 
-    @if (cart.Any() && !string.IsNullOrEmpty(formaPagamentoSelecionada) && !string.IsNullOrEmpty(pedidoStatus) && !isProcessing)
+    @if (cart.Any() && !string.IsNullOrEmpty(formaPagamentoSelecionada) && !string.IsNullOrEmpty(pedidoStatus) && !isProcessing && !string.IsNullOrEmpty(vendedorNome))
     {
         <button class="btn btn-success btn-lg w-100 mt-3" @onclick="FinalizePurchase">
             <span>Finalizar Compra</span>
@@ -484,8 +556,8 @@
                 <h5 class="fw-bold text-center">@selectedProduct?.Nome</h5>
 
                 <div class="mb-3">
-                    <input type="text" inputmode="numeric" pattern="[0-9xX]*" class="form-control form-control-lg text-center"
-                           placeholder="Quantidade (ex: 9x24 ou 216)" value="@selectedQuantityBuffer" @oninput="OnQuantityInput" />
+                    <input id="quantity_input" type="text" inputmode="numeric" pattern="[0-9xX]*" class="form-control form-control-lg text-center"
+                           placeholder="Quantidade (ex: 9x24 ou 216)" value="@selectedQuantityBuffer" @oninput="OnQuantityInput" @onkeydown="OnQuantityKeyDown" />
                     <div class="small text-muted mt-1">Quantidade final: @RenderComputedQuantity()</div>
                 </div>
 
@@ -548,6 +620,13 @@
     private string? selectedSize = null;
     private List<string> flavorsForSelection = new();
     private Dictionary<string, Produto> flavorToProduct = new(StringComparer.OrdinalIgnoreCase);
+    // snapshot to preserve product filters while modal is open
+    private List<Produto>? _snapshotFilteredProdutos;
+    private string? _snapshotSelectedMarca;
+    private string? _snapshotSelectedSize;
+    private List<string>? _snapshotFlavorsForSelection;
+    private bool? _snapshotShowProductList;
+    private string? _snapshotSearchTerm;
 
     private void PopulateMarcasFromProdutos(List<Produto> produtos)
     {
@@ -1279,18 +1358,43 @@ void OpenQuantityModal(Produto produto)
     selectedQuantityBuffer = string.Empty;
     // default temperature to null
     selectedTemperatura = null;
+    // take snapshot so UI filters are not lost if other code mutates them
+    _snapshotFilteredProdutos = filteredProdutos?.ToList();
+    _snapshotSelectedMarca = selectedMarca;
+    _snapshotSelectedSize = selectedSize;
+    _snapshotFlavorsForSelection = flavorsForSelection?.ToList();
+    _snapshotShowProductList = showProductList;
+    _snapshotSearchTerm = searchTerm;
     showQuantityModal = true;
+    // focus the quantity input after modal is shown
+    _ = Task.Run(async () => {
+        await Task.Delay(50); // allow modal to render
+        try { await JS.InvokeVoidAsync("eval", "document.getElementById('quantity_input')?.focus()"); } catch { }
+    });
 }
 
 void CloseModal()
 {
     showQuantityModal = false;
-    // clear search so user can type a new search after adding
-    searchTerm = string.Empty;
-    showProductList = false;
+    // restore snapshot in case filters were modified elsewhere while modal was open
+    if (_snapshotFilteredProdutos != null) filteredProdutos = _snapshotFilteredProdutos;
+    selectedMarca = _snapshotSelectedMarca;
+    selectedSize = _snapshotSelectedSize;
+    if (_snapshotFlavorsForSelection != null) flavorsForSelection = _snapshotFlavorsForSelection;
+    if (_snapshotShowProductList.HasValue) showProductList = _snapshotShowProductList.Value;
+    if (_snapshotSearchTerm != null) searchTerm = _snapshotSearchTerm;
+    // clear snapshots
+    _snapshotFilteredProdutos = null;
+    _snapshotSelectedMarca = null;
+    _snapshotSelectedSize = null;
+    _snapshotFlavorsForSelection = null;
+    _snapshotShowProductList = null;
+    _snapshotSearchTerm = null;
     SyncPriceInputs();
     StateHasChanged();
 }
+
+// snapshot helper removed - modal must not alter filters
 
     private void SyncPriceInputs()
     {
@@ -1463,7 +1567,7 @@ void OnNumericBackspace()
         return false;
     }
 
-    void ConfirmAddToCart()
+private async Task ConfirmAddToCart()
 {
     // prefer computed quantity from buffer if present
     var computed = ComputeQuantityFromBuffer();
@@ -1518,11 +1622,21 @@ void OnNumericBackspace()
     }
 
     showQuantityModal = false;
-    // clear search so user can type a new search after adding
-    searchTerm = string.Empty;
-    showProductList = false;
+    // do not clear product filters or search when closing modal; keep current product list visible
     UpdateCartTotals();
     StateHasChanged();
+}
+
+private async Task OnQuantityKeyDown(KeyboardEventArgs e)
+{
+    if (e.Key == "Enter")
+    {
+        await ConfirmAddToCart();
+    }
+    else if (e.Key == "Escape")
+    {
+        CloseModal();
+    }
 }
 
 void UpdateCartTotals()

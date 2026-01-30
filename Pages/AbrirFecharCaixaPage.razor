@@ -42,23 +42,32 @@ else if (caixaAberto == null)
 
     <div class="card mt-3 p-3">
         <h5>Registrar Retirada do Caixa</h5>
-        <div class="mb-2">
-            <label>Valor</label>
-            <InputNumber @bind-Value="retiradaValor" class="form-control" step="0.01" />
-        </div>
-        <div class="mb-2">
-            <label>Descrição</label>
-            <InputText @bind-Value="retiradaDescricao" class="form-control" />
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-danger" @onclick="RegistrarRetiradaAsync" disabled="@(isRegistrandoRetirada || retiradaValor <= 0)">Registrar Retirada</button>
-            <button class="btn btn-secondary" @onclick="LimparRetirada">Limpar</button>
-        </div>
-        @if (!string.IsNullOrEmpty(retiradaMensagem))
+        @if (caixaAberto != null)
         {
-            <div class="mt-2 text-muted">@retiradaMensagem</div>
+            <div class="mb-2">
+                <label>Valor</label>
+                <InputNumber @bind-Value="retiradaValor" class="form-control" step="0.01" />
+            </div>
+            <div class="mb-2">
+                <label>Descrição</label>
+                <InputText @bind-Value="retiradaDescricao" class="form-control" />
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-danger" @onclick="RegistrarRetiradaAsync" disabled="@(isRegistrandoRetirada || retiradaValor <= 0)">Registrar Retirada</button>
+                <button class="btn btn-secondary" @onclick="LimparRetirada">Limpar</button>
+            </div>
+            @if (!string.IsNullOrEmpty(retiradaMensagem))
+            {
+                <div class="mt-2 text-muted">@retiradaMensagem</div>
+            }
+        }
+        else
+        {
+            <div class="text-muted">Abra o caixa para registrar retiradas.</div>
         }
     </div>
+
+    
 }
 else
 {

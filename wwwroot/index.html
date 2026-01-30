@@ -41,6 +41,30 @@
     <script src="_framework/blazor.webassembly.js"></script>
 
     <script>
+        // Global ESC handler registration for Blazor pages
+        (function () {
+            var dotRef = null;
+            function onKeyDown(e) {
+                if (e.key === 'Escape') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnEscapePressed'); } catch { }
+                    }
+                }
+            }
+            window.addGlobalEscHandler = function (dref) {
+                try {
+                    dotRef = dref;
+                    window.addEventListener('keydown', onKeyDown);
+                } catch { }
+            };
+            window.removeGlobalEscHandler = function () {
+                try {
+                    window.removeEventListener('keydown', onKeyDown);
+                    dotRef = null;
+                } catch { }
+            };
+        })();
+
         window.numericKeypad = {
             _target: null,
             show: function (elementId) {
@@ -93,17 +117,31 @@
                     if (!el) return;
                     el.focus();
                     console.log('numericKeypad.insert -> target=', elementId, 'ch=', ch, 'valueBefore=', el.value);
-                    // insert at caret (selectionStart may be null for type=number in some browsers)
-                    var start = (typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
-                    var end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : start;
-                    var val = el.value || '';
-                    var newVal = val.substring(0, start) + ch + val.substring(end);
-                    el.value = newVal;
-                    var newPos = start + ch.length;
-                    this._setCaret(el, newPos);
-                    // dispatch both input and change to ensure Blazor bindings pick up the new value
+                    // insert at caret; prefer setRangeText when available
+                    var start = (typeof el.selectionStart === 'number') ? el.selectionStart : null;
+                    var end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : null;
+                    var origType = el.type;
+                    try {
+                        if (origType === 'number') el.type = 'text';
+                        if (typeof el.setRangeText === 'function' && start !== null && end !== null) {
+                            // modern browsers: use setRangeText to insert correctly
+                            el.setRangeText(ch, start, end, 'end');
+                            var newPos = (start + ch.length);
+                            this._setCaret(el, newPos);
+                        } else {
+                        var val = el.value || '';
+                        if (start === null || end === null) {
+                            // fallback: append
+                            el.value = val + ch;
+                        } else {
+                            el.value = val.substring(0, start) + ch + val.substring(end);
+                        }
+                        }
+                    } finally {
+                        try { if (origType === 'number') el.type = origType; } catch (e) { }
+                    }
+                    // dispatch input to ensure Blazor bindings pick up the new value
                     el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
                     console.log('numericKeypad.insert -> valueAfter=', el.value);
                 } catch (e) {
                     console.error('numericKeypad.insert error', e);
@@ -115,22 +153,39 @@
                     if (!el) return;
                     el.focus();
                     console.log('numericKeypad.backspace -> target=', elementId, 'valueBefore=', el.value);
-                    var start = (typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
-                    var end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : start;
+                    var start = (typeof el.selectionStart === 'number') ? el.selectionStart : null;
+                    var end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : null;
                     var val = el.value || '';
-                    if (start === end && start > 0) {
-                        // remove previous char
-                        var newVal = val.substring(0, start - 1) + val.substring(end);
-                        el.value = newVal;
-                        this._setCaret(el, start - 1);
-                    } else if (start !== end) {
-                        // remove selection
-                        var newVal = val.substring(0, start) + val.substring(end);
-                        el.value = newVal;
-                        this._setCaret(el, start);
+                    var origType = el.type;
+                    try {
+                        if (origType === 'number') el.type = 'text';
+                        if (typeof el.setRangeText === 'function' && start !== null && end !== null) {
+                            if (start === end && start > 0) {
+                                // delete previous char
+                                el.setRangeText('', start - 1, end, 'end');
+                                this._setCaret(el, start - 1);
+                            } else if (start !== end) {
+                                el.setRangeText('', start, end, 'end');
+                                this._setCaret(el, start);
+                            }
+                        } else {
+                        if (start === null || end === null) {
+                            // fallback: remove last char
+                            if (val.length > 0) el.value = val.slice(0, -1);
+                        } else {
+                            if (start === end && start > 0) {
+                                el.value = val.substring(0, start - 1) + val.substring(end);
+                                this._setCaret(el, start - 1);
+                            } else if (start !== end) {
+                                el.value = val.substring(0, start) + val.substring(end);
+                                this._setCaret(el, start);
+                            }
+                        }
+                        }
+                    } finally {
+                        try { if (origType === 'number') el.type = origType; } catch (e) { }
                     }
                     el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
                     console.log('numericKeypad.backspace -> valueAfter=', el.value);
                 } catch (e) {
                     console.error('numericKeypad.backspace error', e);
@@ -139,6 +194,7 @@
             commit: function (elementId) {
                 var el = document.getElementById(elementId);
                 if (!el) return;
+                // commit should trigger change so two-way bindings that listen on change update
                 el.dispatchEvent(new Event('change', { bubbles: true }));
             }
         };

@@ -1,0 +1,7 @@
+em Developer PowerShell
+
+GIT add --all
+
+Git commit -m ""
+
+GIT push -u origin main

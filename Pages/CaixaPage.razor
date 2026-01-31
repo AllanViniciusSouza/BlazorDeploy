@@ -2187,6 +2187,24 @@ private void OnUsarPagamento2Changed()
             await _apiService.MovimentarEstoqueAsync(movimentacao);
         }
 
+        // If payment includes cash, open cash drawer via print service
+        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase)
+            || (UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                var resp = await _apiService.AbrirGavetaAsync("192.168.1.51", 9100);
+                if (!resp.Data)
+                {
+                    try { await JS.InvokeVoidAsync("console.warn", "Falha ao abrir gaveta: " + (resp.ErrorMessage ?? "unknown")); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { await JS.InvokeVoidAsync("console.error", "Erro ao solicitar abertura de gaveta: " + ex.Message); } catch { }
+            }
+        }
+
         cart.Clear();
         // reset payment fields and selections so next sale starts clean
         // remember last primary formaPagamentoSelecionada and persist it
@@ -2202,15 +2220,12 @@ private void OnUsarPagamento2Changed()
         UsarPagamento2 = false;
 
         clienteNome = string.Empty;
-        // persist last vendedor
+        // persist last vendedor so it can be restored on next load
         try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastVendedor", vendedorNome ?? string.Empty); } catch { }
-        // reset vendedor and set default back to last or Finalizado
-        vendedorNome = string.Empty;
+        // persist last pedido status so next session can default to it
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastPedidoStatus", pedidoStatus ?? string.Empty); } catch { }
+        // keep vendedorNome populated (last vendedor) and keep pedidoStatus as Finalizado
         pedidoStatus = "Finalizado";
-        // clear radio selections
-        formaPagamentoSelecionada = string.Empty;
-        formaPagamento2 = string.Empty;
-        pedidoStatus = string.Empty;
         entryTelefone = string.Empty;
         entryEndereco = string.Empty;
         observacoes = string.Empty;

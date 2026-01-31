@@ -27,7 +27,10 @@
     [JSInvokable]
     public Task OnF1Key()
     {
-        Navigation.NavigateTo("/");
+        try { Console.WriteLine("F1 pressed - navigating to app base"); } catch { }
+        // Use relative navigation (empty string) so Navigation goes to the app base
+        // This avoids absolute "/" which points to domain root and can cause 404 on GitHub Pages
+        Navigation.NavigateTo("");
         return Task.CompletedTask;
     }
 

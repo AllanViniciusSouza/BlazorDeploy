@@ -19,20 +19,16 @@
         .pedido-card { max-width: 100%; min-height: 120px; }
         .pedido-card .card-body { padding: .375rem; }
     }
-    /* Prevent fixed right summary from overlapping content on larger screens */
-    @@media (min-width: 768px) {
-        .main-layout.content { padding-right: 300px; }
-    }
+    /* (removed fixed-card padding) */
 </style>
 
-<div class="d-flex align-items-center mb-3">
+<!-- Date selector and actions placed inline above the status filter -->
+<div class="mb-3 d-flex align-items-center">
     <label class="me-2 fw-bold">Selecionar Data:</label>
     <InputDate @bind-Value="dataSelecionada" class="form-control w-auto me-2" />
     <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
+    <button class="btn btn-outline-secondary ms-2" @onclick="RefreshPageAsync" title="Atualizar página">⟳</button>
 </div>
-
-<!-- Refresh button (top-right) -->
-<button class="btn btn-outline-secondary position-fixed" style="top:12px; right:12px; z-index:2000;" @onclick="RefreshPageAsync" title="Atualizar página">⟳</button>
 
 <div class="mb-3 d-flex align-items-center gap-3">
     <label class="fw-bold">Filtrar status:</label>
@@ -49,9 +45,10 @@
     @* Remove inline summary shown earlier for small screens; replaced by fixed card on the right. *@
 </div>
 
-    <!-- Right-side summary card (shows on md+) -->
-    <div class="d-none d-md-block position-fixed" style="top:56px; right:12px; width:260px; z-index:2000;">
-        <div class="card shadow-sm p-3">
+
+    <!-- Inline summary card (shows on md+). Placed between filter controls and orders list, does not float. -->
+    <div class="d-none d-md-block mb-3">
+        <div class="card shadow-sm p-3" style="max-width:360px;">
             <div class="small text-muted">Total Vendido</div>
             <div class="fw-bold fs-5 text-success">R$ @totalVendido.ToString("F2")</div>
             <hr />
@@ -66,10 +63,14 @@
         </div>
     </div>
 
+    @* (fixed duplicates removed) *@
+
 @if (pedidosHoje == null || !pedidosHoje.Any())
 {
     <p>Nenhum pedido na data selecionada.</p>
 }
+
+    
 
 
     @* Finalize payment selection modal *@
@@ -706,6 +707,8 @@ else
 }
 
 @code {
+    
+    
     private bool isEditingPedido = false;
     private string? editingField = null;
     private string? editClienteNome;

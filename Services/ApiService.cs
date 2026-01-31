@@ -19,6 +19,12 @@ using System.Net.Http.Headers;
 
 namespace BlazorDeploy.Services;
 
+public class OpenPrinterDto
+{
+    public string PrinterIp { get; set; }
+    public int PrinterPort { get; set; }
+}
+
 public class ApiService
 {
     private readonly HttpClient _httpClient;
@@ -45,6 +51,46 @@ public class ApiService
                 _serializerOptions.Converters.Add(new DateTimeJsonConverter());
             }
             catch { }
+        }
+
+    /// <summary>
+    /// Solicita ao serviço de impressão que abra a gaveta (drawer) enviando IP e porta da impressora.
+    /// Endpoint esperado: POST api/Impressao/open
+    /// </summary>
+    public async Task<ApiResponse<bool>> AbrirGavetaAsync(string printerIp, int printerPort)
+    {
+        try
+        {
+            var payload = new OpenPrinterDto { PrinterIp = printerIp, PrinterPort = printerPort };
+            // serialize using default options to keep property names as declared (PascalCase)
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            // Build full URL and ensure auth header is set (mirrors PostRequest behavior)
+            var endpoint = "api/Impressao/open";
+            var enderecoUrl = BuildUrl(endpoint);
+            try { await AddAuthorizationHeader(); } catch { }
+
+            var response = await _httpClient.PostAsync(enderecoUrl, content);
+
+            string respBody = string.Empty;
+            try { respBody = await response.Content.ReadAsStringAsync(); } catch { }
+            try { _jsRuntime.InvokeVoidAsync("console.log", $"AbrirGaveta POST {enderecoUrl} -> {response.StatusCode} body: {respBody}"); } catch { }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Erro ao solicitar abertura de gaveta: {Status} - {Body}", response.StatusCode, respBody);
+                return new ApiResponse<bool> { ErrorMessage = $"Erro ao abrir gaveta: {response.StatusCode}", Data = false };
+            }
+
+            return new ApiResponse<bool> { Data = true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception ao abrir gaveta");
+            try { _jsRuntime.InvokeVoidAsync("console.error", "AbrirGavetaAsync exception: " + ex.Message); } catch { }
+            return new ApiResponse<bool> { ErrorMessage = ex.Message, Data = false };
+        }
     }
 
     // PUT api/pedidos/{id}/finalize -> returns updated order summary { Id, Status, ValorTotal }

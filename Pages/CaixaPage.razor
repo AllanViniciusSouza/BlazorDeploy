@@ -11,6 +11,11 @@
 
 <PageTitle>Caixa</PageTitle>
 
+@if (!string.IsNullOrEmpty(initializationError))
+{
+    <div class="alert alert-danger mb-3">Erro ao inicializar página: @initializationError</div>
+}
+
 @* compact vendor + client inputs shown at bottom (rendered near cart) *@
 
 
@@ -940,6 +945,7 @@ private string? selectedTemperatura = null;
     private string pagamento1Text = string.Empty;
     private bool UsarPagamento2 = false;
     private bool SecondaryCalculated = false;
+    private string initializationError = string.Empty;
     private string pedidoStatus = "Finalizado";
     private string PedidoStatus
     {
@@ -1860,70 +1866,79 @@ private void OnUsarPagamento2Changed()
 
     protected override async Task OnInitializedAsync()
     {
-        // try to restore previous caixa state if any
-        await RestoreCaixaStateIfAnyAsync();
-
-        // If opened via external scanner app it may include ?scanned=CODE in the URL -> handle it
         try
         {
-            var uri = Navigation.Uri;
-            var marker = "?scanned=";
-            var idx = uri.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0)
-            {
-                var code = Uri.UnescapeDataString(uri.Substring(idx + marker.Length));
-                if (!string.IsNullOrWhiteSpace(code))
-                {
-                    // remove query part from URL and process
-                    var baseUri = uri.Substring(0, idx);
-                    // navigate to base to remove query (keeps app state)
-                    Navigation.NavigateTo(baseUri, replace: true);
-                    await ProcessBarcode(code);
-                }
-            }
-        }
-        catch { }
+            // try to restore previous caixa state if any
+            await RestoreCaixaStateIfAnyAsync();
 
-        var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
-
-        if (string.IsNullOrEmpty(nome))
-        {
-            Navigation.NavigateTo("login");
-        }
-
-        var (produtosMaisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
-        filteredProdutos = produtosMaisVendidos ?? new List<Produto>();
-
-        // load all products once for brand/size quick filters
-        var (all, errAll) = await _apiService.GetTodosProdutos();
-        allProdutos = all ?? new List<Produto>();
-        PopulateMarcasFromProdutos(allProdutos);
-
-        // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
-        if (vendedores == null || !vendedores.Any())
-        {
-            vendedores = new List<string> { "Ronaldo", "Nathan", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
-        }
-        try
-        {
-            var last = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastVendedor");
-            if (!string.IsNullOrEmpty(last))
-            {
-                vendedorNome = last;
-                isOtherVendedorSelected = !vendedores.Contains(vendedorNome);
-            }
-            // restore last used primary payment form if present
+            // If opened via external scanner app it may include ?scanned=CODE in the URL -> handle it
             try
             {
-                var lastFp = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastFormaPagamento1");
-                if (!string.IsNullOrEmpty(lastFp))
+                var uri = Navigation.Uri;
+                var marker = "?scanned=";
+                var idx = uri.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
                 {
-                    formaPagamentoSelecionada = lastFp;
+                    var code = Uri.UnescapeDataString(uri.Substring(idx + marker.Length));
+                    if (!string.IsNullOrWhiteSpace(code))
+                    {
+                        // remove query part from URL and process
+                        var baseUri = uri.Substring(0, idx);
+                        // navigate to base to remove query (keeps app state)
+                        Navigation.NavigateTo(baseUri, replace: true);
+                        await ProcessBarcode(code);
+                    }
                 }
             }
             catch { }
+
+            var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+
+            if (string.IsNullOrEmpty(nome))
+            {
+                Navigation.NavigateTo("login");
+                return;
+            }
+
+            var (produtosMaisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
+            filteredProdutos = produtosMaisVendidos ?? new List<Produto>();
+
+            // load all products once for brand/size quick filters
+            var (all, errAll) = await _apiService.GetTodosProdutos();
+            allProdutos = all ?? new List<Produto>();
+            PopulateMarcasFromProdutos(allProdutos);
+
+            // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
+            if (vendedores == null || !vendedores.Any())
+            {
+                vendedores = new List<string> { "Ronaldo", "Nathan", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
+            }
+            try
+            {
+                var last = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastVendedor");
+                if (!string.IsNullOrEmpty(last))
+                {
+                    vendedorNome = last;
+                    isOtherVendedorSelected = !vendedores.Contains(vendedorNome);
+                }
+                // restore last used primary payment form if present
+                try
+                {
+                    var lastFp = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastFormaPagamento1");
+                    if (!string.IsNullOrEmpty(lastFp))
+                    {
+                        formaPagamentoSelecionada = lastFp;
+                    }
+                }
+                catch { }
+            }
+            catch { }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            initializationError = ex.Message;
+            try { await JS.InvokeVoidAsync("console.error", "CaixaPage OnInitializedAsync error: " + ex.Message); } catch { }
+        }
     }
 
     private async Task BuscarSugestoesComanda(ChangeEventArgs e)

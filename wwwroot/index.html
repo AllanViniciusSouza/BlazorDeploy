@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rota019</title>
-    <base href="/" />
+    <base href="./" />
 
     <!-- ✅ Bootstrap via CDN (sem arquivos locais) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
@@ -268,7 +268,20 @@
         };
     </script>
 
-    <script>navigator.serviceWorker.register('service-worker.js');</script>
+    <script>
+        // Register service worker only when supported. Wrap in try/catch to avoid
+        // breaking the app on browsers (or hosting environments) that reject
+        // service worker registration (e.g. some mobile browsers or GitHub Pages setups).
+        try {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('service-worker.js').catch(function (err) {
+                    console.warn('Service worker registration failed:', err);
+                });
+            }
+        } catch (e) {
+            console.warn('Service worker registration error:', e);
+        }
+    </script>
 </body>
 
 </html>

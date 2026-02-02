@@ -1,0 +1,2445 @@
+﻿@page "/teste"
+@inject ApiService _apiService
+@inject AuthService AuthService
+@inject IJSRuntime JS
+@inject IValidator Validator
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using System.Globalization
+
+@inject NavigationManager Navigation
+
+<PageTitle>Caixa</PageTitle>
+
+@if (!string.IsNullOrEmpty(initializationError))
+{
+    <div class="alert alert-danger mb-3">Erro ao inicializar página: @initializationError</div>
+}
+
+
+
+@* compact vendor + client inputs shown at bottom (rendered near cart) *@
+
+
+    <div class="card shadow-sm p-3 mb-4 bg-dark text-white" @onkeydown:window="OnWindowKeyDown">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <h4 class="fw-bold text-white mb-0">Produtos</h4>
+        <button class="btn btn-sm btn-outline-primary ms-2" title="Abrir Leitor (câmera)" @onclick="OpenScanner" aria-label="Abrir leitor de códigos">
+            <!-- simple camera SVG icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M10.5 2a.5.5 0 0 1 .5.5V3h1.5A1.5 1.5 0 0 1 14 4.5v7A1.5 1.5 0 0 1 12.5 13H3.5A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3H5v-.5a.5.5 0 0 1 .5-.5h5zM8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                <path d="M8 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12">
+            @if (string.IsNullOrEmpty(selectedMarca))
+            {
+                <input id="searchInput" class="form-control form-control-lg"
+                       placeholder="Pesquisar por nome ou código de barras"
+                       value="@searchTerm"
+                       @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
+                       @onkeyup="OnSearchKeyUp" />
+            }
+
+@* keyboard handlers moved into @code block to avoid rendering as text *@
+
+@* Numeric keypad removed — iOS issues suspected. *@
+
+@code {
+    private string GetDataPagamentoPrazoClass() => dataPagamentoPrazo.HasValue ? "form-control w-auto border-3 border-primary" : "form-control w-auto border-3 border-danger";
+    private string GetDataPagamentoPrazo2Class() => dataPagamentoPrazo2.HasValue ? "form-control w-auto border-3 border-primary" : "form-control w-auto border-3 border-secondary";
+    private DotNetObjectReference<object>? _escDotRef;
+    private bool focusSearchRequested = false;
+
+    private async Task OnWindowKeyDown(KeyboardEventArgs e)
+    {
+        // ignore when user is focused inside an input/textarea/select
+        string activeTag = string.Empty;
+        try
+        {
+            activeTag = (await JS.InvokeAsync<string>("eval", "(document.activeElement && document.activeElement.tagName) || ''"))?.ToUpperInvariant() ?? string.Empty;
+        }
+        catch { }
+
+        if (activeTag == "INPUT" || activeTag == "TEXTAREA" || activeTag == "SELECT" || activeTag == "OPTION")
+            return;
+
+        if (e.Key == "Escape")
+        {
+            ClearAllFilters();
+            StateHasChanged();
+        }
+        else
+        {
+            // accept '+' from main keyboard (shift+'='), numpad or Add key
+            var isPlus = e.Key == "+" || e.Code == "NumpadAdd" || e.Key == "Add" || (e.Key == "=" && e.ShiftKey);
+            if (isPlus)
+            {
+                await AddBlankCartItem();
+                // allow render then focus description
+                await Task.Delay(50);
+                try { await JS.InvokeVoidAsync("focusFirstBlankDescricao"); } catch { }
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void ClearAllFilters()
+    {
+        selectedMarca = null;
+        selectedSize = null;
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+        searchTerm = string.Empty;
+        filteredProdutos = maisVendidos ?? new();
+        showProductList = filteredProdutos.Any();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _escDotRef ??= DotNetObjectReference.Create((object)this);
+                await JS.InvokeVoidAsync("addGlobalEscHandler", _escDotRef);
+            }
+            catch { }
+            // request focus for search input on first render
+            focusSearchRequested = true;
+        }
+
+        if (focusSearchRequested)
+        {
+            focusSearchRequested = false;
+            try { await JS.InvokeVoidAsync("eval", "document.getElementById('searchInput')?.focus()"); } catch { }
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnEscapePressed()
+    {
+        // called from global JS handler
+        ClearAllFilters();
+        try { await JS.InvokeVoidAsync("numericKeypad.hide"); } catch { }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnPlusPressed()
+    {
+        // add blank item and focus description
+        await AddBlankCartItem();
+        await InvokeAsync(async () => {
+            StateHasChanged();
+            try { await JS.InvokeVoidAsync("focusFirstBlankDescricao"); } catch { }
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("removeGlobalEscHandler");
+        }
+        catch { }
+        try { _escDotRef?.Dispose(); } catch { }
+    }
+}
+        </div>
+    </div>
+
+    @* Brand quick-filter cards *@
+    @if (marcas != null && marcas.Any())
+    {
+        <div class="mb-3">
+            <label class="form-label fw-bold">Marcas</label>
+            <div class="brand-list" style="font-size:0.85rem;">
+                @if (string.IsNullOrEmpty(selectedMarca))
+                {
+                    <div class="d-flex flex-row flex-wrap" style="gap:1rem; align-items:flex-start;">
+                        @foreach (var group in marcas.GroupBy(m => char.ToUpperInvariant((!string.IsNullOrWhiteSpace(m) ? m.Trim()[0] : '?'))).OrderBy(g => g.Key))
+                        {
+                            <div style="min-width:90px;">
+                                <div class="fw-bold text-white mb-1">@group.Key</div>
+                                @foreach (var m in group.OrderBy(x => x))
+                                {
+                                    <button class="brand-item text-white text-start p-0 mb-1" style="background:none; border:none; display:block; width:100%; padding:0.12rem 0;" @onclick="() => OnSelectMarca(m)">@m</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div>
+                        <span class="fw-bold text-white">@selectedMarca</span>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="() => OnSelectMarca(null)">Limpar</button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* Size options for selected brand *@
+    @if (!string.IsNullOrEmpty(selectedMarca) && sizesForMarca != null && sizesForMarca.Any())
+    {
+        <div class="mb-3">
+            <label class="form-label fw-bold">Opções para @selectedMarca</label>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var size in sizesForMarca)
+                {
+                    <div class="card p-2 bg-dark text-white" style="min-width:140px; cursor:pointer;" @onclick="() => OnSelectSize(size)">
+                        <div class="fw-bold">@size</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* Flavor cards shown after selecting size (if available) *@
+    @if (flavorsForSelection != null && flavorsForSelection.Any())
+    {
+        <div class="mb-3">
+            <label class="form-label fw-bold">Sabores para @selectedMarca @selectedSize</label>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var f in flavorsForSelection)
+                {
+                    <div class="card p-2 bg-dark text-white" style="min-width:120px; cursor:pointer;" @onclick="() => OnSelectFlavor(f)">
+                        <div class="fw-bold">@f</div>
+                    </div>
+                }
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ClearFlavors()">Limpar</button>
+            </div>
+        </div>
+    }
+
+    @if (showProductList)
+    {
+        <div style="max-height: 480px; overflow-y: auto;">
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-6 g-2">
+                @foreach (var Produto in filteredProdutos)
+                {
+                    <div class="col">
+                    <div class="card h-100 shadow-sm small" style="cursor:pointer;">
+                            <div class="card-body p-1 d-flex flex-column" @onclick="() => OpenQuantityModal(Produto)">
+                                <div class="card-title mb-1" title="@Produto.Nome" style="font-size:0.95rem; white-space:normal;">@Produto.Nome</div>
+                                <div class="d-flex gap-2 mt-2 align-items-end">
+                                    <div class="text-center">
+                                        <div class="small text-white-50">Quente</div>
+                                        <div class="fw-bold">R$ @(Produto.PrecoQuente > 0 ? Produto.PrecoQuente.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="small text-white-50">Gelado</div>
+                                        <div class="fw-bold">R$ @(Produto.PrecoGelada > 0 ? Produto.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+@* create-from-barcode modal *@
+@if (showCreateProductModal)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal d-block">
+        <div class="modal-dialog modal-md mt-5">
+            <div class="modal-content p-4 shadow-lg">
+                <h5 class="fw-bold text-center">Cadastrar Produto (código: @newProductForBarcode.Barcode)</h5>
+
+                <div class="mb-3">
+                    <label class="form-label">Nome</label>
+                    <input class="form-control" @bind="newProductForBarcode.Nome" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Preço (padrão)</label>
+                    <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.Preco" />
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Quente (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoQuente" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Gelada (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoGelada" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Custo (opcional)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newProductForBarcode.PrecoCusto" />
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3">
+                    <button class="btn btn-secondary btn-lg" @onclick="CancelCreateProduct">Cancelar</button>
+                    <button class="btn btn-primary btn-lg" @onclick="CreateProductFromBarcode">Cadastrar e Adicionar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+<div class="card shadow-sm p-3 mb-4 bg-dark text-white">
+    <div class="d-flex align-items-center justify-content-between">
+        <h4 class="fw-bold text-white mb-0">Carrinho</h4>
+           </div>
+
+    <table class="table table-bordered table-striped align-middle mt-2">
+        <thead class="table-dark">
+            <tr>
+                <th>Produto</th>
+                <th>Valor Unit.</th>
+                <th>Qtd</th>
+                <th>Total</th>
+                <th class="text-center">&nbsp;</th>
+            </tr>
+        </thead>
+    <tbody>
+            @for (int i = 0; i < cart.Count; i++)
+            {
+                var item = cart[i];
+                var idx = i;
+                <tr>
+                    <td>
+                        @if (item.Produto == null || item.Produto.Id == 0)
+                        {
+                            // use a textarea so text wraps as user types
+                            <textarea class="form-control form-control-sm" placeholder="Descrição"
+                                      style="width:100%; min-width:0; white-space:pre-wrap; overflow-wrap:break-word; resize:vertical;"
+                                      rows="2"
+                                      @bind="item.Produto.Nome" @bind:event="oninput"></textarea>
+                        }
+                        else
+                        {
+                            <span class="fw-bold">@item.Produto.Nome</span>
+                        }
+                    </td>
+
+                    <td>
+                        @if (item.Produto == null || item.Produto.Id == 0)
+                        {
+                            <input id="price_@idx" type="text" inputmode="decimal" pattern="[0-9.,]*"
+                                   class="form-control form-control-sm text-end"
+                                   value="@(idx >= 0 && idx < priceInputs.Count ? priceInputs[idx] : string.Empty)"
+                                   @oninput="@(e => OnPrecoUnitarioTyping(idx, e))"
+                                   @onchange="@(e => OnPrecoUnitarioCommit(idx, e))"
+                                   @onfocus:preventDefault @onblur:preventDefault />
+                        }
+                        else
+                        {
+                            <input id="price_@idx" type="number" step="0.01" class="form-control form-control-sm text-end"
+                                   @bind="cart[idx].PrecoUnitario" @bind:event="oninput" @bind:after="UpdateCartTotals"
+                                   @onfocus:preventDefault @onblur:preventDefault />
+                        }
+                    </td>
+
+                    <td>
+                        <input id="qty_@idx" type="number" min="1"
+                               class="form-control form-control-sm text-center"
+                               @bind="item.Quantidade" @bind:after="UpdateCartTotals"
+                               @onfocus:preventDefault @onblur:preventDefault />
+                    </td>
+
+                    <td class="fw-bold">R$ @item.Total.ToString("0.00")</td>
+
+                    <td>
+                        <button class="btn btn-danger btn-sm"
+                                @onclick="@(() => RemoveFromCart(item))">
+                            X
+                        </button>
+                    </td>
+                </tr>
+            }
+            <!-- add-row: keeps the add-blank-item button always below the last cart row -->
+            <tr>
+                <td colspan="5" class="text-center">
+                    <button class="btn btn-success btn-sm" title="Adicionar item livre" @onclick="AddBlankCartItemAndFocus">+</button>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="row align-items-start">
+        <div class="col-md-8">
+            @* left column kept for cart table (already rendered above) *@
+        </div>
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-end">
+                <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @cart.Sum(p => p.Total).ToString("0.00")</h3>
+                @if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+                {
+                    var troco = trocoDinheiro;
+                    var trocoClass = troco > 0 ? "text-danger" : "text-white";
+                    <h5 class="fw-bold mb-1 text-end @trocoClass" style="font-size:1.05rem;">
+                        Troco: R$ @troco.ToString("0.00")
+                    </h5>
+                }
+            </div>
+
+            <div class="card p-2 bg-transparent border-0">
+                <label class="form-label fw-bold text-white">Forma de Pagamento</label>
+                <div class="d-flex w-100">
+                    <div class="me-3">
+                        <div class="form-check d-flex flex-column">
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => formaPagamentoSelecionada = "Dinheiro"' /><label class="form-check-label ms-2 text-white">Dinheiro</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => formaPagamentoSelecionada = "Credito"' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => formaPagamentoSelecionada = "Debito"' /><label class="form-check-label ms-2 text-white">Débito</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => formaPagamentoSelecionada = "Pix"' /><label class="form-check-label ms-2 text-white">Pix</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => formaPagamentoSelecionada = "A Prazo"' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
+                        </div>
+                    </div>
+                    <div class="flex-fill">
+                        <label class="form-label text-white">Valor (principal)</label>
+                        <input id="pag1_input" type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!UsarPagamento2) && !string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus:preventDefault @onblur:preventDefault />
+                        <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="usar_pag2" @bind="UsarPagamento2" @bind:after="OnUsarPagamento2Changed" /><label class="form-check-label ms-2 text-white" for="usar_pag2">Adicionar forma de pagamento 2</label></div>
+                    </div>
+                </div>
+
+                @if (formaPagamentoSelecionada == "A Prazo")
+                {
+                    <div class="mt-2">
+                        <label class="text-white">Data de Pagamento (prazo)</label>
+                        <InputDate @bind-Value="dataPagamentoPrazo"
+                                   class="@GetDataPagamentoPrazoClass()"
+                                   style="transition: border-color .15s ease, box-shadow .15s ease;" />
+                    </div>
+                }
+
+                @if (UsarPagamento2)
+                {
+                    <div class="mt-3">
+                        <label class="form-label fw-bold text-white">Forma de Pagamento 2 (opcional)</label>
+                        <div class="d-flex align-items-start">
+                            <div class="form-check d-flex flex-column me-2">
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(formaPagamento2 == "Credito")' @onclick='() => formaPagamento2 = "Credito"' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => formaPagamento2 = "Debito"' /><label class="form-check-label ms-2 text-white">Débito</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => formaPagamento2 = "Pix"' /><label class="form-check-label ms-2 text-white">Pix</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => formaPagamento2 = "A Prazo"' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
+                            </div>
+                            <div class="ms-2">
+                                <input type="number" step="0.01" class="form-control" style="max-width:140px;" placeholder="Valor" @bind="pagamento2" disabled="@SecondaryCalculated" />
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+            <!-- Vendedores: moved here to sit between payment and client input -->
+            <div class="mt-3">
+                <label class="form-label fw-bold text-white">Vendedor</label>
+                <div class="d-flex flex-wrap gap-2">
+                    @if (vendedores != null && vendedores.Any())
+                    {
+                        @foreach (var v in vendedores)
+                        {
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_@v" @onchange="() => OnVendedorSelected(v)" checked="@(vendedorNome == v)" />
+                                <label class="form-check-label ms-1 text-white" for="v_inline_@v">@v</label>
+                            </div>
+                        }
+
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_outro" @onchange="() => OnOtherVendedorSelected()" checked="@isOtherVendedorSelected" />
+                            <label class="form-check-label ms-1 text-white" for="v_inline_outro">Outro</label>
+                        </div>
+
+                        @if (isOtherVendedorSelected)
+                        {
+                            <input class="form-control form-control-sm mt-2" style="max-width:220px;" @bind="vendedorNome" placeholder="Digite o nome do vendedor" />
+                        }
+                    }
+                </div>
+            </div>
+
+   
+    @if (formaPagamento2 == "A Prazo")
+    {
+        <div class="mt-2">
+            <label class="fw-bold">Data de Pagamento 2 (prazo)</label>
+            <InputDate @bind-Value="dataPagamentoPrazo2"
+                       class="@GetDataPagamentoPrazo2Class()"
+                       style="transition: border-color .15s ease, box-shadow .15s ease;" />
+        </div>
+    }
+
+    
+    @* Compact input row: cliente (vendedor moved above) *@
+    <div class="d-flex gap-3 mt-3">
+        <div style="flex:1; display:flex; gap:8px; flex-direction:column;">
+            <div>
+                <input type="text" class="form-control form-control-sm" @bind="clienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome do cliente" />
+            </div>
+
+            @* Telefone e Endereço aparecem apenas quando pagamento for A Prazo (forma 1) ou formaPagamento2 for A Prazo *@
+            @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
+            {
+                <div>
+                    <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
+                </div>
+                <div>
+                    <input type="text" class="form-control form-control-sm" @bind="entryEndereco" placeholder="Endereço" />
+                </div>
+            }
+
+            <div>
+                <input type="text" class="form-control form-control-sm" @bind="observacoes" placeholder="Observações do pedido" />
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <label class="form-label fw-bold">Status do Pedido</label>
+            <div class="d-flex gap-3 mt-2">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" value="Finalizado" checked='@(PedidoStatus == "Finalizado")' @onclick='() => PedidoStatus = "Finalizado"' />
+                    <label class="form-check-label ms-2" for="status_finalizado">Finalizado</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" value="Retirada" checked='@(PedidoStatus == "Retirada")' @onclick='() => PedidoStatus = "Retirada"' />
+                    <label class="form-check-label ms-2" for="status_retirada">Retirada</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" value="Em entrega" checked='@(PedidoStatus == "Em entrega")' @onclick='() => PedidoStatus = "Em entrega"' />
+                    <label class="form-check-label ms-2" for="status_entrega">Em entrega</label>
+                </div>
+            </div>
+        </div>
+
+    @{ 
+        bool canShowFinalize = cart.Any() && !string.IsNullOrEmpty(formaPagamentoSelecionada) && !string.IsNullOrEmpty(pedidoStatus) && !isProcessing && !string.IsNullOrEmpty(vendedorNome);
+        // when payment is 'A Prazo' require a selected due date and a client name before showing the button
+        if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        {
+            canShowFinalize = canShowFinalize && dataPagamentoPrazo.HasValue && !string.IsNullOrWhiteSpace(clienteNome);
+        }
+    }
+
+    @if (canShowFinalize)
+    {
+        <button class="btn btn-success btn-lg w-100 mt-3" @onclick="FinalizePurchase">
+            <span>Finalizar Compra</span>
+        </button>
+    }
+    else
+    {
+        <div class="mt-3"></div>
+    }
+</div>
+
+
+
+
+@if (showQuantityModal)
+{
+    <div class="modal-backdrop fade show"></div>
+
+    <div class="modal d-block">
+        <div class="modal-dialog modal-sm mt-5">
+            <div class="modal-content p-4 shadow-lg">
+                <h5 class="fw-bold text-center">@selectedProduct?.Nome</h5>
+
+                <div class="mb-3">
+                    <input id="quantity_input" type="text" inputmode="numeric" pattern="[0-9xX]*" class="form-control form-control-lg text-center"
+                           placeholder="Quantidade (ex: 9x24 ou 216)" value="@selectedQuantityBuffer" @oninput="OnQuantityInput" @onkeydown="OnQuantityKeyDown" />
+                    <div class="small text-muted mt-1">Quantidade final: @RenderComputedQuantity()</div>
+                </div>
+
+                <div class="mb-2 d-flex flex-wrap gap-2 justify-content-center">
+                    @for (int n = 0; n <= 9; n++)
+                    {
+                        var digit = n; /* capture loop variable to avoid closure issue */
+                        <button class="btn btn-outline-secondary btn-lg" @onclick="() => OnNumericPadClick(digit)">@digit</button>
+                    }
+                    <button class="btn btn-outline-secondary btn-lg" title="Multiplicar (ex: 9x24)" @onclick="OnInsertMultiply">×</button>
+                    <button class="btn btn-outline-danger btn-lg" title="Apagar" @onclick="OnNumericBackspace">⌫</button>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Temperatura</label>
+                    <div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_none" checked="@(string.IsNullOrEmpty(selectedTemperatura))" @onchange="() => OnSelectTemperatura(null)" />
+                            <label class="form-check-label ms-2" for="temp_none">Nenhuma</label>
+                            <div class="small text-muted ms-4">Preço: R$ @(GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_quente" checked='@(selectedTemperatura == "Quente")' @onchange='() => OnSelectTemperatura("Quente")' />
+                            <label class="form-check-label ms-2" for="temp_quente">Quente</label>
+                            <div class="small text-muted ms-4">Preço: R$ @(selectedProduct != null && selectedProduct.PrecoQuente > 0 ? selectedProduct.PrecoQuente.ToString("0.00") : GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="temp" id="temp_gelada" checked='@(selectedTemperatura == "Gelada")' @onchange='() => OnSelectTemperatura("Gelada")' />
+                            <label class="form-check-label ms-2" for="temp_gelada">Gelada</label>
+                            <div class="small text-muted ms-4">Preço: R$ @(selectedProduct != null && selectedProduct.PrecoGelada > 0 ? selectedProduct.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex mt-3 justify-content-around">
+                    <button class="btn btn-secondary btn-lg" @onclick="CloseModal">Cancelar</button>
+                    <button class="btn btn-primary btn-lg" @onclick="ConfirmAddToCart">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+
+@* html *@
+@code {
+    //c#
+    private string searchNome = string.Empty;
+    private string searchBarcode = string.Empty;
+    private string searchTerm = string.Empty;
+    private bool showProductList = false;
+    private string clienteNome = string.Empty;
+    private string vendedorNome = string.Empty;
+    private List<Produto> filteredProdutos = new();
+    private List<string> marcas = new();
+    private string? selectedMarca = null;
+    private List<string> sizesForMarca = new();
+    private List<Produto> allProdutos = new();
+    private string? selectedSize = null;
+    private List<string> flavorsForSelection = new();
+    private Dictionary<string, Produto> flavorToProduct = new(StringComparer.OrdinalIgnoreCase);
+    // snapshot to preserve product filters while modal is open
+    private List<Produto>? _snapshotFilteredProdutos;
+    private string? _snapshotSelectedMarca;
+    private string? _snapshotSelectedSize;
+    private List<string>? _snapshotFlavorsForSelection;
+    private bool? _snapshotShowProductList;
+    private string? _snapshotSearchTerm;
+
+    private void PopulateMarcasFromProdutos(List<Produto> produtos)
+    {
+        // crude brand list by scanning product.Nome/Detalhe
+        var known = new[] { "Brahma", "Skol", "Antarctica", "Original", "Xereta", "Coca Cola", "Coca-Cola", "Fanta", "Heineken", "Budweiser", "Red Bull", "Gaterade", "Petra", "Pepsi",
+        "Sukita", "Corona", "Tubaina", "Lacta", "Eisenbahn", "Baianinha", "Chapinha", "Askov", "Stella", "Monster", "Amstel", "Red label", "Del valle", "Sprite", "Fanta", "Imperio", "Baly",
+        "Crystal", "Gorillaz"};
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in produtos)
+        {
+            var txt = (p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty);
+            foreach (var k in known)
+            {
+                if (!found.Contains(k) && txt.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0)
+                    found.Add(k);
+            }
+        }
+        // normalize certain brand variants (e.g. "Coca Cola" / "Coca-Cola" -> "Coca-cola")
+        if (found.Remove("Coca Cola") | found.Remove("Coca-Cola"))
+        {
+            found.Add("Coca-cola");
+        }
+        marcas = found.OrderBy(m => m).ToList();
+    }
+
+    // return true if the given text contains the brand, accepting orthographic variants
+    private bool BrandMatch(string text, string brand)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(brand)) return false;
+
+        string NormalizeForMatch(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var lower = s.ToLowerInvariant();
+            var formD = lower.Normalize(System.Text.NormalizationForm.FormD);
+            var sb = new System.Text.StringBuilder();
+            foreach (var ch in formD)
+            {
+                var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
+                if (cat != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            }
+            var cleaned = sb.ToString();
+            cleaned = cleaned.Replace('\u00A0', ' ');
+            cleaned = cleaned.Replace('-', ' ');
+            cleaned = cleaned.Replace('_', ' ');
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, "\\s+", " ").Trim();
+            return cleaned;
+        }
+
+        var nText = NormalizeForMatch(text);
+        var nBrand = NormalizeForMatch(brand);
+        if (nText.Contains(nBrand, StringComparison.OrdinalIgnoreCase)) return true;
+
+        var noSepText = nText.Replace(" ", string.Empty);
+        var noSepBrand = nBrand.Replace(" ", string.Empty);
+        if (!string.IsNullOrEmpty(noSepBrand) && noSepText.Contains(noSepBrand, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return false;
+    }
+
+    private void OnSelectMarca(string? marca)
+    {
+        selectedMarca = marca;
+        sizesForMarca.Clear();
+        // if clearing brand, reset dependent UI (sizes, flavors, products)
+        if (string.IsNullOrEmpty(marca))
+        {
+            selectedSize = null;
+            flavorsForSelection.Clear();
+            flavorToProduct.Clear();
+            filteredProdutos = new List<Produto>();
+            showProductList = false;
+            return;
+        }
+
+        // collect sizes from product names like '600ml', '350ml', '1L', '2L', 'dose'
+        var sizes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in allProdutos ?? new List<Produto>())
+        {
+            if (BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
+            {
+                var s = ExtractSizeFromName(p.Nome) ?? ExtractSizeFromName(p.Detalhe);
+                if (!string.IsNullOrEmpty(s)) sizes.Add(s);
+            }
+        }
+
+        // add some common sizes if nothing found
+        if (!sizes.Any())
+        {
+            sizes.UnionWith(new[] { "600ml", "350ml", "1L", "2L", "269ml", "dose" });
+        }
+
+        sizesForMarca = sizes.OrderBy(s => s).ToList();
+
+        // set filtered products to this brand
+        filteredProdutos = (allProdutos ?? new List<Produto>())
+            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
+            .ToList();
+        showProductList = filteredProdutos.Any();
+    }
+
+    private Produto? FindProductForBrandAndSize(string marca, string size)
+    {
+        return (allProdutos ?? new List<Produto>()).FirstOrDefault(p =>
+            BrandMatch(((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)), marca)
+            && (((p.Nome ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0))
+        );
+    }
+
+    private string? ExtractSizeFromName(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        // simple regex-like checks
+        var lower = text.ToLowerInvariant();
+        var candidates = new[] { "600ml", "350ml", "269ml", "1l", "2l", "500ml", "dose", "300ml", "250ml", "200ml", "330ml", "330 ml", "2000ml", "20g", "1kg", "35g", "880ml", "1.5L", "473ml",
+        "275ml", "355ml"};
+        foreach (var c in candidates)
+        {
+            if (lower.Contains(c)) return c.ToUpperInvariant();
+        }
+        return null;
+    }
+
+    private void OnSelectSize(Produto? produto)
+    {
+        // When user selects a size card we want to check if there are flavor variants for this brand+size.
+        // If flavors exist show flavor cards; otherwise open quantity modal for the product (quick add).
+        selectedSize = null;
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+
+        if (produto == null)
+            return;
+
+        // determine size string by inspecting product name/detail (fallback to previously selected size heuristics)
+        selectedSize = ExtractSizeFromName(produto.Nome) ?? ExtractSizeFromName(produto.Detalhe);
+
+        // collect flavors for same brand and size
+        if (!string.IsNullOrEmpty(selectedMarca))
+        {
+            foreach (var p in allProdutos ?? new List<Produto>())
+            {
+                if (!BrandMatch(((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)), selectedMarca ?? string.Empty))
+                    continue;
+
+                // match size
+                var s = ExtractSizeFromName(p.Nome) ?? ExtractSizeFromName(p.Detalhe);
+                if (string.IsNullOrEmpty(selectedSize) || string.IsNullOrEmpty(s) || !string.Equals(s, selectedSize, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var f = ExtractFlavorFromName(p.Nome) ?? ExtractFlavorFromName(p.Detalhe);
+                if (!string.IsNullOrEmpty(f) && !flavorToProduct.ContainsKey(f))
+                {
+                    flavorToProduct[f] = p;
+                    flavorsForSelection.Add(f);
+                }
+            }
+        }
+
+        if (flavorsForSelection.Any())
+        {
+            // show flavor cards (UI reads flavorsForSelection)
+            StateHasChanged();
+            return;
+        }
+
+        // no flavors -> proceed to modal for the selected product
+        OpenQuantityModal(produto);
+        selectedQuantity = 1;
+        selectedQuantityBuffer = "1";
+    }
+
+    // overload for clicking a size card when we only have the size string
+    private void OnSelectSize(string size)
+    {
+        selectedSize = size;
+        // filter products by brand+size
+        filteredProdutos = (allProdutos ?? new List<Produto>())
+            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+                && (((p.Nome ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0)))
+            .ToList();
+
+        showProductList = filteredProdutos.Any();
+
+        // repopulate flavors (only if there are any)
+        var flavors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in filteredProdutos)
+        {
+            var f = ExtractFlavorFromName(p.Nome) ?? ExtractFlavorFromName(p.Detalhe);
+            if (!string.IsNullOrEmpty(f)) flavors.Add(f);
+        }
+        flavorsForSelection = flavors.Any() ? flavors.OrderBy(f => f).ToList() : new List<string>();
+        flavorToProduct.Clear();
+        foreach (var f in flavorsForSelection)
+        {
+            var match = filteredProdutos.FirstOrDefault(p => (((p.Nome ?? string.Empty).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
+                || ((p.Detalhe ?? string.Empty).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)));
+            if (match != null && !flavorToProduct.ContainsKey(f)) flavorToProduct[f] = match;
+        }
+    }
+
+    private void OnSelectFlavor(string flavor)
+    {
+        if (string.IsNullOrEmpty(flavor)) return;
+        // filter products for current brand + size + flavor
+        filteredProdutos = (allProdutos ?? new List<Produto>())
+            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+                && (string.IsNullOrEmpty(selectedSize) || ((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0))
+                && (((p.Nome ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0)))
+            .ToList();
+
+        // do not open modal when selecting a flavor — only filter products
+        // keep flavor buttons visible until user clears
+        showProductList = filteredProdutos.Any();
+        StateHasChanged();
+    }
+
+    private void ClearFlavors()
+    {
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+        // when clearing flavors, if a size is selected, keep filteredProdutos to brand+size
+        if (!string.IsNullOrEmpty(selectedMarca) && !string.IsNullOrEmpty(selectedSize))
+        {
+            filteredProdutos = (allProdutos ?? new List<Produto>())
+                .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+                    && (((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0)))
+                .ToList();
+        }
+        else if (!string.IsNullOrEmpty(selectedMarca))
+        {
+            filteredProdutos = (allProdutos ?? new List<Produto>())
+                .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private string? ExtractFlavorFromName(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        var lower = text.ToLowerInvariant();
+        var candidates = new[] { "uva", "maçã", "maca", "laranja", "limão", "limao", "morango", "abacaxi", "cajú", "caju", "guaraná", "guarana", 
+        "cola", "baunilha", "chocolate", "melancia", "morango-maracuja", "zero", "sem açúcar", "maracuja", "Limonada", "Tanjerina", "black", "Tradicional", "Tropical", "maca verde",
+        "f vermelhas", "manga", "morango e pêssego", "Maça verde", "Mango loco", "Pipeline" };
+        foreach (var c in candidates)
+        {
+            if (lower.Contains(c)) return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(c.Replace("ç","c"));
+        }
+        return null;
+    }
+    private List<Produto> maisVendidos = new();
+    private List<CartItem> cart = new();
+    private List<string> priceInputs = new();
+    private List<ItemComanda> itensComanda = new();
+    private int idcomanda;
+    private bool isProcessing = false;
+    private string formaPagamentoSelecionada = string.Empty;
+    private List<Comanda> todasComandasAbertas = new();
+    private List<Comanda> sugestoesComanda = new();
+    private string entryTelefone;
+    private string entryEndereco;
+    private bool imprimirNaCozinha = false;
+    private DateTime? dataPagamentoPrazo;
+    private DateTime? dataPagamentoPrazo2;
+
+    private bool showQuantityModal = false;
+    private bool showCreateProductModal = false;
+    private Produto newProductForBarcode = new Produto();
+private Produto selectedProduct;
+private int? selectedQuantity = null;
+private string selectedQuantityBuffer = string.Empty;
+private string? selectedTemperatura = null;
+    private string observacoes = string.Empty;
+    private bool showDebugImages = false;
+    private List<string> debugImageSources = new();
+    private bool showCartDebug = false;
+    private string formaPagamento2 = string.Empty;
+    private decimal? pagamento1;
+    private decimal? pagamento2;
+    private List<string> vendedores = new();
+    private bool isOtherVendedorSelected = false;
+    private string pagamento1Text = string.Empty;
+    private bool UsarPagamento2 = false;
+    private bool SecondaryCalculated = false;
+    private string initializationError = string.Empty;
+    private string pedidoStatus = "Finalizado";
+    private string PedidoStatus
+    {
+        get => pedidoStatus;
+        set
+        {
+            if (pedidoStatus != value)
+            {
+                pedidoStatus = value;
+                // Only update the status; do not change item prices here
+                StateHasChanged();
+            }
+        }
+    }
+    
+    private void SelectVendedor(string nome) => vendedorNome = nome;
+    private void SelectStatus(string status) => pedidoStatus = status;
+
+    private void OnVendedorSelected(string v)
+    {
+        vendedorNome = v;
+        isOtherVendedorSelected = false;
+    }
+
+    private void OnOtherVendedorSelected()
+    {
+        vendedorNome = string.Empty;
+        isOtherVendedorSelected = true;
+    }
+
+    private string Pagamento1Text
+    {
+        get => pagamento1Text;
+        set
+        {
+            pagamento1Text = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(pagamento1Text))
+            {
+                pagamento1 = null;
+            }
+            else if (TryParseDecimalFlexible(pagamento1Text, out var v))
+            {
+                pagamento1 = Math.Round(v, 2);
+            }
+            RecalculateSecondary();
+        }
+    }
+
+    // scanner interop fields moved into code-behind section
+    private DotNetObjectReference<object>? _dotNetRef;
+
+
+    private void CancelCreateProduct()
+    {
+        showCreateProductModal = false;
+    }
+
+    private async Task CreateProductFromBarcode()
+    {
+        try
+        {
+            // Basic validation and defaults required by backend
+            if (string.IsNullOrWhiteSpace(newProductForBarcode.Nome))
+            {
+                await ShowAlert("Por favor informe o nome do produto antes de cadastrar.");
+                return;
+            }
+
+            // PrecoCusto is required by backend. If not provided, fallback to Preco or a small non-zero value.
+            if (newProductForBarcode.PrecoCusto <= 0)
+            {
+                if (newProductForBarcode.Preco > 0)
+                    newProductForBarcode.PrecoCusto = newProductForBarcode.Preco;
+                else
+                    newProductForBarcode.PrecoCusto = 0.01m;
+            }
+
+            // CategoriaId may be required; pick a sensible default if not set
+            if (newProductForBarcode.CategoriaId == 0)
+            {
+                var (cats, _) = await _apiService.GetCategorias();
+                if (cats != null && cats.Any())
+                    newProductForBarcode.CategoriaId = cats.First().Id;
+                else
+                    newProductForBarcode.CategoriaId = 1; // fallback
+            }
+
+            // call API to create product
+            var response = await _apiService.AdicionarProdutoAsync(newProductForBarcode);
+            if (!string.IsNullOrEmpty(response.ErrorMessage))
+            {
+                await ShowAlert("Falha ao criar produto: " + response.ErrorMessage);
+                return;
+            }
+
+            // reload products and add created product to cart
+            var (todosProdutos, err) = await _apiService.GetTodosProdutos();
+            var created = todosProdutos?.FirstOrDefault(p => p.Barcode == newProductForBarcode.Barcode) ?? newProductForBarcode;
+            // open quantity modal for the newly created product
+            showCreateProductModal = false;
+            OpenQuantityModal(created);
+        }
+        catch (Exception ex)
+        {
+            await ShowAlert("Erro ao criar produto: " + ex.Message);
+        }
+    }
+
+    private decimal GetProdutoDisplayPrice(Produto p)
+    {
+        if (p == null) return 0m;
+        if (p.PrecoRetirar > 0) return p.PrecoRetirar;
+        if (p.PrecoEntrega > 0) return p.PrecoEntrega;
+        if (p.PrecoQuente > 0) return p.PrecoQuente;
+        if (p.PrecoGelada > 0) return p.PrecoGelada;
+        return p.Preco;
+    }
+
+    private void ToggleDebugImages()
+    {
+        showDebugImages = !showDebugImages;
+        if (showDebugImages)
+        {
+            debugImageSources = filteredProdutos.Select(p => p.CaminhoImagem ?? p.UrlImagem ?? "(none)").ToList();
+        }
+    }
+
+    private async Task OpenScanner()
+    {
+        _dotNetRef ??= DotNetObjectReference.Create((object)this);
+        await JS.InvokeVoidAsync("barcodeScanner.start", _dotNetRef, "barcode-scanner-container");
+    }
+
+    private async Task OpenNativeScanner()
+    {
+        // call JS helper that tries to open ZXing or Intent
+        await JS.InvokeVoidAsync("barcodeScanner.openScannerApp");
+    }
+
+    [JSInvokable]
+    public async Task OnBarcodeScanned(string code)
+    {
+        searchTerm = code;
+        await SearchProducts(null);
+        StateHasChanged();
+        await ProcessBarcode(code);
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ProcessBarcode(searchTerm);
+        }
+    }
+
+    private async Task SearchProducts(ChangeEventArgs e)
+    {
+        // unify name or barcode search into single input
+        if (e != null)
+            searchTerm = e.Value?.ToString() ?? string.Empty;
+        else
+        {
+            // when used from JSInvokable or code, searchTerm already set
+        }
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filteredProdutos = new List<Produto>();
+            showProductList = false;
+            return;
+        }
+
+        // attempt exact barcode match first
+        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+        if (todosProdutos == null)
+        {
+            filteredProdutos = new();
+            showProductList = false;
+            return;
+        }
+
+        var byBarcode = todosProdutos.Where(p => !string.IsNullOrWhiteSpace(p.Barcode) && p.Barcode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (byBarcode.Any())
+        {
+            filteredProdutos = byBarcode;
+            showProductList = true;
+            return;
+        }
+
+        // fallback to name search
+        filteredProdutos = todosProdutos.Where(p => p.Nome != null && p.Nome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+        showProductList = filteredProdutos.Any();
+    }
+
+    private async Task OnBarcodeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var code = searchBarcode?.Trim();
+            await JS.InvokeVoidAsync("console.log", $"OnBarcodeKeyDown Enter pressed, code='" + (code ?? "(null)") + "'");
+            if (string.IsNullOrEmpty(code))
+            {
+                await JS.InvokeVoidAsync("console.warn", "Barcode input empty on Enter");
+                return;
+            }
+            await ProcessBarcode(code);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnBarcodeKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var code = searchBarcode?.Trim();
+            await JS.InvokeVoidAsync("console.log", $"OnBarcodeKeyUp Enter pressed, code='" + (code ?? "(null)") + "'");
+            if (string.IsNullOrEmpty(code))
+            {
+                await JS.InvokeVoidAsync("console.warn", "Barcode input empty on Enter (keyup)");
+                return;
+            }
+
+            await ProcessBarcode(code);
+            StateHasChanged();
+        }
+    }
+
+    private async Task ProcessBarcode(string code)
+    {
+        try
+        {
+            // 1) Check backend product DB first
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+
+            if (todosProdutos == null || !todosProdutos.Any())
+            {
+                await JS.InvokeVoidAsync("console.warn", "ProcessBarcode: GetTodosProdutos returned no items: " + (errorMessage ?? "(no error msg)"));
+            }
+
+            string Normalize(string? s) => string.IsNullOrWhiteSpace(s) ? string.Empty : new string(s.Where(char.IsDigit).ToArray());
+            var normalizedCode = Normalize(code);
+
+            Produto? produto = null;
+            if (!string.IsNullOrEmpty(normalizedCode))
+            {
+                produto = (todosProdutos ?? new List<Produto>())
+                    .FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.Barcode) && Normalize(p.Barcode) == normalizedCode);
+            }
+            if (produto == null)
+            {
+                produto = (todosProdutos ?? new List<Produto>())
+                    .FirstOrDefault(p => string.Equals(p.Barcode?.Trim(), code?.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (produto != null)
+            {
+                // product exists in DB -> open quantity modal
+                OpenQuantityModal(produto);
+                return;
+            }
+            // 2) Not in DB -> open modal immediately with barcode, then prefill asynchronously
+            try
+            {
+                // set minimal barcode and clear other fields on the existing instance so bindings show immediately
+                newProductForBarcode.Barcode = code;
+                newProductForBarcode.Nome = null;
+                newProductForBarcode.Preco = 0m;
+                newProductForBarcode.Detalhe = null;
+                newProductForBarcode.UrlImagem = null;
+                newProductForBarcode.PrecoCusto = 0m;
+                newProductForBarcode.PrecoQuente = 0m;
+                newProductForBarcode.PrecoGelada = 0m;
+                newProductForBarcode.PrecoEntrega = 0m;
+                newProductForBarcode.PrecoRetirar = 0m;
+                newProductForBarcode.CategoriaId = 0;
+
+                showCreateProductModal = true;
+                StateHasChanged();
+
+                // Prefill in background so UI is responsive
+                _ = PrefillProductFromLookup(code);
+                return;
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", "Barcode lookup exception: " + ex.Message);
+                newProductForBarcode.Barcode = code;
+                showCreateProductModal = true;
+                StateHasChanged();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", "Erro em ProcessBarcode: " + ex.Message);
+            newProductForBarcode = new Produto { Barcode = code };
+            showCreateProductModal = true;
+            StateHasChanged();
+        }
+    }
+
+    private class CaixaStateDto
+    {
+        public List<object>? Cart { get; set; }
+        public string? ClienteNome { get; set; }
+        public string? VendedorNome { get; set; }
+        public string? FormaPagamentoSelecionada { get; set; }
+        public string? FormaPagamento2 { get; set; }
+        public decimal? Pagamento1 { get; set; }
+        public decimal? Pagamento2 { get; set; }
+        public string? PedidoStatus { get; set; }
+        public decimal ValorRecebido { get; set; }
+    }
+
+    private async Task SaveCaixaStateAsync()
+    {
+        try
+        {
+            var dto = new CaixaStateDto
+            {
+                Cart = cart.Select(i => new {
+                    ProdutoId = i.Produto?.Id,
+                    i.Produto?.Nome,
+                    i.Produto?.Barcode,
+                    PrecoUnitario = i.PrecoUnitario,
+                    Quantidade = i.Quantidade,
+                    Temperatura = i.Temperatura
+                }).Cast<object>().ToList(),
+                ClienteNome = clienteNome,
+                VendedorNome = vendedorNome,
+                FormaPagamentoSelecionada = formaPagamentoSelecionada,
+                FormaPagamento2 = formaPagamento2,
+                Pagamento1 = pagamento1,
+                Pagamento2 = pagamento2,
+                PedidoStatus = pedidoStatus,
+                ValorRecebido = valorRecebidoDinheiro
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(dto);
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "caixaState", json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao salvar estado do caixa: " + ex.Message);
+        }
+    }
+
+    private async Task RestoreCaixaStateIfAnyAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("sessionStorage.getItem", "caixaState");
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            var dto = System.Text.Json.JsonSerializer.Deserialize<CaixaStateDto>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (dto == null) return;
+
+            // restore basic fields
+            clienteNome = dto.ClienteNome ?? clienteNome;
+            vendedorNome = dto.VendedorNome ?? vendedorNome;
+            formaPagamentoSelecionada = dto.FormaPagamentoSelecionada ?? formaPagamentoSelecionada;
+            formaPagamento2 = dto.FormaPagamento2 ?? formaPagamento2;
+            pagamento1 = dto.Pagamento1 ?? pagamento1;
+            pagamento2 = dto.Pagamento2 ?? pagamento2;
+            pedidoStatus = dto.PedidoStatus ?? pedidoStatus;
+            valorRecebidoDinheiro = dto.ValorRecebido;
+
+            // restore cart: we need to fetch products and match ids
+            if (dto.Cart != null && dto.Cart.Any())
+            {
+                var (todosProdutos, err) = await _apiService.GetTodosProdutos();
+                var prodList = todosProdutos ?? new List<Produto>();
+                var newCart = new List<CartItem>();
+                foreach (var itemObj in dto.Cart)
+                {
+                    // parse with JsonElement
+                    var elem = itemObj as System.Text.Json.JsonElement?;
+                    System.Text.Json.JsonElement je;
+                    if (itemObj is System.Text.Json.JsonElement)
+                        je = (System.Text.Json.JsonElement)itemObj;
+                    else
+                        je = (System.Text.Json.JsonElement)System.Text.Json.JsonSerializer.SerializeToElement(itemObj);
+
+                    int? prodId = null;
+                    try { if (je.TryGetProperty("ProdutoId", out var p1) && p1.ValueKind == System.Text.Json.JsonValueKind.Number) prodId = p1.GetInt32(); } catch { }
+                    string nome = null;
+                    try { if (je.TryGetProperty("Nome", out var p2) && p2.ValueKind == System.Text.Json.JsonValueKind.String) nome = p2.GetString(); } catch { }
+                    decimal preco = 0;
+                    try { if (je.TryGetProperty("PrecoUnitario", out var p3) && p3.ValueKind == System.Text.Json.JsonValueKind.Number) preco = p3.GetDecimal(); } catch { }
+                    int quantidade = 1;
+                    try { if (je.TryGetProperty("Quantidade", out var p4) && p4.ValueKind == System.Text.Json.JsonValueKind.Number) quantidade = p4.GetInt32(); } catch { }
+                    string temperatura = null;
+                    try { if (je.TryGetProperty("Temperatura", out var p5) && p5.ValueKind == System.Text.Json.JsonValueKind.String) temperatura = p5.GetString(); } catch { }
+
+                    Produto? prod = null;
+                    if (prodId.HasValue) prod = prodList.FirstOrDefault(p => p.Id == prodId.Value);
+                    if (prod == null && !string.IsNullOrEmpty(nome)) prod = prodList.FirstOrDefault(p => p.Nome == nome);
+
+                    if (prod != null)
+                    {
+                        newCart.Add(new CartItem { Produto = prod, Quantidade = quantidade, PrecoUnitario = preco, Temperatura = temperatura });
+                    }
+                }
+
+                if (newCart.Any()) cart = newCart;
+                SyncPriceInputs();
+            }
+
+            // remove saved state
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "caixaState");
+            EnsurePagamento1State();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao restaurar estado do caixa: " + ex.Message);
+        }
+    }
+
+    private void EnsurePagamento1State()
+    {
+        // If second payment not used, primary should be cart total and disabled
+        if (!UsarPagamento2)
+        {
+            pagamento1 = Math.Round(cart.Sum(p => p.Total), 2);
+            pagamento1Text = pagamento1.HasValue ? pagamento1.Value.ToString("0.00", CultureInfo.CurrentCulture) : string.Empty;
+        }
+        // if UsarPagamento2 is true, do not overwrite user input
+    }
+
+    [JSInvokable]
+    public async Task OnBarcodeError(string message)
+    {
+        await ShowAlert("Erro no leitor: " + message);
+    }
+
+void OpenQuantityModal(Produto produto)
+{
+    selectedProduct = produto;
+    // start empty so user can type a value without having to delete a default
+    selectedQuantity = null;
+    selectedQuantityBuffer = string.Empty;
+    // default temperature to null
+    selectedTemperatura = null;
+    // take snapshot so UI filters are not lost if other code mutates them
+    _snapshotFilteredProdutos = filteredProdutos?.ToList();
+    _snapshotSelectedMarca = selectedMarca;
+    _snapshotSelectedSize = selectedSize;
+    _snapshotFlavorsForSelection = flavorsForSelection?.ToList();
+    _snapshotShowProductList = showProductList;
+    _snapshotSearchTerm = searchTerm;
+    showQuantityModal = true;
+    // focus the quantity input after modal is shown
+    _ = Task.Run(async () => {
+        await Task.Delay(50); // allow modal to render
+        try { await JS.InvokeVoidAsync("eval", "document.getElementById('quantity_input')?.focus()"); } catch { }
+    });
+}
+
+void CloseModal()
+{
+    showQuantityModal = false;
+    // restore snapshot in case filters were modified elsewhere while modal was open
+    if (_snapshotFilteredProdutos != null) filteredProdutos = _snapshotFilteredProdutos;
+    selectedMarca = _snapshotSelectedMarca;
+    selectedSize = _snapshotSelectedSize;
+    if (_snapshotFlavorsForSelection != null) flavorsForSelection = _snapshotFlavorsForSelection;
+    if (_snapshotShowProductList.HasValue) showProductList = _snapshotShowProductList.Value;
+    if (_snapshotSearchTerm != null) searchTerm = _snapshotSearchTerm;
+    // clear snapshots
+    _snapshotFilteredProdutos = null;
+    _snapshotSelectedMarca = null;
+    _snapshotSelectedSize = null;
+    _snapshotFlavorsForSelection = null;
+    _snapshotShowProductList = null;
+    _snapshotSearchTerm = null;
+    SyncPriceInputs();
+    StateHasChanged();
+}
+
+// snapshot helper removed - modal must not alter filters
+
+    private void SyncPriceInputs()
+    {
+        priceInputs = new List<string>(cart.Count);
+        for (int i = 0; i < cart.Count; i++)
+        {
+            priceInputs.Add(cart[i].PrecoUnitario > 0 ? cart[i].PrecoUnitario.ToString("0.00") : string.Empty);
+        }
+    }
+
+void OnSelectTemperatura(string? temp)
+{
+    selectedTemperatura = temp;
+    StateHasChanged();
+}
+
+void OnNumericPadClick(int n)
+{
+    // append digit to buffer and update parsed quantity
+    if (selectedQuantityBuffer == "0") selectedQuantityBuffer = string.Empty;
+    selectedQuantityBuffer += n.ToString();
+    if (int.TryParse(selectedQuantityBuffer, out var v)) selectedQuantity = v; else selectedQuantity = null;
+    StateHasChanged();
+}
+
+void OnQuantityInput(ChangeEventArgs e)
+{
+    selectedQuantityBuffer = e?.Value?.ToString() ?? string.Empty;
+    // if buffer represents a multiplication like 9x24, use computed result; otherwise try parse as integer
+    var computed = ComputeQuantityFromBuffer();
+    if (computed > 0)
+    {
+        selectedQuantity = computed;
+    }
+    else if (int.TryParse(selectedQuantityBuffer, out var v))
+    {
+        selectedQuantity = v;
+    }
+    else
+    {
+        selectedQuantity = null;
+    }
+}
+
+void OnInsertMultiply()
+{
+    // insert 'x' if not present, or remove if already the last char
+    if (string.IsNullOrEmpty(selectedQuantityBuffer))
+    {
+        selectedQuantityBuffer = "x";
+    }
+    else
+    {
+        if (selectedQuantityBuffer.EndsWith("x", StringComparison.OrdinalIgnoreCase))
+            selectedQuantityBuffer = selectedQuantityBuffer.Substring(0, selectedQuantityBuffer.Length - 1);
+        else
+            selectedQuantityBuffer += "x";
+    }
+}
+
+int ComputeQuantityFromBuffer()
+{
+    if (string.IsNullOrWhiteSpace(selectedQuantityBuffer)) return 0;
+    var s = selectedQuantityBuffer.Trim();
+    // support formats like "9x24", "9X24", "216"
+    if (s.IndexOf('x') >= 0 || s.IndexOf('X') >= 0)
+    {
+        var parts = s.Split(new[] { 'x', 'X' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out var a) && int.TryParse(parts[1].Trim(), out var b))
+            return a * b;
+        return 0;
+    }
+    if (int.TryParse(s, out var v)) return v;
+    return 0;
+}
+
+string RenderComputedQuantity()
+{
+    var q = ComputeQuantityFromBuffer();
+    return q > 0 ? q.ToString() : "-";
+}
+
+void OnNumericBackspace()
+{
+    if (string.IsNullOrEmpty(selectedQuantityBuffer)) return;
+    selectedQuantityBuffer = selectedQuantityBuffer.Length <= 1 ? string.Empty : selectedQuantityBuffer.Substring(0, selectedQuantityBuffer.Length - 1);
+    // update selectedQuantity from buffer (supports multiplication)
+    var computed = ComputeQuantityFromBuffer();
+    if (computed > 0)
+        selectedQuantity = computed;
+    else if (int.TryParse(selectedQuantityBuffer, out var v))
+        selectedQuantity = v;
+    else
+        selectedQuantity = null;
+
+    StateHasChanged();
+}
+
+    private void EnsurePriceInputsMatchCart()
+    {
+        // make sure priceInputs has exactly one entry per cart item to avoid index errors
+        while (priceInputs.Count < cart.Count)
+        {
+            var idx = priceInputs.Count;
+            priceInputs.Add(idx < cart.Count && cart[idx].PrecoUnitario > 0 ? cart[idx].PrecoUnitario.ToString("0.00") : string.Empty);
+        }
+        while (priceInputs.Count > cart.Count)
+        {
+            priceInputs.RemoveAt(priceInputs.Count - 1);
+        }
+    }
+
+    private bool TryParseDecimalFlexible(string? s, out decimal value)
+    {
+        value = 0m;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        s = s.Trim();
+
+        // Normalize common number formats: handle both comma and dot as decimal separators,
+        // and possible thousand separators. Strategy:
+        // - If string contains both '.' and ',', assume the last one is the decimal separator.
+        //   Remove the other characters (thousand separators) and replace the decimal separator with '.'.
+        // - If contains only ',', replace it with '.' and parse with invariant culture.
+        // - Otherwise try invariant parse.
+
+        string normalized = s;
+        bool hasDot = s.IndexOf('.') >= 0;
+        bool hasComma = s.IndexOf(',') >= 0;
+
+        if (hasDot && hasComma)
+        {
+            // Decide which is decimal separator by last index
+            int lastDot = s.LastIndexOf('.');
+            int lastComma = s.LastIndexOf(',');
+            if (lastComma > lastDot)
+            {
+                // comma is decimal separator
+                normalized = s.Replace(".", string.Empty).Replace(',', '.');
+            }
+            else
+            {
+                // dot is decimal separator
+                normalized = s.Replace(",", string.Empty);
+            }
+        }
+        else if (hasComma && !hasDot)
+        {
+            // treat comma as decimal separator
+            normalized = s.Replace(',', '.');
+        }
+        else
+        {
+            // only dot or neither -> keep as-is
+            normalized = s;
+        }
+
+        if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var result))
+        {
+            value = result;
+            return true;
+        }
+
+        // Fallback: try current culture as last resort
+        if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.CurrentCulture, out result))
+        {
+            value = result;
+            return true;
+        }
+
+        return false;
+    }
+
+private async Task ConfirmAddToCart()
+{
+    // prefer computed quantity from buffer if present
+    var computed = ComputeQuantityFromBuffer();
+    if (computed > 0)
+        selectedQuantity = computed;
+
+    var qty = selectedQuantity ?? 1; // default 1 if user leaves empty
+
+    // consider product identity + temperatura when merging items
+    var existing = cart.FirstOrDefault(c => c.Produto.Id == selectedProduct.Id && (c.Temperatura ?? string.Empty) == (selectedTemperatura ?? string.Empty));
+
+    if (existing == null)
+    {
+            var precoUnit = selectedProduct.Preco;
+            // treat 'Nenhuma' (null) as Quente — prefer PrecoQuente when available
+            var temp = selectedTemperatura ?? "Quente";
+            if (temp == "Quente")
+            {
+                if (selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
+            }
+            else if (temp == "Gelada")
+            {
+                if (selectedProduct.PrecoGelada > 0) precoUnit = selectedProduct.PrecoGelada;
+            }
+            else
+            {
+                // fallback: if order status indicates retirada/entrega, use those prices
+                if (pedidoStatus == "Retirada" && selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
+                if (pedidoStatus == "Em entrega" && selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
+            }
+
+        // If current order status is delivery, apply surcharge to the price we add
+        var cartItem = new CartItem
+        {
+            Produto = selectedProduct,
+            Quantidade = qty,
+            PrecoUnitario = precoUnit,
+            Temperatura = selectedTemperatura,
+            DeliverySurchargeApplied = false
+        };
+
+        // do not modify prices when adding; only change PedidoStatus should alter prices elsewhere
+
+        cart.Add(cartItem);
+        SyncPriceInputs();
+    }
+    else
+    {
+        // same product and temperature -> increment quantity
+        existing.Quantidade += qty;
+        SyncPriceInputs();
+    }
+
+    showQuantityModal = false;
+    // do not clear product filters or search when closing modal; keep current product list visible
+    UpdateCartTotals();
+    StateHasChanged();
+}
+
+private async Task OnQuantityKeyDown(KeyboardEventArgs e)
+{
+    if (e.Key == "Enter")
+    {
+        await ConfirmAddToCart();
+    }
+    else if (e.Key == "Escape")
+    {
+        CloseModal();
+    }
+}
+
+void UpdateCartTotals()
+{
+    EnsurePagamento1State();
+    RecalculateSecondary();
+    // debug: log totals so we can see in browser console when this runs
+    try
+    {
+        _ = JS.InvokeVoidAsync("console.log", $"UpdateCartTotals called: cartTotal={cart.Sum(p => p.Total)} items={cart.Count}");
+    }
+    catch { }
+    StateHasChanged();
+}
+
+private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
+{
+    var s = e?.Value?.ToString();
+    if (string.IsNullOrWhiteSpace(s))
+    {
+        item.PrecoUnitario = 0m;
+    }
+    else if (decimal.TryParse(s, out var v))
+    {
+        item.PrecoUnitario = Math.Round(v, 2);
+    }
+
+    UpdateCartTotals();
+}
+
+    private async Task OnPrecoUnitarioTyping(int index, ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString() ?? string.Empty;
+        EnsurePriceInputsMatchCart();
+        if (index < 0 || index >= cart.Count)
+            return;
+
+        if (index >= 0 && index < priceInputs.Count)
+            priceInputs[index] = s;
+
+        // tolerant parse: if user types trailing separator, append 0 so parsing succeeds
+        var sForParse = s.Trim();
+        if (sForParse.EndsWith(",") || sForParse.EndsWith("."))
+            sForParse += "0";
+
+        if (TryParseDecimalFlexible(sForParse, out var v))
+        {
+            // update model value but DO NOT rewrite the user's typed string while typing
+            cart[index].PrecoUnitario = Math.Round(v, 2);
+            // priceInputs[index] is left as the raw user input to avoid interfering with typing/caret
+        }
+        else if (string.IsNullOrWhiteSpace(s))
+        {
+            cart[index].PrecoUnitario = 0m;
+        }
+
+        UpdateCartTotals();
+        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioTyping idx={index} input='{s}' price={cart[index].PrecoUnitario} total={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
+        StateHasChanged();
+    }
+
+    private async Task OnPrecoUnitarioCommit(int index, ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString();
+        if (index < 0 || index >= cart.Count) return;
+        var item = cart[index];
+
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            item.PrecoUnitario = 0m;
+            if (index >= 0 && index < priceInputs.Count) priceInputs[index] = string.Empty;
+        }
+        else if (TryParseDecimalFlexible(s, out var v))
+        {
+            item.PrecoUnitario = Math.Round(v, 2);
+            if (index >= 0 && index < priceInputs.Count) priceInputs[index] = item.PrecoUnitario.ToString("0.00", CultureInfo.CurrentCulture);
+        }
+
+        UpdateCartTotals();
+        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioCommit idx={index} input='{s}' price={item.PrecoUnitario} total={item.Total} cartTotal={cart.Sum(p => p.Total)}");
+        StateHasChanged();
+    }
+
+    private void OnPriceInputChanged(int index)
+    {
+        EnsurePriceInputsMatchCart();
+        if (index < 0 || index >= cart.Count) return;
+        var s = priceInputs[index] ?? string.Empty;
+        // tolerant parse
+        var sForParse = s.Trim();
+        if (sForParse.EndsWith(",") || sForParse.EndsWith(".")) sForParse += "0";
+        if (TryParseDecimalFlexible(sForParse, out var v))
+        {
+            cart[index].PrecoUnitario = Math.Round(v, 2);
+            // normalize display
+            priceInputs[index] = cart[index].PrecoUnitario.ToString("0.00", CultureInfo.CurrentCulture);
+        }
+        else if (string.IsNullOrWhiteSpace(s))
+        {
+            cart[index].PrecoUnitario = 0m;
+            priceInputs[index] = string.Empty;
+        }
+        UpdateCartTotals();
+        // debug log
+        _ = JS.InvokeVoidAsync($"console.log", $"OnPriceInputChanged idx={index} input='{s}' parsed={cart[index].PrecoUnitario} lineTotal={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
+        StateHasChanged();
+    }
+
+    private void OnPagamento1Input(ChangeEventArgs e)
+    {
+        var s = e?.Value?.ToString() ?? string.Empty;
+        pagamento1Text = s;
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            pagamento1 = null;
+        }
+        else if (TryParseDecimalFlexible(s, out var v))
+        {
+            pagamento1 = Math.Round(v, 2);
+        }
+
+        RecalculateSecondary();
+    }
+
+private void OnUsarPagamento2Changed()
+{
+    // If enabling payment2, clear pagamento1 so user can enter a custom value
+    if (UsarPagamento2)
+    {
+        pagamento1 = null;
+    }
+    else
+    {
+        // If disabling payment2, set pagamento1 to cart total and lock it
+        pagamento1 = Math.Round(cart.Sum(p => p.Total), 2);
+    }
+
+    RecalculateSecondary();
+}
+
+    private decimal valorRecebidoDinheiro;
+    private decimal valorRecebidoDinheiro2;
+
+    private decimal trocoDinheiro => ComputeTrocoPrimary();
+    private decimal trocoDinheiro2 => ComputeTrocoSecondary();
+
+    private decimal ComputeTrocoPrimary()
+    {
+        var total = cart.Sum(p => p.Total);
+
+        // Determine how much was paid as primary cash
+        decimal paidPrimary = 0m;
+        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        {
+            paidPrimary = (pagamento1.HasValue && pagamento1.Value > 0) ? pagamento1.Value : valorRecebidoDinheiro;
+        }
+
+        // Determine how much was paid as secondary cash (if any)
+        decimal paidSecondary = 0m;
+        if (UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        {
+            paidSecondary = (pagamento2.HasValue && pagamento2.Value > 0) ? pagamento2.Value : valorRecebidoDinheiro2;
+        }
+
+        // Secondary cash covers up to paidSecondary; remaining amount is covered by primary
+        var remainingForPrimary = Math.Max(0, total - paidSecondary);
+        var assignedToPrimary = Math.Min(paidPrimary, remainingForPrimary);
+
+        var troco = paidPrimary - assignedToPrimary;
+        return Math.Round(troco, 2);
+    }
+
+    private decimal ComputeTrocoSecondary()
+    {
+        var total = cart.Sum(p => p.Total);
+
+        if (!(UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
+            return 0m;
+
+        var paidSecondary = (pagamento2.HasValue && pagamento2.Value > 0) ? pagamento2.Value : valorRecebidoDinheiro2;
+
+        decimal paidPrimary = 0m;
+        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+            paidPrimary = (pagamento1.HasValue && pagamento1.Value > 0) ? pagamento1.Value : valorRecebidoDinheiro;
+
+        var remainingForSecondary = Math.Max(0, total - paidPrimary);
+        var assignedToSecondary = Math.Min(paidSecondary, remainingForSecondary);
+
+        var troco = paidSecondary - assignedToSecondary;
+        return Math.Round(troco, 2);
+    }
+
+    private int? NumeroComanda => int.TryParse(clienteNome, out int num) ? num : (int?)null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // try to restore previous caixa state if any
+            await RestoreCaixaStateIfAnyAsync();
+
+            // If opened via external scanner app it may include ?scanned=CODE in the URL -> handle it
+            try
+            {
+                var uri = Navigation.Uri;
+                var marker = "?scanned=";
+                var idx = uri.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    var code = Uri.UnescapeDataString(uri.Substring(idx + marker.Length));
+                    if (!string.IsNullOrWhiteSpace(code))
+                    {
+                        // remove query part from URL and process
+                        var baseUri = uri.Substring(0, idx);
+                        // navigate to base to remove query (keeps app state)
+                        Navigation.NavigateTo(baseUri, replace: true);
+                        await ProcessBarcode(code);
+                    }
+                }
+            }
+            catch { }
+
+            var nome = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+
+            if (string.IsNullOrEmpty(nome))
+            {
+                Navigation.NavigateTo("login");
+                return;
+            }
+
+            var (produtosMaisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
+            filteredProdutos = produtosMaisVendidos ?? new List<Produto>();
+
+            // load all products once for brand/size quick filters
+            var (all, errAll) = await _apiService.GetTodosProdutos();
+            allProdutos = all ?? new List<Produto>();
+            PopulateMarcasFromProdutos(allProdutos);
+
+            // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
+            if (vendedores == null || !vendedores.Any())
+            {
+                vendedores = new List<string> { "Ronaldo", "Nathan", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
+            }
+            try
+            {
+                var last = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastVendedor");
+                if (!string.IsNullOrEmpty(last))
+                {
+                    vendedorNome = last;
+                    isOtherVendedorSelected = !vendedores.Contains(vendedorNome);
+                }
+                // restore last used primary payment form if present
+                try
+                {
+                    var lastFp = await JS.InvokeAsync<string>("sessionStorage.getItem", "lastFormaPagamento1");
+                    if (!string.IsNullOrEmpty(lastFp))
+                    {
+                        formaPagamentoSelecionada = lastFp;
+                    }
+                }
+                catch { }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            initializationError = ex.Message;
+            try { await JS.InvokeVoidAsync("console.error", "CaixaPage OnInitializedAsync error: " + ex.Message); } catch { }
+        }
+    }
+
+    private async Task BuscarSugestoesComanda(ChangeEventArgs e)
+    {
+        clienteNome = e.Value.ToString();
+
+        if (string.IsNullOrWhiteSpace(clienteNome))
+        {
+            sugestoesComanda.Clear();
+            return;
+        }
+
+        // Se ainda não carregou todas as comandas abertas
+        if (!todasComandasAbertas.Any())
+        {
+            var (lista, erro) = await _apiService.GetComandas();
+            todasComandasAbertas = lista ?? new();
+        }
+
+        sugestoesComanda = todasComandasAbertas
+            .Where(c => c.Nome.Contains(clienteNome, StringComparison.OrdinalIgnoreCase))
+            .Take(5) // Limita sugestões
+            .ToList();
+    }
+
+    private void SelecionarSugestaoComanda(string idSelecionado)
+    {
+        clienteNome = idSelecionado;
+        sugestoesComanda.Clear();
+    }
+
+    private string GetProdutoImageSrc(Produto produto)
+    {
+        // Prefer Produto.CaminhoImagem (already includes AppConfig.BaseUrl) when available
+        if (!string.IsNullOrEmpty(produto.CaminhoImagem))
+            return produto.CaminhoImagem;
+
+        // Fallback to UrlImagem if it's already an absolute URL
+        if (!string.IsNullOrEmpty(produto.UrlImagem) && produto.UrlImagem.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return produto.UrlImagem;
+
+        return string.Empty;
+    }
+
+    private async Task SearchByNome(ChangeEventArgs e)
+    {
+        searchBarcode = string.Empty; // Limpa a pesquisa por código de barras
+        searchNome = e.Value.ToString();
+        if (string.IsNullOrWhiteSpace(searchNome))
+        {
+            var (maisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
+            filteredProdutos = maisVendidos;
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos
+                                .Where(c => c.Nome.IndexOf(searchNome, StringComparison.OrdinalIgnoreCase) >= 0)
+                                .ToList();
+        }
+    }
+
+    private async Task SearchByBarcode(ChangeEventArgs e)
+    {
+        searchNome = string.Empty; // Limpa a pesquisa por nome
+        searchBarcode = e.Value.ToString();
+        if (string.IsNullOrWhiteSpace(searchBarcode))
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos;
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos
+                                .Where(c => c.Barcode == searchBarcode)
+                                .ToList();
+        }
+    }
+
+    private async Task OnBarcodeInput(ChangeEventArgs e)
+    {
+        // keep behavior consistent with SearchByBarcode
+        searchNome = string.Empty;
+        searchBarcode = e?.Value?.ToString();
+
+        if (string.IsNullOrWhiteSpace(searchBarcode))
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = todosProdutos ?? new List<Produto>();
+        }
+        else
+        {
+            var (todosProdutos, errorMessage) = await _apiService.GetTodosProdutos();
+            filteredProdutos = (todosProdutos ?? new List<Produto>())
+                                .Where(c => string.Equals(c.Barcode, searchBarcode, StringComparison.OrdinalIgnoreCase))
+                                .ToList();
+        }
+    }
+
+    // private void AddToCart(Produto Produto)
+    // {
+    //     var newItem = new CartItem
+    //     {
+    //         Produto = Produto,
+    //         Quantidade = 1
+    //     };
+    //     cart.Add(Produto);
+    // }
+
+    private void RemoveFromCart(CartItem  Produto)
+    {
+        cart.Remove(Produto);
+        EnsurePagamento1State();
+        SyncPriceInputs();
+        EnsurePriceInputsMatchCart();
+        StateHasChanged();
+    }
+
+    private async Task AddBlankCartItem()
+    {
+        var blank = new Produto { Id = 0, Nome = string.Empty, Preco = 0m, PrecoCusto = 0.01m, CategoriaId = 1 };
+        var item = new CartItem { Produto = blank, Quantidade = 1, PrecoUnitario = 0m };
+        cart.Add(item);
+        EnsurePagamento1State();
+        SyncPriceInputs();
+        EnsurePriceInputsMatchCart();
+        UpdateCartTotals();
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private async Task AddBlankCartItemAndFocus()
+    {
+        await AddBlankCartItem();
+        // give Blazor a moment to render the new row
+        await Task.Delay(30);
+        try {
+            await JS.InvokeVoidAsync("focusFirstBlankDescricao");
+        } catch { }
+    }
+
+    private async Task FinalizePurchase()
+    {
+        // exigir vendedor preenchido
+        if (string.IsNullOrWhiteSpace(vendedorNome))
+        {
+            await ShowAlert("Por favor selecione ou digite o nome do vendedor antes de finalizar a compra.");
+            return;
+        }
+
+        // exigir status selecionado
+        if (string.IsNullOrWhiteSpace(pedidoStatus))
+        {
+            await ShowAlert("Por favor selecione o status do pedido antes de finalizar a compra.");
+            return;
+        }
+
+        // If payment is 'A Prazo' require dataPagamentoPrazo and clienteNome (telefone is no longer required)
+        if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!dataPagamentoPrazo.HasValue)
+            {
+                await ShowAlert("Para pagamento a prazo, informe a data de pagamento (prazo).");
+                return;
+            }
+            // require clienteNome when forma1 is A Prazo
+            if (string.IsNullOrWhiteSpace(clienteNome))
+            {
+                await ShowAlert("Para pagamento a prazo (forma 1), informe o nome do cliente.");
+                return;
+            }
+        }
+        
+        // If payment 2 is used and is 'A Prazo', require clienteNome as well (telefone not required)
+        if (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(clienteNome))
+            {
+                await ShowAlert("Para pagamento a prazo (forma 2), informe o nome do cliente.");
+                return;
+            }
+        }
+        // Build DTO matching backend PedidoDetalheDTO for items
+        var itensDto = cart.Select(item => new
+        {
+            ProdutoId = item.Produto.Id,    
+            ProdutoNome = item.Produto.Nome,
+            ProdutoImagem = item.Produto.UrlImagem ?? item.Produto.CaminhoImagem,
+            Quantidade = item.Quantidade,
+            ProdutoPreco = item.PrecoUnitario,
+            SubTotal = item.Total,
+            CaminhoImagem = item.Produto.CaminhoImagem ?? (item.Produto.UrlImagem != null ? AppConfig.BaseUrl + item.Produto.UrlImagem : null)
+        }).ToList();
+
+        var pedidoDto = new
+        {
+            Endereco = entryEndereco,
+            VendedorNome = vendedorNome,
+            ClienteNome = clienteNome,
+            ValorTotal = cart.Sum(p => p.Total),
+            DataPedido = DateTime.Now,
+            FormaPagamento = formaPagamentoSelecionada,
+            ValorPago1 = pagamento1,
+            FormaPagamento2 = formaPagamento2,
+            ValorPago2 = pagamento2,
+            Status = pedidoStatus,
+            DataPagamentoPrazo = dataPagamentoPrazo,
+            DataPagamentoPrazo2 = dataPagamentoPrazo2,
+            Observacoes = observacoes,
+            Itens = itensDto
+        };
+
+        // serialize and post directly to API
+        var json = System.Text.Json.JsonSerializer.Serialize(pedidoDto);
+        var content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _apiService.PostRequest("api/Pedidos", content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await ShowAlert($"Falha ao confirmar pedido: {response.ReasonPhrase}");
+            return;
+        }
+
+        // registrar movimentações de estoque
+        foreach (var item in cart)
+        {
+            var movimentacao = new MovimentacaoEstoque()
+            {
+                ProdutoId = item.Produto.Id,
+                Tipo = TipoMovimentacao.Venda,
+                Quantidade = 1,
+                DataMovimentacao = DateTime.Now
+            };
+            await _apiService.MovimentarEstoqueAsync(movimentacao);
+        }
+
+        // If payment includes cash, open cash drawer via print service
+        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase)
+            || (UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                var resp = await _apiService.AbrirGavetaAsync("192.168.1.51", 9100);
+                if (!resp.Data)
+                {
+                    try { await JS.InvokeVoidAsync("console.warn", "Falha ao abrir gaveta: " + (resp.ErrorMessage ?? "unknown")); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { await JS.InvokeVoidAsync("console.error", "Erro ao solicitar abertura de gaveta: " + ex.Message); } catch { }
+            }
+        }
+
+        cart.Clear();
+        // reset payment fields and selections so next sale starts clean
+        // remember last primary formaPagamentoSelecionada and persist it
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastFormaPagamento1", formaPagamentoSelecionada ?? string.Empty); } catch { }
+        formaPagamentoSelecionada = string.Empty;
+        formaPagamento2 = string.Empty;
+        // deselect all radio buttons by clearing bound values
+        UsarPagamento2 = false;
+        pagamento1 = null;
+        pagamento2 = null;
+        valorRecebidoDinheiro = 0m;
+        valorRecebidoDinheiro2 = 0m;
+        UsarPagamento2 = false;
+
+        clienteNome = string.Empty;
+        // persist last vendedor so it can be restored on next load
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastVendedor", vendedorNome ?? string.Empty); } catch { }
+        // persist last pedido status so next session can default to it
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastPedidoStatus", pedidoStatus ?? string.Empty); } catch { }
+        // keep vendedorNome populated (last vendedor) and keep pedidoStatus as Finalizado
+        pedidoStatus = "Finalizado";
+        entryTelefone = string.Empty;
+        entryEndereco = string.Empty;
+        observacoes = string.Empty;
+        dataPagamentoPrazo = null;
+        dataPagamentoPrazo2 = null;
+
+        StateHasChanged(); // Atualiza a UI
+        Console.WriteLine("Compra finalizada!");
+    }
+
+    private void RecalculateSecondary()
+    {
+        try
+        {
+            if (!UsarPagamento2)
+            {
+                SecondaryCalculated = false;
+                return;
+            }
+
+            var total = cart.Sum(p => p.Total);
+
+            // if primary provided, allocate remaining to secondary
+            var primaryValue = pagamento1 ?? 0m;
+
+            var remaining = total - primaryValue;
+            if (remaining <= 0)
+            {
+                pagamento2 = 0m;
+            }
+            else
+            {
+                pagamento2 = Math.Round(remaining, 2);
+            }
+
+            SecondaryCalculated = true;
+        }
+        catch { }
+    }
+
+    private async Task CreateComanda()
+    {
+        if (isProcessing)
+            return;
+
+        if (string.IsNullOrEmpty(clienteNome))
+            return;
+
+        isProcessing = true;
+
+        try
+        {
+            if (!string.IsNullOrEmpty(entryTelefone))
+            {
+            var (existeCliente, errorMessage) = await _apiService.GetClienteByPhoneAsync(entryTelefone);
+            if (existeCliente == null)
+            {
+                var novoCliente = new Clientes
+                    {
+                        Nome = clienteNome,
+                        Telefone = entryTelefone,
+                        Endereco = entryEndereco
+                    };
+                var respondeCliente = await _apiService.AddClienteAsync(novoCliente);
+            }
+        }
+            var (comandaExistente, erro) = await _apiService.GetComandaPorNome(clienteNome);
+
+            if (comandaExistente != null)
+            {
+                var produtosCart = cart.Select(p => new Produto
+                {
+                    Id = p.Produto.Id,
+                    Nome = p.Produto.Nome,
+                    Preco = p.Produto.Preco,
+                    UrlImagem = p.Produto.UrlImagem
+                }).ToList();
+
+                // Comanda já existe, adicionar produtos do carrinho a ela
+                await AdicionarProdutosAComanda(comandaExistente.Nome, produtosCart);
+                await AtualizarValorComanda(comandaExistente.Nome);
+            }
+            else
+            {
+                // Comanda não existe, criar uma nova
+                var comandaId = await CriarNovaComanda(clienteNome, itensComanda);
+                var produtosCart = cart.Select(p => new Produto
+                {
+                    Id = p.Produto.Id,
+                    Nome = p.Produto.Nome,
+                    Preco = p.Produto.Preco,
+                    UrlImagem = p.Produto.UrlImagem
+                }).ToList();
+
+                if (!(comandaId == 0))
+                {
+                    await AdicionarProdutosAComanda(clienteNome, produtosCart);
+                    await AtualizarValorComanda(clienteNome);
+                }
+            }
+            cart.Clear();
+            itensComanda.Clear();
+            clienteNome = string.Empty;
+            entryTelefone = string.Empty;
+            StateHasChanged(); // Atualiza a UI
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro ao criar ou atualizar comanda: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task AdicionarProdutosAComanda(string nome, List<Produto> carrinho)
+    {
+        //adicionar os itens na comanda
+        foreach (var produto in carrinho)
+        {
+            var itemComanda = new ItemComanda
+            {
+                Nome = nome,
+                PrecoUnitario = produto.Preco,
+                Quantidade = 1,
+                ProdutoId = produto.Id,
+                NomeProduto = produto.Nome,
+                UrlImagem = produto.UrlImagem
+            };
+            var responseAddItem = await _apiService.AdicionaItemNaComanda(itemComanda);
+            if (responseAddItem.Data)
+            {
+                // await ShowAlert("Item adicionado na comanda !");
+            }
+            else
+            {
+                await ShowAlert($"Falha ao adicionar item: {responseAddItem.ErrorMessage}");
+            }
+            var movimentacao = new MovimentacaoEstoque()
+            {
+                ProdutoId = produto.Id,
+                Tipo = TipoMovimentacao.Venda,
+                Quantidade = 1,
+                DataMovimentacao = DateTime.Now
+            };
+            var responseMovimetacao = await _apiService.MovimentarEstoqueAsync(movimentacao);
+            if (responseMovimetacao.Data)
+            {
+                // await ShowAlert("Item adicionado na comanda !");
+            }
+            else
+            {
+                // await ShowAlert($"Falha ao movimentar estoque: {responseAddItem.ErrorMessage}");
+            }
+        }
+    }
+
+    private async Task<int> CriarNovaComanda(string nome, List<ItemComanda> carrinho)
+    {
+        var dto = carrinho.Select(i => new ItemComandaDTO
+        {
+            Id = i.Id,
+            Nome = i.Nome,
+            ProdutoId = i.ProdutoId,
+            NomeProduto = i.NomeProduto,
+            Quantidade = i.Quantidade,
+            PrecoUnitario = i.PrecoUnitario
+        }).ToList();
+
+        // Verifica se o carrinho tem produtos da categoria 99 (Cozinha)
+        var temProdutosDeCozinha = dto.Any(p => p.CategoriaId == 22 || p.CategoriaId == 18);
+
+        // Define o status com base nisso
+        var statusComanda = temProdutosDeCozinha ? "Aguardando Impressao" : "Aberta";
+
+        // Cria a nova comanda com o status adequado
+        var novaComanda = new Comanda()
+        {
+            DataAbertura = DateTime.Now,
+            Nome = nome,
+            ValorTotal = carrinho.Sum(p => p.ValorTotal),
+            Itens = carrinho,
+            Status = statusComanda
+        };
+
+
+        var responseComanda = await _apiService.CriarComanda(novaComanda);
+        if (responseComanda.Data != null)
+        {
+            // await ShowAlert("Comanda criada!");
+            return responseComanda.Data;
+        }
+        else
+        {
+            await ShowAlert($"Falha ao criar comanda: {responseComanda.ErrorMessage}");
+            return 0;
+        }
+    }
+
+    private async Task AtualizarValorComanda(string nome)
+    {
+        var (itensComanda, errorMessage) = await _apiService.GetItensComanda(nome);
+
+        //atualizar o valor da comanda
+        var (comanda, errorMessageComanda) = await _apiService.GetComandaPorNome(nome);
+
+        comanda.ValorTotal = itensComanda.Sum(p => p.Quantidade * p.PrecoUnitario);
+
+        // ??? Enviar a comanda atualizada para a API para persistência no banco
+        var responseUpdateComanda = await _apiService.AtualizarComanda(comanda);
+        // if (!responseUpdateComanda.HasError)
+        // {
+        //     //await DisplayAlert("Sucesso", "Comanda atualizada!", "OK");
+        //     await Navigation.PopAsync();
+        // }
+        // else
+        // {
+        //     await ShowAlert($"Falha ao criar comanda: {responseComanda.ErrorMessage}");
+        // }
+    }
+
+    private async Task ShowAlert(string message)
+    {
+        await JS.InvokeVoidAsync("alert", message);
+    }
+
+    private async Task PrefillProductFromLookup(string code)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("console.log", "PrefillProductFromLookup: calling GetProdutoPorBarcodeLookup for: " + code);
+            var (produtoLookup, errLookup) = await _apiService.GetProdutoPorBarcodeLookup(code);
+
+            if (!string.IsNullOrEmpty(errLookup))
+            {
+                await JS.InvokeVoidAsync("console.warn", "GetProdutoPorBarcodeLookup returned error: " + errLookup);
+            }
+
+            if (produtoLookup != null)
+            {
+                newProductForBarcode.Nome = produtoLookup.Nome;
+                newProductForBarcode.Preco = produtoLookup.Preco;
+                newProductForBarcode.Detalhe = produtoLookup.Detalhe;
+                newProductForBarcode.UrlImagem = produtoLookup.UrlImagem;
+                newProductForBarcode.PrecoCusto = produtoLookup.PrecoCusto;
+                newProductForBarcode.PrecoQuente = produtoLookup.PrecoQuente;
+                newProductForBarcode.PrecoGelada = produtoLookup.PrecoGelada;
+                newProductForBarcode.PrecoEntrega = produtoLookup.PrecoEntrega;
+                newProductForBarcode.PrecoRetirar = produtoLookup.PrecoRetirar;
+                newProductForBarcode.CategoriaId = produtoLookup.CategoriaId;
+
+                try { await JS.InvokeVoidAsync("console.log", "PrefillProductFromLookup: filled -> " + System.Text.Json.JsonSerializer.Serialize(newProductForBarcode)); } catch { }
+
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", "PrefillProductFromLookup exception: " + ex.Message);
+        }
+    }
+
+}

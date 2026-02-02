@@ -20,6 +20,8 @@
        placeholder="Pesquisar por nome ou código de barras"
        class="form-control mb-3" />
 
+@* Top 10 removido por impacto de performance *@
+
 @* Brand quick-filter grouped by initial letter (like CaixaPage) *@
 @if (marcas != null && marcas.Any())
 {
@@ -280,6 +282,8 @@ else
         }
         StateHasChanged();
     }
+
+    // Top10 removed due to performance impact. Keep simple derived lists instead when needed.
 
     private List<Estoque> produtosAbaixoMinimo => estoques
     .Where(e => (e.QuantidadeMinima ?? 0) > 0 && e.Quantidade < (e.QuantidadeMinima ?? 0))

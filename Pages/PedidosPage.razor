@@ -30,20 +30,7 @@
     <button class="btn btn-outline-secondary ms-2" @onclick="RefreshPageAsync" title="Atualizar página">⟳</button>
 </div>
 
-<div class="mb-3 d-flex align-items-center gap-3">
-    <label class="fw-bold">Filtrar status:</label>
-    <div class="new-class">
-        <select class="form-select form-select-sm" style="min-width:180px;" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" value="@statusFilter">
-            <option value="">Todos</option>
-            <option value="Em entrega">Em entrega</option>
-            <option value="Retirada">Retirada</option>
-            <option value="A Prazo">A Prazo</option>
-            <option value="Finalizado">Finalizado</option>
-        </select>
-    </div>
-
-    @* Remove inline summary shown earlier for small screens; replaced by fixed card on the right. *@
-</div>
+    
 
 
     <!-- Summary card: visible on all sizes. On small screens a compact variant is shown, on md+ the original layout is used. -->
@@ -81,6 +68,63 @@
     </div>
 
     @* (fixed duplicates removed) *@
+
+    @* Top sellers chart (most pedidos by vendedor) - shows after summary and before orders list *@
+    <div class="mb-3">
+        <label class="form-label fw-bold">Vendedores (maior número de pedidos)</label>
+        @if (topSellers != null && topSellers.Any())
+        {
+            <div>
+                @foreach (var s in topSellers)
+                {
+                    <div class="d-flex align-items-center mb-1">
+                        <div style="width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@s.Name</div>
+                        <div class="flex-grow-1 mx-2" style="min-width:80px;">
+                            <div class="bg-secondary" style="height:14px; border-radius:.25rem; position:relative; overflow:hidden;">
+                                <div class="bg-success" style="height:100%; width:@(s.Percentage.ToString("0.##"))%;"></div>
+                            </div>
+                        </div>
+                        <div style="width:48px; text-align:right;">@s.Count</div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="text-muted small">Sem dados de vendedores para a data selecionada.</div>
+        }
+    </div>
+
+    @* Status filter: radio buttons horizontal, 'Todos' preselected *@
+    <div class="mb-3 d-flex align-items-center gap-3">
+        <label class="fw-bold me-2">Filtrar status:</label>
+        <div class="d-flex flex-row flex-wrap">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusFilter" id="status_all" value="" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.IsNullOrEmpty(statusFilter))" />
+                <label class="form-check-label" for="status_all">Todos</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusFilter" id="status_em_entrega" value="Em entrega" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Em entrega", StringComparison.OrdinalIgnoreCase))" />
+                <label class="form-check-label" for="status_em_entrega">Em entrega</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusFilter" id="status_retirada" value="Retirada" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Retirada", StringComparison.OrdinalIgnoreCase))" />
+                <label class="form-check-label" for="status_retirada">Retirada</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusFilter" id="status_a_prazo" value="A Prazo" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase))" />
+                <label class="form-check-label" for="status_a_prazo">A Prazo</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusFilter" id="status_atrasados" value="Atrasados" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Atrasados", StringComparison.OrdinalIgnoreCase))" />
+                <label class="form-check-label" for="status_atrasados">Atrasados</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="statusFilter" id="status_finalizado" value="Finalizado" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Finalizado", StringComparison.OrdinalIgnoreCase))" />
+                <label class="form-check-label" for="status_finalizado">Finalizado</label>
+            </div>
+        </div>
+    </div>
 
 @if (pedidosHoje == null || !pedidosHoje.Any())
 {
@@ -396,7 +440,6 @@ else
                                     </div>
                                 <div class="text-end">
                                         <div class="fs-6 text-success">R$ @comanda.ValorTotal.ToString("F2")</div>
-                                        <div class="text-white-50 small">Pagamento: @(comanda.DataPagamentoPrazo.HasValue ? comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy") : "-")</div>
                                         <div class="text-white-50 small">@(comanda.DataPedido?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
                                         @* Finalizar button moved to card actions for alignment *@
                                     </div>
@@ -477,7 +520,6 @@ else
                                     </div>
                                 <div class="text-end">
                                         <div class="fs-6 text-success">R$ @comanda.ValorTotal.ToString("F2")</div>
-                                        <div class="text-white-50 small">Pagamento: @(comanda.DataPagamentoPrazo.HasValue ? comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy") : "-")</div>
                                         <div class="text-white-50 small">@(comanda.DataPedido?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
                                         @* Finalizar button moved to card actions for alignment *@
                                     </div>
@@ -558,7 +600,6 @@ else
                                     </div>
                                 <div class="text-end">
                                         <div class="fs-6 text-success">R$ @comanda.ValorTotal.ToString("F2")</div>
-                                        <div class="text-white-50 small">Pagamento: @(comanda.DataPagamentoPrazo.HasValue ? comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy") : "-")</div>
                                         <div class="text-white-50 small">@(comanda.DataPedido?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
                                         @* Finalizar button moved to card actions for alignment *@
                                     </div>
@@ -639,7 +680,6 @@ else
                                     </div>
                                 <div class="text-end">
                                         <div class="fs-6 text-success">R$ @comanda.ValorTotal.ToString("F2")</div>
-                                        <div class="text-white-50 small">Pagamento: @(comanda.DataPagamentoPrazo.HasValue ? comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy") : "-")</div>
                                         <div class="text-white-50 small">@(comanda.DataPedido?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
                                         @* Finalizar button moved to card actions for alignment *@
                                     </div>
@@ -912,6 +952,19 @@ else
                 return pedidosPorData.Concat(prazoOnly);
             }
 
+            // If user selected 'Atrasados' show any order with overdue payment regardless of status
+            if (string.Equals(statusFilter, "Atrasados", StringComparison.OrdinalIgnoreCase))
+            {
+                // consider overdue when DataPagamentoPrazo or DataPagamentoPrazo2 is before today
+                var source = pedidosPorData.Concat(prazoOnly).Concat(prazoOrders).Concat(pedidosHoje)
+                    .GroupBy(p => p.Id).Select(g => g.First());
+                var atrasados = source.Where(p => (
+                    (p.DataPagamentoPrazo.HasValue && p.DataPagamentoPrazo.Value.Date < DateTime.Today)
+                    || (p.DataPagamentoPrazo2.HasValue && p.DataPagamentoPrazo2.Value.Date < DateTime.Today)
+                ));
+                return atrasados;
+            }
+
             // use effective status: consider Finalizado with payment A Prazo as 'A Prazo'
             // only rely on EffectiveStatus for filtering to avoid mismatches
             var filteredDate = pedidosPorData.Where(p => string.Equals(EffectiveStatus(p), statusFilter, StringComparison.OrdinalIgnoreCase));
@@ -933,6 +986,9 @@ else
     private decimal totalDinheiro = 0;
     private decimal totalIfood = 0;
     private decimal totalAPrazo = 0;
+
+    // computed chart data for top sellers
+    private List<(string Name, int Count, decimal Percentage)> topSellers = new();
 
     private DateTime dataSelecionada = DateTime.Today;
 
@@ -985,6 +1041,9 @@ else
     {
         // keep dark background but add colored left border to indicate status
         if (p == null) return string.Empty;
+        // highlight overdue payments for orders "Em entrega" older than today
+        if (IsOverdue(p))
+            return "border-start border-4 border-danger";
         if (string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase))
             return "border-start border-4 border-success";
         if (string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase))
@@ -1018,6 +1077,15 @@ else
         }
 
         return p.Status ?? string.Empty;
+    }
+
+    private bool IsOverdue(Pedido p)
+    {
+        if (p == null) return false;
+        if (!string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!p.DataPedido.HasValue) return false;
+        // consider overdue if DataPedido date is before today
+        return p.DataPedido.Value.Date < DateTime.Today;
     }
 
     private async Task ShowPedidoModal(int pedidoId)
@@ -1103,6 +1171,9 @@ else
         // Recompute totals based on the currently displayed pedidos (pedidosHoje)
         ComputeSummaryFromList(pedidosHoje);
 
+        // also compute top sellers chart data
+        ComputeTopSellers();
+
         return Task.CompletedTask;
     }
 
@@ -1141,11 +1212,50 @@ else
             .Where(c => string.Equals(c.FormaPagamento, "Ifood", StringComparison.OrdinalIgnoreCase))
             .Sum(c => c.ValorTotal);
 
-        // compute A prazo totals: include both FormaPagamento and FormaPagamento2
-        totalAPrazo = valid
-            .Where(c => string.Equals(c.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
-                     || string.Equals(c.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
-            .Sum(c => c.ValorTotal);
+        // compute A prazo totals across all known orders regardless of payment date or order status
+        try
+        {
+            var allOrders = (pedidosPorData ?? Enumerable.Empty<Pedido>())
+                .Concat(prazoOrders ?? Enumerable.Empty<Pedido>())
+                .Concat(pedidosHoje ?? Enumerable.Empty<Pedido>())
+                .GroupBy(p => p.Id)
+                .Select(g => g.First());
+
+            totalAPrazo = allOrders
+                .Where(c => string.Equals(c.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(c.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                .Sum(c => c.ValorTotal);
+        }
+        catch
+        {
+            totalAPrazo = 0;
+        }
+    }
+
+    private void ComputeTopSellers()
+    {
+        try
+        {
+            // use pedidosPorData (selected date) as source
+            var source = pedidosPorData ?? new List<Pedido>();
+            var groups = source
+                .Where(p => !string.IsNullOrWhiteSpace(p.VendedorNome))
+                .GroupBy(p => p.VendedorNome.Trim())
+                .Select(g => new { Name = g.Key, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+            if (!groups.Any())
+            {
+                topSellers = new List<(string Name, int Count, decimal Percentage)>();
+                return;
+            }
+
+            var max = groups.Max(g => g.Count);
+            var list = groups.Select(g => (Name: g.Name, Count: g.Count, Percentage: max > 0 ? Math.Round((decimal)g.Count / max * 100m, 2) : 0m)).ToList();
+            topSellers = list;
+        }
+        catch { topSellers = new List<(string Name, int Count, decimal Percentage)>(); }
     }
 
     protected override async Task OnInitializedAsync()

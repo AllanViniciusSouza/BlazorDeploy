@@ -21,23 +21,33 @@
     </div>
 </div>
 
-@* Brand / Size / Flavor quick filters similar to CaixaPage *@
+@* Brand quick-filter grouped by initial letter (from CaixaPage) *@
 @if (marcas != null && marcas.Any())
 {
     <div class="mb-3">
         <label class="form-label fw-bold">Marcas</label>
-        <div class="d-flex flex-wrap gap-2">
+        <div class="brand-list" style="font-size:0.85rem;">
             @if (string.IsNullOrEmpty(selectedMarca))
             {
-                @foreach (var m in marcas)
-                {
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectMarca(m)">@m</button>
-                }
+                <div class="d-flex flex-row flex-wrap" style="gap:1rem; align-items:flex-start;">
+                    @foreach (var group in marcas.GroupBy(m => char.ToUpperInvariant((!string.IsNullOrWhiteSpace(m) ? m.Trim()[0] : '?'))).OrderBy(g => g.Key))
+                    {
+                        <div style="min-width:90px;">
+                            <div class="fw-bold mb-1">@group.Key</div>
+                            @foreach (var m in group.OrderBy(x => x))
+                            {
+                                <button class="brand-item text-start p-0 mb-1" style="background:none; border:none; display:block; width:100%; padding:0.12rem 0;" @onclick="() => OnSelectMarca(m)">@m</button>
+                            }
+                        </div>
+                    }
+                </div>
             }
             else
             {
-                <button class="btn btn-sm btn-primary">@selectedMarca</button>
-                <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectMarca(null)">Limpar</button>
+                <div>
+                    <span class="fw-bold">@selectedMarca</span>
+                    <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="() => OnSelectMarca(null)">Limpar</button>
+                </div>
             }
         </div>
     </div>
@@ -81,43 +91,64 @@
 
 @if (exibirFormulario)
 {
-    <EditForm Model="novoProduto" OnValidSubmit="AdicionarProduto">
-        <DataAnnotationsValidator />
-        <div class="form-group mb-2">
-            <label for="nome">Nome:</label>
-            <InputText id="nome" class="form-control" @bind-Value="novoProduto.Nome" />
-            <ValidationMessage For="@(() => novoProduto.Nome)" />
-        </div>
-        <div class="row mb-2">
-            <div class="col-md-6">
-                <label class="form-label">Preço Quente</label>
-                <InputNumber class="form-control" @bind-Value="novoProduto.PrecoQuente" step="0.01" />
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal d-block">
+        <div class="modal-dialog modal-md mt-5">
+            <div class="modal-content p-4">
+                <EditForm Model="novoProduto" OnValidSubmit="AdicionarProduto">
+                    <DataAnnotationsValidator />
+                    <h5 class="mb-3">Adicionar Produto</h5>
+
+                    <div class="form-group mb-2">
+                        <label for="nome">Nome:</label>
+                        <InputText id="nome" class="form-control" @bind-Value="novoProduto.Nome" />
+                        <ValidationMessage For="@(() => novoProduto.Nome)" />
+                    </div>
+
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Preço Quente</label>
+                            <InputNumber class="form-control" @bind-Value="novoProduto.PrecoQuente" step="0.01" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Preço Gelada</label>
+                            <InputNumber class="form-control" @bind-Value="novoProduto.PrecoGelada" step="0.01" />
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-2">
+                        <label class="form-label">Categoria:</label>
+                        <div class="d-flex flex-wrap" style="gap:.5rem;">
+                            @if (categorias != null && categorias.Any())
+                            {
+                                @foreach (var cat in categorias)
+                                {
+                                    <div class="form-check" style="flex:1 0 140px; min-width:140px;">
+                                        <input class="form-check-input" type="radio" name="categoria_radio" id="cat_@cat.Id" value="@cat.Id" @onchange="() => novoProduto.CategoriaId = cat.Id" checked="@(novoProduto.CategoriaId == cat.Id)" />
+                                        <label class="form-check-label ms-1" for="cat_@cat.Id">@cat.Nome</label>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="text-muted">Nenhuma categoria disponível</div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label for="barcode">Barcode:</label>
+                        <InputText id="barcode" class="form-control" @bind-Value="novoProduto.Barcode" />
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-success me-2">Salvar</button>
+                        <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
+                    </div>
+                </EditForm>
             </div>
-            <div class="col-md-6">
-                <label class="form-label">Preço Gelada</label>
-                <InputNumber class="form-control" @bind-Value="novoProduto.PrecoGelada" step="0.01" />
-            </div>
         </div>
-
-        <div class="form-group mb-2">
-            <label for="categoria">Categoria:</label>
-            <InputSelect id="categoria" class="form-control" @bind-Value="novoProduto.CategoriaId">
-                <option value="">Selecione...</option>
-                @foreach (var cat in categorias)
-                {
-                    <option value="@cat.Id">@cat.Nome</option>
-                }
-            </InputSelect>
-        </div>
-
-        <div class="form-group mb-3">
-            <label for="barcode">Barcode:</label>
-            <InputText id="barcode" class="form-control" @bind-Value="novoProduto.Barcode" />
-        </div>
-
-        <button type="submit" class="btn btn-success me-2">Salvar</button>
-        <button type="button" class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
-    </EditForm>
+    </div>
 }
 
 @if (string.IsNullOrEmpty(selectedMarca))
@@ -502,7 +533,7 @@
 
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos ?? new List<Produto>();
-        allProdutos = filteredProdutos;
+        allProdutos = filteredProdutos.ToList();
         PopulateMarcasFromProdutos(allProdutos);
 
         var (cats, _) = await _apiService.GetCategorias();

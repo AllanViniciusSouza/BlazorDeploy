@@ -155,3 +155,16 @@ code {
     padding-bottom: 70px;
 }
 
+/* CaixaPage: aumentar fonte das marcas */
+.brand-list .btn {
+    font-size: 1.15rem; /* slightly larger */
+    padding: 0.4rem 0.75rem;
+}
+
+@media (max-width: 575.98px) {
+    .brand-list .btn {
+        font-size: 1.05rem; /* a bit smaller on small screens */
+        padding: 0.35rem 0.6rem;
+    }
+}
+

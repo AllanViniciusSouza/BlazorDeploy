@@ -1,4 +1,5 @@
 ﻿@page "/"
+@page "/caixa"
 @inject ApiService _apiService
 @inject AuthService AuthService
 @inject IJSRuntime JS
@@ -15,6 +16,8 @@
 {
     <div class="alert alert-danger mb-3">Erro ao inicializar página: @initializationError</div>
 }
+
+
 
 @* compact vendor + client inputs shown at bottom (rendered near cart) *@
 
@@ -44,28 +47,11 @@
 
 @* keyboard handlers moved into @code block to avoid rendering as text *@
 
-@* Numeric keypad overlay *@
-<div id="numeric-keypad" class="position-fixed" style="display:none; z-index:1050; right:20px; bottom:120px;" onmousedown="event.preventDefault();">
-    <div class="card p-2 shadow-lg" style="width:220px;">
-        <div class="d-grid gap-2" style="grid-template-columns: repeat(3, 1fr);">
-            @for (int n = 1; n <= 9; n++)
-            {
-                <button class="btn btn-secondary" type="button" onclick="numericKeypad.insert(null, '@n')">@n</button>
-            }
-            <button class="btn btn-secondary" type="button" onclick="numericKeypad.insert(null, '.')">.</button>
-            <button class="btn btn-secondary" type="button" onclick="numericKeypad.insert(null, '0')">0</button>
-            <button class="btn btn-danger" type="button" onclick="numericKeypad.backspace(null)">⌫</button>
-        </div>
-        <div class="d-flex justify-content-between mt-2">
-            <button class="btn btn-outline-primary" @onclick="OnKeypadOk">OK</button>
-            <button class="btn btn-outline-secondary" @onclick="HideNumericKeypad">Fechar</button>
-        </div>
-    </div>
-</div>
+@* Numeric keypad removed — iOS issues suspected. *@
 
 @code {
-    private string _activeKeypadTarget = null;
-    private DotNetObjectReference<object>? _dotRefForKeypad;
+    private string GetDataPagamentoPrazoClass() => dataPagamentoPrazo.HasValue ? "form-control w-auto border-3 border-primary" : "form-control w-auto border-3 border-danger";
+    private string GetDataPagamentoPrazo2Class() => dataPagamentoPrazo2.HasValue ? "form-control w-auto border-3 border-primary" : "form-control w-auto border-3 border-secondary";
     private DotNetObjectReference<object>? _escDotRef;
     private bool focusSearchRequested = false;
 
@@ -163,54 +149,6 @@
         catch { }
         try { _escDotRef?.Dispose(); } catch { }
     }
-
-    private async Task ShowNumericKeypadAsync(string elementId)
-    {
-        _activeKeypadTarget = elementId;
-        await JS.InvokeVoidAsync("numericKeypad.show", elementId);
-    }
-
-    private async Task HideNumericKeypad()
-    {
-        _activeKeypadTarget = null;
-        await JS.InvokeVoidAsync("numericKeypad.hide");
-    }
-
-    private async Task HideNumericKeypadWithDelay(FocusEventArgs e)
-    {
-        // delay to allow click on keypad buttons
-        await Task.Delay(150);
-        if (!string.IsNullOrEmpty(_activeKeypadTarget))
-        {
-            // if still active, keep it; otherwise hide
-        }
-        else
-        {
-            await HideNumericKeypad();
-        }
-    }
-
-    private async Task OnKeypadClick(string key)
-    {
-        if (string.IsNullOrEmpty(_activeKeypadTarget)) return;
-        await JS.InvokeVoidAsync("numericKeypad.insert", _activeKeypadTarget, key);
-    }
-
-    private async Task OnKeypadBackspace()
-    {
-        if (string.IsNullOrEmpty(_activeKeypadTarget)) return;
-        await JS.InvokeVoidAsync("numericKeypad.backspace", _activeKeypadTarget);
-    }
-
-    private async Task OnKeypadOk()
-    {
-        await HideNumericKeypad();
-        // trigger change event to update Blazor binding
-        if (!string.IsNullOrEmpty(_activeKeypadTarget))
-        {
-            await JS.InvokeVoidAsync("numericKeypad.commit", _activeKeypadTarget);
-        }
-    }
 }
         </div>
     </div>
@@ -220,18 +158,28 @@
     {
         <div class="mb-3">
             <label class="form-label fw-bold">Marcas</label>
-            <div class="d-flex flex-wrap gap-2">
+            <div class="brand-list" style="font-size:0.85rem;">
                 @if (string.IsNullOrEmpty(selectedMarca))
                 {
-                    @foreach (var m in marcas)
-                    {
-                        <button class="btn btn-sm btn-outline-light" @onclick="() => OnSelectMarca(m)">@m</button>
-                    }
+                    <div class="d-flex flex-row flex-wrap" style="gap:1rem; align-items:flex-start;">
+                        @foreach (var group in marcas.GroupBy(m => char.ToUpperInvariant((!string.IsNullOrWhiteSpace(m) ? m.Trim()[0] : '?'))).OrderBy(g => g.Key))
+                        {
+                            <div style="min-width:90px;">
+                                <div class="fw-bold text-white mb-1">@group.Key</div>
+                                @foreach (var m in group.OrderBy(x => x))
+                                {
+                                    <button class="brand-item text-white text-start p-0 mb-1" style="background:none; border:none; display:block; width:100%; padding:0.12rem 0;" @onclick="() => OnSelectMarca(m)">@m</button>
+                                }
+                            </div>
+                        }
+                    </div>
                 }
                 else
                 {
-                    <button class="btn btn-sm btn-primary">@selectedMarca</button>
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectMarca(null)">Limpar</button>
+                    <div>
+                        <span class="fw-bold text-white">@selectedMarca</span>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="() => OnSelectMarca(null)">Limpar</button>
+                    </div>
                 }
             </div>
         </div>
@@ -386,13 +334,13 @@
                                    value="@(idx >= 0 && idx < priceInputs.Count ? priceInputs[idx] : string.Empty)"
                                    @oninput="@(e => OnPrecoUnitarioTyping(idx, e))"
                                    @onchange="@(e => OnPrecoUnitarioCommit(idx, e))"
-                                   @onfocus='@(() => ShowNumericKeypadAsync("price_" + idx))' @onblur="HideNumericKeypadWithDelay" />
+                                   @onfocus:preventDefault @onblur:preventDefault />
                         }
                         else
                         {
                             <input id="price_@idx" type="number" step="0.01" class="form-control form-control-sm text-end"
                                    @bind="cart[idx].PrecoUnitario" @bind:event="oninput" @bind:after="UpdateCartTotals"
-                                   @onfocus='@(() => ShowNumericKeypadAsync("price_" + idx))' @onblur="HideNumericKeypadWithDelay" />
+                                   @onfocus:preventDefault @onblur:preventDefault />
                         }
                     </td>
 
@@ -400,7 +348,7 @@
                         <input id="qty_@idx" type="number" min="1"
                                class="form-control form-control-sm text-center"
                                @bind="item.Quantidade" @bind:after="UpdateCartTotals"
-                               @onfocus='@(() => ShowNumericKeypadAsync("qty_" + idx))' @onblur="HideNumericKeypadWithDelay" />
+                               @onfocus:preventDefault @onblur:preventDefault />
                     </td>
 
                     <td class="fw-bold">R$ @item.Total.ToString("0.00")</td>
@@ -453,14 +401,19 @@
                     </div>
                     <div class="flex-fill">
                         <label class="form-label text-white">Valor (principal)</label>
-                        <input id="pag1_input" type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!UsarPagamento2) && !string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus='@(() => ShowNumericKeypadAsync("pag1_input"))' @onblur="HideNumericKeypadWithDelay" />
+                        <input id="pag1_input" type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!UsarPagamento2) && !string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus:preventDefault @onblur:preventDefault />
                         <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="usar_pag2" @bind="UsarPagamento2" @bind:after="OnUsarPagamento2Changed" /><label class="form-check-label ms-2 text-white" for="usar_pag2">Adicionar forma de pagamento 2</label></div>
                     </div>
                 </div>
 
                 @if (formaPagamentoSelecionada == "A Prazo")
                 {
-                    <div class="mt-2"><label class="fw-bold">Data de Pagamento (prazo)</label><InputDate @bind-Value="dataPagamentoPrazo" class="form-control w-auto" /></div>
+                    <div class="mt-2">
+                        <label class="text-white">Data de Pagamento (prazo)</label>
+                        <InputDate @bind-Value="dataPagamentoPrazo"
+                                   class="@GetDataPagamentoPrazoClass()"
+                                   style="transition: border-color .15s ease, box-shadow .15s ease;" />
+                    </div>
                 }
 
                 @if (UsarPagamento2)
@@ -516,7 +469,9 @@
     {
         <div class="mt-2">
             <label class="fw-bold">Data de Pagamento 2 (prazo)</label>
-            <InputDate @bind-Value="dataPagamentoPrazo2" class="form-control w-auto" />
+            <InputDate @bind-Value="dataPagamentoPrazo2"
+                       class="@GetDataPagamentoPrazo2Class()"
+                       style="transition: border-color .15s ease, box-shadow .15s ease;" />
         </div>
     }
 
@@ -563,7 +518,16 @@
             </div>
         </div>
 
-    @if (cart.Any() && !string.IsNullOrEmpty(formaPagamentoSelecionada) && !string.IsNullOrEmpty(pedidoStatus) && !isProcessing && !string.IsNullOrEmpty(vendedorNome))
+    @{ 
+        bool canShowFinalize = cart.Any() && !string.IsNullOrEmpty(formaPagamentoSelecionada) && !string.IsNullOrEmpty(pedidoStatus) && !isProcessing && !string.IsNullOrEmpty(vendedorNome);
+        // when payment is 'A Prazo' require a selected due date and a client name before showing the button
+        if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        {
+            canShowFinalize = canShowFinalize && dataPagamentoPrazo.HasValue && !string.IsNullOrWhiteSpace(clienteNome);
+        }
+    }
+
+    @if (canShowFinalize)
     {
         <button class="btn btn-success btn-lg w-100 mt-3" @onclick="FinalizePurchase">
             <span>Finalizar Compra</span>
@@ -2097,7 +2061,7 @@ private void OnUsarPagamento2Changed()
             return;
         }
 
-        // If payment is 'A Prazo' require dataPagamentoPrazo, clienteNome and telefone
+        // If payment is 'A Prazo' require dataPagamentoPrazo and clienteNome (telefone is no longer required)
         if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase))
         {
             if (!dataPagamentoPrazo.HasValue)
@@ -2105,30 +2069,20 @@ private void OnUsarPagamento2Changed()
                 await ShowAlert("Para pagamento a prazo, informe a data de pagamento (prazo).");
                 return;
             }
-            // require clienteNome and telefone when forma1 is A Prazo
+            // require clienteNome when forma1 is A Prazo
             if (string.IsNullOrWhiteSpace(clienteNome))
             {
                 await ShowAlert("Para pagamento a prazo (forma 1), informe o nome do cliente.");
                 return;
             }
-            if (string.IsNullOrWhiteSpace(entryTelefone))
-            {
-                await ShowAlert("Para pagamento a prazo (forma 1), informe o telefone do cliente.");
-                return;
-            }
         }
         
-        // If payment 2 is used and is 'A Prazo', require clienteNome and telefone as well
+        // If payment 2 is used and is 'A Prazo', require clienteNome as well (telefone not required)
         if (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(clienteNome))
             {
                 await ShowAlert("Para pagamento a prazo (forma 2), informe o nome do cliente.");
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(entryTelefone))
-            {
-                await ShowAlert("Para pagamento a prazo (forma 2), informe o telefone do cliente.");
                 return;
             }
         }

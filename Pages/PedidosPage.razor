@@ -46,7 +46,24 @@
 </div>
 
 
-    <!-- Inline summary card (shows on md+). Placed between filter controls and orders list, does not float. -->
+    <!-- Summary card: visible on all sizes. On small screens a compact variant is shown, on md+ the original layout is used. -->
+    <div class="d-block d-md-none mb-3">@* compact for xs-sm *@
+        <div class="card shadow-sm p-2">
+            <div class="small text-muted">Total Vendido</div>
+            <div class="fw-bold fs-6 text-success">R$ @totalVendido.ToString("F2")</div>
+            <hr />
+            <div class="small text-muted mb-1">Resumo por Forma</div>
+            <div class="small">
+                <div>Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong></div>
+                <div>Débito: <strong>R$ @totalDebito.ToString("F2")</strong></div>
+                <div>Crédito: <strong>R$ @totalCredito.ToString("F2")</strong></div>
+                <div>Pix: <strong>R$ @totalPix.ToString("F2")</strong></div>
+                <div>A prazo: <strong>R$ @totalAPrazo.ToString("F2")</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inline summary card for md+ screens -->
     <div class="d-none d-md-block mb-3">
         <div class="card shadow-sm p-3" style="max-width:360px;">
             <div class="small text-muted">Total Vendido</div>

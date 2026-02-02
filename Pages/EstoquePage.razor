@@ -2,6 +2,7 @@
 @inject ApiService _apiService
 @inject AuthService AuthService
 @inject IJSRuntime JS
+@using System.Globalization
 @inject NavigationManager Navigation
 
 <div class="d-flex align-items-center justify-content-between mb-2">
@@ -18,6 +19,38 @@
        @bind:event="oninput"
        placeholder="Pesquisar por nome ou código de barras"
        class="form-control mb-3" />
+
+@* Brand quick-filter grouped by initial letter (like CaixaPage) *@
+@if (marcas != null && marcas.Any())
+{
+    <div class="mb-3">
+        <label class="form-label fw-bold">Marcas</label>
+        <div class="brand-list" style="font-size:0.85rem;">
+            @if (string.IsNullOrEmpty(selectedMarca))
+            {
+                <div class="d-flex flex-row flex-wrap" style="gap:1rem; align-items:flex-start;">
+                    @foreach (var group in marcas.GroupBy(m => char.ToUpperInvariant((!string.IsNullOrWhiteSpace(m) ? m.Trim()[0] : '?'))).OrderBy(g => g.Key))
+                    {
+                        <div style="min-width:90px;">
+                            <div class="fw-bold mb-1">@group.Key</div>
+                            @foreach (var m in group.OrderBy(x => x))
+                            {
+                                <button class="brand-item text-start p-0 mb-1" style="background:none; border:none; display:block; width:100%; padding:0.12rem 0;" @onclick="() => OnSelectMarca(m)">@m</button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div>
+                    <span class="fw-bold">@selectedMarca</span>
+                    <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="() => OnSelectMarca(null)">Limpar</button>
+                </div>
+            }
+        </div>
+    </div>
+}
 
 @if (estoques is null)
 {
@@ -162,6 +195,8 @@ else
 
 @code {
     private List<Estoque> estoques = new();
+    private List<string> marcas = new();
+    private string? selectedMarca = null;
     private string _termoPesquisa = "";
     private bool isLoading = true;
     private bool isProcessing = false;
@@ -201,7 +236,49 @@ else
             Navigation.NavigateTo("login");
         }
         var (response, errorMessage) = await _apiService.GetEstoque();
-        estoques = response;
+        estoques = response ?? new List<Estoque>();
+        // populate brand list from loaded products in estoque
+        var prods = estoques.Where(e => e.Produto != null).Select(e => e.Produto!).ToList();
+        PopulateMarcasFromProdutos(prods);
+    }
+
+    private void PopulateMarcasFromProdutos(List<Produto> produtos)
+    {
+        if (produtos == null) { marcas = new List<string>(); return; }
+        var known = new[] { "Brahma", "Skol", "Antarctica", "Original", "Xereta", "Coca Cola", "Coca-Cola", "Fanta", "Heineken", "Budweiser", "Red Bull", "Gaterade", "Petra", "Pepsi",
+            "Sukita", "Corona", "Tubaina", "Lacta", "Eisenbahn", "Baianinha", "Chapinha", "Askov", "Stella", "Monster", "Amstel", "Red label", "Del valle", "Sprite", "Fanta", "Imperio", "Baly",
+            "Crystal", "Gorillaz" };
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in produtos)
+        {
+            var txt = (p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty);
+            foreach (var k in known)
+            {
+                if (!found.Contains(k) && txt.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0)
+                    found.Add(k);
+            }
+        }
+        if (found.Remove("Coca Cola") | found.Remove("Coca-Cola"))
+        {
+            found.Add("Coca-cola");
+        }
+        marcas = found.OrderBy(m => m).ToList();
+    }
+
+    private void OnSelectMarca(string? marca)
+    {
+        selectedMarca = marca;
+        if (string.IsNullOrEmpty(marca))
+        {
+            // clear filter
+            _termoPesquisa = string.Empty;
+        }
+        else
+        {
+            // filter estoques to selected brand by product name/detalhe
+            _termoPesquisa = string.Empty;
+        }
+        StateHasChanged();
     }
 
     private List<Estoque> produtosAbaixoMinimo => estoques
@@ -209,15 +286,29 @@ else
     .ToList();
 
 
-    private List<Estoque> estoquesFiltrados => string.IsNullOrWhiteSpace(_termoPesquisa)
-    ? estoques
-    : estoques.Where(e =>
-        e.Produto != null &&
-        (
-            (e.Produto.Nome?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (e.Produto.Barcode?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false)
-        )
-    ).ToList();
+    private List<Estoque> estoquesFiltrados
+    {
+        get
+        {
+            var list = estoques ?? new List<Estoque>();
+            // apply brand filter first if set
+            if (!string.IsNullOrEmpty(selectedMarca))
+            {
+                list = list.Where(e => e.Produto != null && ((e.Produto.Nome ?? string.Empty) + " " + (e.Produto.Detalhe ?? string.Empty)).IndexOf(selectedMarca ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            }
+
+            if (string.IsNullOrWhiteSpace(_termoPesquisa))
+                return list.ToList();
+
+            return list.Where(e =>
+                e.Produto != null &&
+                (
+                    (e.Produto.Nome?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (e.Produto.Barcode?.Contains(_termoPesquisa, StringComparison.OrdinalIgnoreCase) ?? false)
+                )
+            ).ToList();
+        }
+    }
 
     private void FiltrarEstoques(string term)
     {

@@ -277,9 +277,70 @@ else
             }
             // after final calculation, update the fechar DTO so input shows the current caixa
             fecharDto.ValorFechamento = currentCaixa;
+            // if current caixa crosses threshold, notify via WhatsApp once per session
+            try
+            {
+                await CheckAndNotifyCaixaThresholdAsync();
+            }
+            catch { }
             StateHasChanged();
         }
         catch { }
+    }
+
+    private const decimal CaixaThreshold = 500m;
+
+    private async Task CheckAndNotifyCaixaThresholdAsync()
+    {
+        try
+        {
+            // read last known caixa value stored in session to detect transition (<= threshold -> > threshold)
+            var lastValueStr = await JS.InvokeAsync<string>("sessionStorage.getItem", "caixa_last_value");
+            decimal lastValue = 0m;
+            if (!string.IsNullOrEmpty(lastValueStr) && decimal.TryParse(lastValueStr, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            {
+                lastValue = parsed;
+            }
+
+            // only notify when crossing from <= threshold to > threshold
+            if (!(lastValue <= CaixaThreshold && currentCaixa > CaixaThreshold))
+            {
+                // update last value and exit
+                await JS.InvokeVoidAsync("sessionStorage.setItem", "caixa_last_value", currentCaixa.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                return;
+            }
+
+            // avoid duplicate in same session
+            var flag = await JS.InvokeAsync<string>("sessionStorage.getItem", "caixa_threshold_alert_sent");
+            if (!string.IsNullOrEmpty(flag) && flag == "1")
+            {
+                await JS.InvokeVoidAsync("sessionStorage.setItem", "caixa_last_value", currentCaixa.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                return; // already sent this session
+            }
+
+            var dto = new BlazorDeploy.Models.WhatsappMessageDto
+            {
+                Phone = "55" + "19984284658", // Brazil country code + number
+                Message = $"Alerta: o valor atual do caixa ultrapassou R$ {CaixaThreshold:0.00}. Valor atual: R$ {currentCaixa:0.00}",
+                Session = "cozinha"
+            };
+
+            var resp = await _apiService.MandarMensagemAsync(dto);
+            try { await JS.InvokeVoidAsync("console.log", "Caixa threshold notify result: " + (resp.Data ? "ok" : (resp.ErrorMessage ?? "fail"))); } catch { }
+
+            if (resp.Data)
+            {
+                // mark as sent for this session
+                await JS.InvokeVoidAsync("sessionStorage.setItem", "caixa_threshold_alert_sent", "1");
+            }
+
+            // update last value after attempting notify
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "caixa_last_value", currentCaixa.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex)
+        {
+            try { await JS.InvokeVoidAsync("console.error", "Failed to send caixa threshold message: " + ex.Message); } catch { }
+        }
     }
 
     private void LimparRetirada()

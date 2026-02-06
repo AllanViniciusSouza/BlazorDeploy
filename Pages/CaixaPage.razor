@@ -17,6 +17,8 @@
     <div class="alert alert-danger mb-3">Erro ao inicializar página: @initializationError</div>
 }
 
+@* Debug panel removed *@
+
 
 
 @* compact vendor + client inputs shown at bottom (rendered near cart) *@
@@ -33,6 +35,8 @@
             </svg>
         </button>
     </div>
+
+                @* removed explicit cart-selection radios; products always add to active cart *@
 
     <div class="row g-3 mb-3">
         <div class="col-12">
@@ -85,7 +89,38 @@
                 try { await JS.InvokeVoidAsync("focusFirstBlankDescricao"); } catch { }
                 StateHasChanged();
             }
+
         }
+    }
+
+    private void CloseAllModals()
+    {
+        showQuantityModal = false;
+        showCreateProductModal = false;
+        StateHasChanged();
+    }
+
+    private bool pointerLoggingEnabled = false;
+    private async Task TogglePointerLogging()
+    {
+        pointerLoggingEnabled = !pointerLoggingEnabled;
+        if (pointerLoggingEnabled)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("eval", @"(function(){ window._copilotPointerLogger = function(e){ try{ console.log('pointerdown target=', e.target, 'x=', e.clientX, 'y=', e.clientY); }catch{} }; window.addEventListener('pointerdown', window._copilotPointerLogger); })();");
+            }
+            catch { }
+        }
+        else
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("eval", @"(function(){ try{ window.removeEventListener('pointerdown', window._copilotPointerLogger); }catch(e){} window._copilotPointerLogger = null; })();");
+            }
+            catch { }
+        }
+        StateHasChanged();
     }
 
     private void ClearAllFilters()
@@ -127,6 +162,21 @@
         ClearAllFilters();
         try { await JS.InvokeVoidAsync("numericKeypad.hide"); } catch { }
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void PrevCart()
+    {
+        if (carts.Count <= 1) return;
+        var next = activeCartIndex - 1;
+        if (next < 0) next = carts.Count - 1; // wrap
+        _ = SwitchToCart(next);
+    }
+
+    private void NextCart()
+    {
+        if (carts.Count <= 1) return;
+        var next = (activeCartIndex + 1) % carts.Count;
+        _ = SwitchToCart(next);
     }
 
     [JSInvokable]
@@ -292,8 +342,18 @@
 
 <div class="card shadow-sm p-3 mb-4 bg-dark text-white">
     <div class="d-flex align-items-center justify-content-between">
-        <h4 class="fw-bold text-white mb-0">Carrinho</h4>
-           </div>
+        <h4 class="fw-bold text-white mb-0">Carrinho @(activeCartIndex + 1)</h4>
+@*         <span class="badge bg-secondary ms-2">Ativo: @(activeCartIndex + 1)</span>
+ *@        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-light" @onclick="PrevCart">Anterior</button>
+            <div class="text-white">Carrinho <strong>@(activeCartIndex + 1)</strong> / @carts.Count</div>
+            <button type="button" class="btn btn-sm btn-outline-light" @onclick="NextCart">Próximo</button>
+            <button type="button" class="btn btn-sm btn-success ms-2" title="Adicionar novo carrinho" @onclick="@(async () => await AddNewCart())">+</button>
+        </div>
+    </div>
+    
+    @* Fixed vertical cart switcher on right side (high z-index) - visible and clickable even with dark background. *@
+    @* Simplified cart controls (removed fixed vertical switcher that caused click issues) *@
 
     <table class="table table-bordered table-striped align-middle mt-2">
         <thead class="table-dark">
@@ -306,9 +366,9 @@
             </tr>
         </thead>
     <tbody>
-            @for (int i = 0; i < cart.Count; i++)
+                @for (int i = 0; i < activeCart.Items.Count; i++)
             {
-                var item = cart[i];
+                var item = activeCart.Items[i];
                 var idx = i;
                 <tr>
                     <td>
@@ -339,7 +399,7 @@
                         else
                         {
                             <input id="price_@idx" type="number" step="0.01" class="form-control form-control-sm text-end"
-                                   @bind="cart[idx].PrecoUnitario" @bind:event="oninput" @bind:after="UpdateCartTotals"
+                                   @bind="activeCart.Items[idx].PrecoUnitario" @bind:event="oninput" @bind:after="UpdateCartTotals"
                                    @onfocus:preventDefault @onblur:preventDefault />
                         }
                     </td>
@@ -376,7 +436,7 @@
         </div>
         <div class="col-md-4">
             <div class="d-flex flex-column align-items-end">
-                <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @cart.Sum(p => p.Total).ToString("0.00")</h3>
+                <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @activeCart.Items.Sum(p => p.Total).ToString("0.00")</h3>
                 @if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
                 {
                     var troco = trocoDinheiro;
@@ -392,43 +452,43 @@
                 <div class="d-flex w-100">
                     <div class="me-3">
                         <div class="form-check d-flex flex-column">
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => formaPagamentoSelecionada = "Dinheiro"' /><label class="form-check-label ms-2 text-white">Dinheiro</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => formaPagamentoSelecionada = "Credito"' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => formaPagamentoSelecionada = "Debito"' /><label class="form-check-label ms-2 text-white">Débito</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => formaPagamentoSelecionada = "Pix"' /><label class="form-check-label ms-2 text-white">Pix</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => formaPagamentoSelecionada = "A Prazo"' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => SetFormaPagamento("Dinheiro")' /><label class="form-check-label ms-2 text-white">Dinheiro</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => SetFormaPagamento("Credito")' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => SetFormaPagamento("Debito")' /><label class="form-check-label ms-2 text-white">Débito</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => SetFormaPagamento("Pix")' /><label class="form-check-label ms-2 text-white">Pix</label></div>
+                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => SetFormaPagamento("A Prazo")' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
                         </div>
                     </div>
                     <div class="flex-fill">
                         <label class="form-label text-white">Valor (principal)</label>
-                        <input id="pag1_input" type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!UsarPagamento2) && !string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus:preventDefault @onblur:preventDefault />
-                        <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="usar_pag2" @bind="UsarPagamento2" @bind:after="OnUsarPagamento2Changed" /><label class="form-check-label ms-2 text-white" for="usar_pag2">Adicionar forma de pagamento 2</label></div>
+                        <input id="pag1_input" type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!activeCart.UsarPagamento2) && !string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus:preventDefault @onblur:preventDefault />
+                        <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="usar_pag2" @bind="activeCart.UsarPagamento2" @bind:after="OnUsarPagamento2Changed" /><label class="form-check-label ms-2 text-white" for="usar_pag2">Adicionar forma de pagamento 2</label></div>
                     </div>
                 </div>
 
-                @if (formaPagamentoSelecionada == "A Prazo")
+                @if (activeCart.FormaPagamentoSelecionada == "A Prazo")
                 {
                     <div class="mt-2">
                         <label class="text-white">Data de Pagamento (prazo)</label>
-                        <InputDate @bind-Value="dataPagamentoPrazo"
+                        <InputDate @bind-Value="activeCart.DataPagamentoPrazo"
                                    class="@GetDataPagamentoPrazoClass()"
                                    style="transition: border-color .15s ease, box-shadow .15s ease;" />
                     </div>
                 }
 
-                @if (UsarPagamento2)
+                @if (activeCart.UsarPagamento2)
                 {
                     <div class="mt-3">
                         <label class="form-label fw-bold text-white">Forma de Pagamento 2 (opcional)</label>
                         <div class="d-flex align-items-start">
                             <div class="form-check d-flex flex-column me-2">
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(formaPagamento2 == "Credito")' @onclick='() => formaPagamento2 = "Credito"' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => formaPagamento2 = "Debito"' /><label class="form-check-label ms-2 text-white">Débito</label></div>
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => formaPagamento2 = "Pix"' /><label class="form-check-label ms-2 text-white">Pix</label></div>
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => formaPagamento2 = "A Prazo"' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(activeCart.FormaPagamento2 == "Credito")' @onclick='() => SetFormaPagamento2("Credito")' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => SetFormaPagamento2("Debito")' /><label class="form-check-label ms-2 text-white">Débito</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => SetFormaPagamento2("Pix")' /><label class="form-check-label ms-2 text-white">Pix</label></div>
+                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => SetFormaPagamento2("A Prazo")' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
                             </div>
-                            <div class="ms-2">
-                                <input type="number" step="0.01" class="form-control" style="max-width:140px;" placeholder="Valor" @bind="pagamento2" disabled="@SecondaryCalculated" />
+                                <div class="ms-2">
+                                <input type="number" step="0.01" class="form-control" style="max-width:140px;" placeholder="Valor" @bind="activeCart.Pagamento2" disabled="@activeCart.SecondaryCalculated" />
                             </div>
                         </div>
                     </div>
@@ -443,22 +503,22 @@
                 <div class="d-flex flex-wrap gap-2">
                     @if (vendedores != null && vendedores.Any())
                     {
-                        @foreach (var v in vendedores)
+                    @foreach (var v in vendedores)
                         {
                             <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_@v" @onchange="() => OnVendedorSelected(v)" checked="@(vendedorNome == v)" />
+                                <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_@v" @onchange="() => OnVendedorSelected(v)" checked="@(activeCart.VendedorNome == v)" />
                                 <label class="form-check-label ms-1 text-white" for="v_inline_@v">@v</label>
                             </div>
                         }
 
                         <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_outro" @onchange="() => OnOtherVendedorSelected()" checked="@isOtherVendedorSelected" />
+                            <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_outro" @onchange="() => OnOtherVendedorSelected()" checked="@activeCart.IsOtherVendedorSelected" />
                             <label class="form-check-label ms-1 text-white" for="v_inline_outro">Outro</label>
                         </div>
 
-                        @if (isOtherVendedorSelected)
+                        @if (activeCart.IsOtherVendedorSelected)
                         {
-                            <input class="form-control form-control-sm mt-2" style="max-width:220px;" @bind="vendedorNome" placeholder="Digite o nome do vendedor" />
+                            <input class="form-control form-control-sm mt-2" style="max-width:220px;" @bind="activeCart.VendedorNome" placeholder="Digite o nome do vendedor" />
                         }
                     }
                 </div>
@@ -480,17 +540,17 @@
     <div class="d-flex gap-3 mt-3">
         <div style="flex:1; display:flex; gap:8px; flex-direction:column;">
             <div>
-                <input type="text" class="form-control form-control-sm" @bind="clienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome do cliente" />
+                <input type="text" class="form-control form-control-sm" @bind="activeCart.ClienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome do cliente" />
             </div>
 
             @* Telefone e Endereço aparecem apenas quando pagamento for A Prazo (forma 1) ou formaPagamento2 for A Prazo *@
             @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
             {
                 <div>
-                    <input type="text" class="form-control form-control-sm" @bind="entryTelefone" placeholder="Telefone" />
+                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryTelefone" placeholder="Telefone" />
                 </div>
                 <div>
-                    <input type="text" class="form-control form-control-sm" @bind="entryEndereco" placeholder="Endereço" />
+                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryEndereco" placeholder="Endereço" />
                 </div>
             }
 
@@ -519,11 +579,23 @@
         </div>
 
     @{ 
-        bool canShowFinalize = cart.Any() && !string.IsNullOrEmpty(formaPagamentoSelecionada) && !string.IsNullOrEmpty(pedidoStatus) && !isProcessing && !string.IsNullOrEmpty(vendedorNome);
+        // derive effective values from activeCart falling back to local UI vars so the check is robust
+        var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
+        var effectiveVendedor = !string.IsNullOrEmpty(activeCart.VendedorNome) ? activeCart.VendedorNome : vendedorNome;
+        var effectivePedido = !string.IsNullOrEmpty(activeCart.PedidoStatus) ? activeCart.PedidoStatus : pedidoStatus;
+
+        bool canShowFinalize = activeCart.Items.Any()
+            && !string.IsNullOrEmpty(effectiveForma)
+            && !string.IsNullOrEmpty(effectivePedido)
+            && !isProcessing
+            && !string.IsNullOrEmpty(effectiveVendedor);
+
         // when payment is 'A Prazo' require a selected due date and a client name before showing the button
-        if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(effectiveForma, "A Prazo", StringComparison.OrdinalIgnoreCase))
         {
-            canShowFinalize = canShowFinalize && dataPagamentoPrazo.HasValue && !string.IsNullOrWhiteSpace(clienteNome);
+            var due = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo;
+            var cliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+            canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(cliente);
         }
     }
 
@@ -876,8 +948,36 @@
         return null;
     }
     private List<Produto> maisVendidos = new();
-    private List<CartItem> cart = new();
+    // support multiple carts with independent state
+    private class CartState
+    {
+        public List<CartItem> Items { get; set; } = new List<CartItem>();
+        public string ClienteNome { get; set; } = string.Empty;
+        public string VendedorNome { get; set; } = string.Empty;
+        public bool IsOtherVendedorSelected { get; set; } = false;
+        public string FormaPagamentoSelecionada { get; set; } = string.Empty;
+        public string FormaPagamento2 { get; set; } = string.Empty;
+        public decimal? Pagamento1 { get; set; }
+        public decimal? Pagamento2 { get; set; }
+        public string Pagamento1Text { get; set; } = string.Empty;
+        public bool UsarPagamento2 { get; set; } = false;
+        public bool SecondaryCalculated { get; set; } = false;
+        public DateTime? DataPagamentoPrazo { get; set; }
+        public DateTime? DataPagamentoPrazo2 { get; set; }
+        public string PedidoStatus { get; set; } = "Finalizado";
+        public string Observacoes { get; set; } = string.Empty;
+        public string EntryTelefone { get; set; } = string.Empty;
+        public string EntryEndereco { get; set; } = string.Empty;
+        public decimal ValorRecebidoDinheiro { get; set; }
+        public decimal ValorRecebidoDinheiro2 { get; set; }
+    }
+
+    private List<CartState> carts = new() { new CartState() };
+    private int activeCartIndex = 0;
+    // keep a single priceInputs list that maps to the active cart rows; will be resynced when switching carts
     private List<string> priceInputs = new();
+
+    private CartState activeCart => carts[activeCartIndex];
     private List<ItemComanda> itensComanda = new();
     private int idcomanda;
     private bool isProcessing = false;
@@ -931,28 +1031,47 @@ private string? selectedTemperatura = null;
     private void OnVendedorSelected(string v)
     {
         vendedorNome = v;
+        // keep activeCart in sync so validation/visibility use correct values
+        try { activeCart.VendedorNome = v ?? string.Empty; activeCart.IsOtherVendedorSelected = false; } catch { }
         isOtherVendedorSelected = false;
     }
 
     private void OnOtherVendedorSelected()
     {
         vendedorNome = string.Empty;
+        try { activeCart.VendedorNome = string.Empty; activeCart.IsOtherVendedorSelected = true; } catch { }
         isOtherVendedorSelected = true;
+    }
+
+    private void SetFormaPagamento(string forma)
+    {
+        formaPagamentoSelecionada = forma;
+        try { activeCart.FormaPagamentoSelecionada = forma; } catch { }
+        EnsurePagamento1State();
+        StateHasChanged();
+    }
+
+    private void SetFormaPagamento2(string forma)
+    {
+        formaPagamento2 = forma;
+        try { activeCart.FormaPagamento2 = forma; } catch { }
+        RecalculateSecondary();
+        StateHasChanged();
     }
 
     private string Pagamento1Text
     {
-        get => pagamento1Text;
+        get => activeCart.Pagamento1Text;
         set
         {
-            pagamento1Text = value ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(pagamento1Text))
+            activeCart.Pagamento1Text = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(activeCart.Pagamento1Text))
             {
-                pagamento1 = null;
+                activeCart.Pagamento1 = null;
             }
-            else if (TryParseDecimalFlexible(pagamento1Text, out var v))
+            else if (TryParseDecimalFlexible(activeCart.Pagamento1Text, out var v))
             {
-                pagamento1 = Math.Round(v, 2);
+                activeCart.Pagamento1 = Math.Round(v, 2);
             }
             RecalculateSecondary();
         }
@@ -1229,9 +1348,10 @@ private string? selectedTemperatura = null;
     {
         try
         {
+            // save active cart state only
             var dto = new CaixaStateDto
             {
-                Cart = cart.Select(i => new {
+                Cart = activeCart.Items.Select(i => new {
                     ProdutoId = i.Produto?.Id,
                     i.Produto?.Nome,
                     i.Produto?.Barcode,
@@ -1239,14 +1359,14 @@ private string? selectedTemperatura = null;
                     Quantidade = i.Quantidade,
                     Temperatura = i.Temperatura
                 }).Cast<object>().ToList(),
-                ClienteNome = clienteNome,
-                VendedorNome = vendedorNome,
-                FormaPagamentoSelecionada = formaPagamentoSelecionada,
-                FormaPagamento2 = formaPagamento2,
-                Pagamento1 = pagamento1,
-                Pagamento2 = pagamento2,
-                PedidoStatus = pedidoStatus,
-                ValorRecebido = valorRecebidoDinheiro
+                ClienteNome = activeCart.ClienteNome,
+                VendedorNome = activeCart.VendedorNome,
+                FormaPagamentoSelecionada = activeCart.FormaPagamentoSelecionada,
+                FormaPagamento2 = activeCart.FormaPagamento2,
+                Pagamento1 = activeCart.Pagamento1,
+                Pagamento2 = activeCart.Pagamento2,
+                PedidoStatus = activeCart.PedidoStatus,
+                ValorRecebido = activeCart.ValorRecebidoDinheiro
             };
 
             var json = System.Text.Json.JsonSerializer.Serialize(dto);
@@ -1268,15 +1388,15 @@ private string? selectedTemperatura = null;
             var dto = System.Text.Json.JsonSerializer.Deserialize<CaixaStateDto>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (dto == null) return;
 
-            // restore basic fields
-            clienteNome = dto.ClienteNome ?? clienteNome;
-            vendedorNome = dto.VendedorNome ?? vendedorNome;
-            formaPagamentoSelecionada = dto.FormaPagamentoSelecionada ?? formaPagamentoSelecionada;
-            formaPagamento2 = dto.FormaPagamento2 ?? formaPagamento2;
-            pagamento1 = dto.Pagamento1 ?? pagamento1;
-            pagamento2 = dto.Pagamento2 ?? pagamento2;
-            pedidoStatus = dto.PedidoStatus ?? pedidoStatus;
-            valorRecebidoDinheiro = dto.ValorRecebido;
+            // restore into active cart
+            activeCart.ClienteNome = dto.ClienteNome ?? activeCart.ClienteNome;
+            activeCart.VendedorNome = dto.VendedorNome ?? activeCart.VendedorNome;
+            activeCart.FormaPagamentoSelecionada = dto.FormaPagamentoSelecionada ?? activeCart.FormaPagamentoSelecionada;
+            activeCart.FormaPagamento2 = dto.FormaPagamento2 ?? activeCart.FormaPagamento2;
+            activeCart.Pagamento1 = dto.Pagamento1 ?? activeCart.Pagamento1;
+            activeCart.Pagamento2 = dto.Pagamento2 ?? activeCart.Pagamento2;
+            activeCart.PedidoStatus = dto.PedidoStatus ?? activeCart.PedidoStatus;
+            activeCart.ValorRecebidoDinheiro = dto.ValorRecebido;
 
             // restore cart: we need to fetch products and match ids
             if (dto.Cart != null && dto.Cart.Any())
@@ -1315,7 +1435,7 @@ private string? selectedTemperatura = null;
                     }
                 }
 
-                if (newCart.Any()) cart = newCart;
+                    if (newCart.Any()) activeCart.Items = newCart;
                 SyncPriceInputs();
             }
 
@@ -1333,10 +1453,10 @@ private string? selectedTemperatura = null;
     private void EnsurePagamento1State()
     {
         // If second payment not used, primary should be cart total and disabled
-        if (!UsarPagamento2)
+        if (!activeCart.UsarPagamento2)
         {
-            pagamento1 = Math.Round(cart.Sum(p => p.Total), 2);
-            pagamento1Text = pagamento1.HasValue ? pagamento1.Value.ToString("0.00", CultureInfo.CurrentCulture) : string.Empty;
+            activeCart.Pagamento1 = Math.Round(activeCart.Items.Sum(p => p.Total), 2);
+            activeCart.Pagamento1Text = activeCart.Pagamento1.HasValue ? activeCart.Pagamento1.Value.ToString("0.00", CultureInfo.CurrentCulture) : string.Empty;
         }
         // if UsarPagamento2 is true, do not overwrite user input
     }
@@ -1395,10 +1515,10 @@ void CloseModal()
 
     private void SyncPriceInputs()
     {
-        priceInputs = new List<string>(cart.Count);
-        for (int i = 0; i < cart.Count; i++)
+        priceInputs = new List<string>(activeCart.Items.Count);
+        for (int i = 0; i < activeCart.Items.Count; i++)
         {
-            priceInputs.Add(cart[i].PrecoUnitario > 0 ? cart[i].PrecoUnitario.ToString("0.00") : string.Empty);
+            priceInputs.Add(activeCart.Items[i].PrecoUnitario > 0 ? activeCart.Items[i].PrecoUnitario.ToString("0.00") : string.Empty);
         }
     }
 
@@ -1493,12 +1613,12 @@ void OnNumericBackspace()
     private void EnsurePriceInputsMatchCart()
     {
         // make sure priceInputs has exactly one entry per cart item to avoid index errors
-        while (priceInputs.Count < cart.Count)
+        while (priceInputs.Count < activeCart.Items.Count)
         {
             var idx = priceInputs.Count;
-            priceInputs.Add(idx < cart.Count && cart[idx].PrecoUnitario > 0 ? cart[idx].PrecoUnitario.ToString("0.00") : string.Empty);
+            priceInputs.Add(idx < activeCart.Items.Count && activeCart.Items[idx].PrecoUnitario > 0 ? activeCart.Items[idx].PrecoUnitario.ToString("0.00") : string.Empty);
         }
-        while (priceInputs.Count > cart.Count)
+        while (priceInputs.Count > activeCart.Items.Count)
         {
             priceInputs.RemoveAt(priceInputs.Count - 1);
         }
@@ -1573,8 +1693,12 @@ private async Task ConfirmAddToCart()
 
     var qty = selectedQuantity ?? 1; // default 1 if user leaves empty
 
+    // always add to active cart
+    var targetCart = activeCart.Items;
+
     // consider product identity + temperatura when merging items
-    var existing = cart.FirstOrDefault(c => c.Produto.Id == selectedProduct.Id && (c.Temperatura ?? string.Empty) == (selectedTemperatura ?? string.Empty));
+    try { _ = JS.InvokeVoidAsync("console.log", $"ConfirmAddToCart -> active={activeCartIndex} selectedProductId={selectedProduct?.Id} qty={qty}"); } catch { }
+    var existing = targetCart.FirstOrDefault(c => c.Produto.Id == selectedProduct.Id && (c.Temperatura ?? string.Empty) == (selectedTemperatura ?? string.Empty));
 
     if (existing == null)
     {
@@ -1608,7 +1732,7 @@ private async Task ConfirmAddToCart()
 
         // do not modify prices when adding; only change PedidoStatus should alter prices elsewhere
 
-        cart.Add(cartItem);
+        targetCart.Add(cartItem);
         SyncPriceInputs();
     }
     else
@@ -1643,7 +1767,7 @@ void UpdateCartTotals()
     // debug: log totals so we can see in browser console when this runs
     try
     {
-        _ = JS.InvokeVoidAsync("console.log", $"UpdateCartTotals called: cartTotal={cart.Sum(p => p.Total)} items={cart.Count}");
+        _ = JS.InvokeVoidAsync("console.log", $"UpdateCartTotals called: cartTotal={activeCart.Items.Sum(p => p.Total)} items={activeCart.Items.Count}");
     }
     catch { }
     StateHasChanged();
@@ -1668,7 +1792,7 @@ private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
     {
         var s = e?.Value?.ToString() ?? string.Empty;
         EnsurePriceInputsMatchCart();
-        if (index < 0 || index >= cart.Count)
+        if (index < 0 || index >= activeCart.Items.Count)
             return;
 
         if (index >= 0 && index < priceInputs.Count)
@@ -1682,24 +1806,24 @@ private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
         if (TryParseDecimalFlexible(sForParse, out var v))
         {
             // update model value but DO NOT rewrite the user's typed string while typing
-            cart[index].PrecoUnitario = Math.Round(v, 2);
+            activeCart.Items[index].PrecoUnitario = Math.Round(v, 2);
             // priceInputs[index] is left as the raw user input to avoid interfering with typing/caret
         }
         else if (string.IsNullOrWhiteSpace(s))
         {
-            cart[index].PrecoUnitario = 0m;
+            activeCart.Items[index].PrecoUnitario = 0m;
         }
 
         UpdateCartTotals();
-        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioTyping idx={index} input='{s}' price={cart[index].PrecoUnitario} total={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
+        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioTyping idx={index} input='{s}' price={activeCart.Items[index].PrecoUnitario} total={activeCart.Items[index].Total} cartTotal={activeCart.Items.Sum(p => p.Total)}");
         StateHasChanged();
     }
 
     private async Task OnPrecoUnitarioCommit(int index, ChangeEventArgs e)
     {
         var s = e?.Value?.ToString();
-        if (index < 0 || index >= cart.Count) return;
-        var item = cart[index];
+        if (index < 0 || index >= activeCart.Items.Count) return;
+        var item = activeCart.Items[index];
 
         if (string.IsNullOrWhiteSpace(s))
         {
@@ -1713,32 +1837,32 @@ private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
         }
 
         UpdateCartTotals();
-        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioCommit idx={index} input='{s}' price={item.PrecoUnitario} total={item.Total} cartTotal={cart.Sum(p => p.Total)}");
+        await JS.InvokeVoidAsync("console.log", $"OnPrecoUnitarioCommit idx={index} input='{s}' price={item.PrecoUnitario} total={item.Total} cartTotal={activeCart.Items.Sum(p => p.Total)}");
         StateHasChanged();
     }
 
     private void OnPriceInputChanged(int index)
     {
         EnsurePriceInputsMatchCart();
-        if (index < 0 || index >= cart.Count) return;
+        if (index < 0 || index >= activeCart.Items.Count) return;
         var s = priceInputs[index] ?? string.Empty;
         // tolerant parse
         var sForParse = s.Trim();
         if (sForParse.EndsWith(",") || sForParse.EndsWith(".")) sForParse += "0";
         if (TryParseDecimalFlexible(sForParse, out var v))
         {
-            cart[index].PrecoUnitario = Math.Round(v, 2);
+            activeCart.Items[index].PrecoUnitario = Math.Round(v, 2);
             // normalize display
-            priceInputs[index] = cart[index].PrecoUnitario.ToString("0.00", CultureInfo.CurrentCulture);
+            priceInputs[index] = activeCart.Items[index].PrecoUnitario.ToString("0.00", CultureInfo.CurrentCulture);
         }
         else if (string.IsNullOrWhiteSpace(s))
         {
-            cart[index].PrecoUnitario = 0m;
+            activeCart.Items[index].PrecoUnitario = 0m;
             priceInputs[index] = string.Empty;
         }
         UpdateCartTotals();
         // debug log
-        _ = JS.InvokeVoidAsync($"console.log", $"OnPriceInputChanged idx={index} input='{s}' parsed={cart[index].PrecoUnitario} lineTotal={cart[index].Total} cartTotal={cart.Sum(p => p.Total)}");
+        _ = JS.InvokeVoidAsync($"console.log", $"OnPriceInputChanged idx={index} input='{s}' parsed={activeCart.Items[index].PrecoUnitario} lineTotal={activeCart.Items[index].Total} cartTotal={activeCart.Items.Sum(p => p.Total)}");
         StateHasChanged();
     }
 
@@ -1761,14 +1885,14 @@ private void OnPrecoUnitarioChanged(CartItem item, ChangeEventArgs e)
 private void OnUsarPagamento2Changed()
 {
     // If enabling payment2, clear pagamento1 so user can enter a custom value
-    if (UsarPagamento2)
+    if (activeCart.UsarPagamento2)
     {
-        pagamento1 = null;
+        activeCart.Pagamento1 = null;
     }
     else
     {
         // If disabling payment2, set pagamento1 to cart total and lock it
-        pagamento1 = Math.Round(cart.Sum(p => p.Total), 2);
+        activeCart.Pagamento1 = Math.Round(activeCart.Items.Sum(p => p.Total), 2);
     }
 
     RecalculateSecondary();
@@ -1782,7 +1906,7 @@ private void OnUsarPagamento2Changed()
 
     private decimal ComputeTrocoPrimary()
     {
-        var total = cart.Sum(p => p.Total);
+        var total = activeCart.Items.Sum(p => p.Total);
 
         // Determine how much was paid as primary cash
         decimal paidPrimary = 0m;
@@ -1793,9 +1917,9 @@ private void OnUsarPagamento2Changed()
 
         // Determine how much was paid as secondary cash (if any)
         decimal paidSecondary = 0m;
-        if (UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        if (activeCart.UsarPagamento2 && string.Equals(activeCart.FormaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
         {
-            paidSecondary = (pagamento2.HasValue && pagamento2.Value > 0) ? pagamento2.Value : valorRecebidoDinheiro2;
+            paidSecondary = (activeCart.Pagamento2.HasValue && activeCart.Pagamento2.Value > 0) ? activeCart.Pagamento2.Value : activeCart.ValorRecebidoDinheiro2;
         }
 
         // Secondary cash covers up to paidSecondary; remaining amount is covered by primary
@@ -1808,16 +1932,15 @@ private void OnUsarPagamento2Changed()
 
     private decimal ComputeTrocoSecondary()
     {
-        var total = cart.Sum(p => p.Total);
+        var total = activeCart.Items.Sum(p => p.Total);
 
-        if (!(UsarPagamento2 && string.Equals(formaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
+        if (!(activeCart.UsarPagamento2 && string.Equals(activeCart.FormaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
             return 0m;
-
-        var paidSecondary = (pagamento2.HasValue && pagamento2.Value > 0) ? pagamento2.Value : valorRecebidoDinheiro2;
+        var paidSecondary = (activeCart.Pagamento2.HasValue && activeCart.Pagamento2.Value > 0) ? activeCart.Pagamento2.Value : activeCart.ValorRecebidoDinheiro2;
 
         decimal paidPrimary = 0m;
-        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
-            paidPrimary = (pagamento1.HasValue && pagamento1.Value > 0) ? pagamento1.Value : valorRecebidoDinheiro;
+        if (string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+            paidPrimary = (activeCart.Pagamento1.HasValue && activeCart.Pagamento1.Value > 0) ? activeCart.Pagamento1.Value : activeCart.ValorRecebidoDinheiro;
 
         var remainingForSecondary = Math.Max(0, total - paidPrimary);
         var assignedToSecondary = Math.Min(paidSecondary, remainingForSecondary);
@@ -1826,7 +1949,7 @@ private void OnUsarPagamento2Changed()
         return Math.Round(troco, 2);
     }
 
-    private int? NumeroComanda => int.TryParse(clienteNome, out int num) ? num : (int?)null;
+    private int? NumeroComanda => int.TryParse(activeCart.ClienteNome, out int num) ? num : (int?)null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -1907,7 +2030,7 @@ private void OnUsarPagamento2Changed()
 
     private async Task BuscarSugestoesComanda(ChangeEventArgs e)
     {
-        clienteNome = e.Value.ToString();
+        activeCart.ClienteNome = e.Value.ToString();
 
         if (string.IsNullOrWhiteSpace(clienteNome))
         {
@@ -1923,14 +2046,14 @@ private void OnUsarPagamento2Changed()
         }
 
         sugestoesComanda = todasComandasAbertas
-            .Where(c => c.Nome.Contains(clienteNome, StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.Nome.Contains(activeCart.ClienteNome, StringComparison.OrdinalIgnoreCase))
             .Take(5) // Limita sugestões
             .ToList();
     }
 
     private void SelecionarSugestaoComanda(string idSelecionado)
     {
-        clienteNome = idSelecionado;
+        activeCart.ClienteNome = idSelecionado;
         sugestoesComanda.Clear();
     }
 
@@ -2015,7 +2138,7 @@ private void OnUsarPagamento2Changed()
 
     private void RemoveFromCart(CartItem  Produto)
     {
-        cart.Remove(Produto);
+        activeCart.Items.Remove(Produto);
         EnsurePagamento1State();
         SyncPriceInputs();
         EnsurePriceInputsMatchCart();
@@ -2026,7 +2149,7 @@ private void OnUsarPagamento2Changed()
     {
         var blank = new Produto { Id = 0, Nome = string.Empty, Preco = 0m, PrecoCusto = 0.01m, CategoriaId = 1 };
         var item = new CartItem { Produto = blank, Quantidade = 1, PrecoUnitario = 0m };
-        cart.Add(item);
+        activeCart.Items.Add(item);
         EnsurePagamento1State();
         SyncPriceInputs();
         EnsurePriceInputsMatchCart();
@@ -2045,49 +2168,113 @@ private void OnUsarPagamento2Changed()
         } catch { }
     }
 
+    private async Task SwitchToCart(int index)
+    {
+        if (index < 0 || index >= carts.Count) return;
+        // ensure any modals/backdrops are closed so buttons are clickable
+        showQuantityModal = false;
+        showCreateProductModal = false;
+        // remove any lingering modal-backdrop elements that may block clicks
+        try { await JS.InvokeVoidAsync("eval", "document.querySelectorAll('.modal-backdrop').forEach(e=>e.remove())"); } catch { }
+        activeCartIndex = index;
+        // sync commonly used UI-local variables from the newly active cart so the UI reflects it
+        try
+        {
+            formaPagamentoSelecionada = activeCart.FormaPagamentoSelecionada ?? string.Empty;
+            formaPagamento2 = activeCart.FormaPagamento2 ?? string.Empty;
+            pagamento1 = activeCart.Pagamento1;
+            pagamento2 = activeCart.Pagamento2;
+            pagamento1Text = activeCart.Pagamento1Text ?? string.Empty;
+            UsarPagamento2 = activeCart.UsarPagamento2;
+            vendedorNome = activeCart.VendedorNome ?? string.Empty;
+            clienteNome = activeCart.ClienteNome ?? string.Empty;
+            pedidoStatus = activeCart.PedidoStatus ?? "Finalizado";
+        }
+        catch { }
+        // resync priceInputs for the newly active cart
+        SyncPriceInputs();
+        EnsurePriceInputsMatchCart();
+        try { _ = JS.InvokeVoidAsync("console.log", $"SwitchToCart -> active={activeCartIndex} items={activeCart.Items.Count}"); } catch { }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AddNewCart()
+    {
+        // limit to a reasonable number (e.g., 4) to avoid UI clutter
+        if (carts.Count >= 4) return;
+        // close modals/backdrops first
+        showQuantityModal = false;
+        showCreateProductModal = false;
+        try { await JS.InvokeVoidAsync("eval", "document.querySelectorAll('.modal-backdrop').forEach(e=>e.remove())"); } catch { }
+        carts.Add(new CartState());
+        activeCartIndex = carts.Count - 1;
+        // sync UI-local variables to the new cart (defaults)
+        try
+        {
+            formaPagamentoSelecionada = activeCart.FormaPagamentoSelecionada ?? string.Empty;
+            formaPagamento2 = activeCart.FormaPagamento2 ?? string.Empty;
+            pagamento1 = activeCart.Pagamento1;
+            pagamento2 = activeCart.Pagamento2;
+            pagamento1Text = activeCart.Pagamento1Text ?? string.Empty;
+            UsarPagamento2 = activeCart.UsarPagamento2;
+            vendedorNome = activeCart.VendedorNome ?? string.Empty;
+            clienteNome = activeCart.ClienteNome ?? string.Empty;
+            pedidoStatus = activeCart.PedidoStatus ?? "Finalizado";
+        }
+        catch { }
+        SyncPriceInputs();
+        EnsurePriceInputsMatchCart();
+        try { _ = JS.InvokeVoidAsync("console.log", $"AddNewCart -> count={carts.Count} active={activeCartIndex}"); } catch { }
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task FinalizePurchase()
     {
-        // exigir vendedor preenchido
-        if (string.IsNullOrWhiteSpace(vendedorNome))
+        // validate using activeCart values (fallback to local UI variables)
+        var effectiveVendedor = !string.IsNullOrWhiteSpace(activeCart.VendedorNome) ? activeCart.VendedorNome : vendedorNome;
+        if (string.IsNullOrWhiteSpace(effectiveVendedor))
         {
             await ShowAlert("Por favor selecione ou digite o nome do vendedor antes de finalizar a compra.");
             return;
         }
 
-        // exigir status selecionado
-        if (string.IsNullOrWhiteSpace(pedidoStatus))
+        var effectivePedido = !string.IsNullOrWhiteSpace(activeCart.PedidoStatus) ? activeCart.PedidoStatus : pedidoStatus;
+        if (string.IsNullOrWhiteSpace(effectivePedido))
         {
             await ShowAlert("Por favor selecione o status do pedido antes de finalizar a compra.");
             return;
         }
 
-        // If payment is 'A Prazo' require dataPagamentoPrazo and clienteNome (telefone is no longer required)
-        if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
+        var effectiveCliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+        var effectiveDataPrazo = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo;
+
+        if (string.Equals(effectiveForma, "A Prazo", StringComparison.OrdinalIgnoreCase))
         {
-            if (!dataPagamentoPrazo.HasValue)
+            if (!effectiveDataPrazo.HasValue)
             {
                 await ShowAlert("Para pagamento a prazo, informe a data de pagamento (prazo).");
                 return;
             }
-            // require clienteNome when forma1 is A Prazo
-            if (string.IsNullOrWhiteSpace(clienteNome))
+            if (string.IsNullOrWhiteSpace(effectiveCliente))
             {
                 await ShowAlert("Para pagamento a prazo (forma 1), informe o nome do cliente.");
                 return;
             }
         }
-        
-        // If payment 2 is used and is 'A Prazo', require clienteNome as well (telefone not required)
-        if (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+
+        var usingPagamento2 = activeCart.UsarPagamento2 || UsarPagamento2;
+        var effectiveForma2 = !string.IsNullOrEmpty(activeCart.FormaPagamento2) ? activeCart.FormaPagamento2 : formaPagamento2;
+        if (usingPagamento2 && string.Equals(effectiveForma2, "A Prazo", StringComparison.OrdinalIgnoreCase))
         {
-            if (string.IsNullOrWhiteSpace(clienteNome))
+            if (string.IsNullOrWhiteSpace(effectiveCliente))
             {
                 await ShowAlert("Para pagamento a prazo (forma 2), informe o nome do cliente.");
                 return;
             }
         }
         // Build DTO matching backend PedidoDetalheDTO for items
-        var itensDto = cart.Select(item => new
+        var itensDto = activeCart.Items.Select(item => new
         {
             ProdutoId = item.Produto.Id,    
             ProdutoNome = item.Produto.Nome,
@@ -2100,19 +2287,19 @@ private void OnUsarPagamento2Changed()
 
         var pedidoDto = new
         {
-            Endereco = entryEndereco,
-            VendedorNome = vendedorNome,
-            ClienteNome = clienteNome,
-            ValorTotal = cart.Sum(p => p.Total),
+            Endereco = activeCart.EntryEndereco ?? entryEndereco,
+            VendedorNome = effectiveVendedor,
+            ClienteNome = effectiveCliente,
+            ValorTotal = activeCart.Items.Sum(p => p.Total),
             DataPedido = DateTime.Now,
-            FormaPagamento = formaPagamentoSelecionada,
-            ValorPago1 = pagamento1,
-            FormaPagamento2 = formaPagamento2,
-            ValorPago2 = pagamento2,
-            Status = pedidoStatus,
-            DataPagamentoPrazo = dataPagamentoPrazo,
-            DataPagamentoPrazo2 = dataPagamentoPrazo2,
-            Observacoes = observacoes,
+            FormaPagamento = effectiveForma,
+            ValorPago1 = activeCart.Pagamento1 ?? pagamento1,
+            FormaPagamento2 = effectiveForma2,
+            ValorPago2 = activeCart.Pagamento2 ?? pagamento2,
+            Status = effectivePedido,
+            DataPagamentoPrazo = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo,
+            DataPagamentoPrazo2 = activeCart.DataPagamentoPrazo2 ?? dataPagamentoPrazo2,
+            Observacoes = activeCart.Observacoes ?? observacoes,
             Itens = itensDto
         };
 
@@ -2129,7 +2316,7 @@ private void OnUsarPagamento2Changed()
         }
 
         // registrar movimentações de estoque
-        foreach (var item in cart)
+        foreach (var item in activeCart.Items)
         {
             var movimentacao = new MovimentacaoEstoque()
             {
@@ -2159,26 +2346,40 @@ private void OnUsarPagamento2Changed()
             }
         }
 
-        cart.Clear();
-        // reset payment fields and selections so next sale starts clean
-        // remember last primary formaPagamentoSelecionada and persist it
-        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastFormaPagamento1", formaPagamentoSelecionada ?? string.Empty); } catch { }
+        // clear active cart and its payment fields
+        activeCart.Items.Clear();
+        activeCart.FormaPagamentoSelecionada = string.Empty;
+        activeCart.FormaPagamento2 = string.Empty;
+        activeCart.Pagamento1 = null;
+        activeCart.Pagamento2 = null;
+        activeCart.Pagamento1Text = string.Empty;
+        activeCart.UsarPagamento2 = false;
+        activeCart.SecondaryCalculated = false;
+        activeCart.ValorRecebidoDinheiro = 0m;
+        activeCart.ValorRecebidoDinheiro2 = 0m;
+        activeCart.ClienteNome = string.Empty;
+        activeCart.VendedorNome = effectiveVendedor; // keep last vendedor stored on cart
+        activeCart.PedidoStatus = "Finalizado";
+        activeCart.EntryTelefone = string.Empty;
+        activeCart.EntryEndereco = string.Empty;
+        activeCart.Observacoes = string.Empty;
+        activeCart.DataPagamentoPrazo = null;
+        activeCart.DataPagamentoPrazo2 = null;
+
+        // remember last primary formaPagamentoSelecionada and persist it (use effectiveForma)
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastFormaPagamento1", effectiveForma ?? string.Empty); } catch { }
+        // persist last vendedor so it can be restored on next load
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastVendedor", effectiveVendedor ?? string.Empty); } catch { }
+
+        // also clear local UI variables so UI resets
         formaPagamentoSelecionada = string.Empty;
         formaPagamento2 = string.Empty;
-        // deselect all radio buttons by clearing bound values
         UsarPagamento2 = false;
         pagamento1 = null;
         pagamento2 = null;
         valorRecebidoDinheiro = 0m;
         valorRecebidoDinheiro2 = 0m;
-        UsarPagamento2 = false;
-
         clienteNome = string.Empty;
-        // persist last vendedor so it can be restored on next load
-        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastVendedor", vendedorNome ?? string.Empty); } catch { }
-        // persist last pedido status so next session can default to it
-        try { await JS.InvokeVoidAsync("sessionStorage.setItem", "lastPedidoStatus", pedidoStatus ?? string.Empty); } catch { }
-        // keep vendedorNome populated (last vendedor) and keep pedidoStatus as Finalizado
         pedidoStatus = "Finalizado";
         entryTelefone = string.Empty;
         entryEndereco = string.Empty;
@@ -2200,7 +2401,7 @@ private void OnUsarPagamento2Changed()
                 return;
             }
 
-            var total = cart.Sum(p => p.Total);
+            var total = activeCart.Items.Sum(p => p.Total);
 
             // if primary provided, allocate remaining to secondary
             var primaryValue = pagamento1 ?? 0m;
@@ -2250,7 +2451,7 @@ private void OnUsarPagamento2Changed()
 
             if (comandaExistente != null)
             {
-                var produtosCart = cart.Select(p => new Produto
+                var produtosCart = activeCart.Items.Select(p => new Produto
                 {
                     Id = p.Produto.Id,
                     Nome = p.Produto.Nome,
@@ -2266,7 +2467,7 @@ private void OnUsarPagamento2Changed()
             {
                 // Comanda não existe, criar uma nova
                 var comandaId = await CriarNovaComanda(clienteNome, itensComanda);
-                var produtosCart = cart.Select(p => new Produto
+                var produtosCart = activeCart.Items.Select(p => new Produto
                 {
                     Id = p.Produto.Id,
                     Nome = p.Produto.Nome,
@@ -2280,7 +2481,7 @@ private void OnUsarPagamento2Changed()
                     await AtualizarValorComanda(clienteNome);
                 }
             }
-            cart.Clear();
+            activeCart.Items.Clear();
             itensComanda.Clear();
             clienteNome = string.Empty;
             entryTelefone = string.Empty;

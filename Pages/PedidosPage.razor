@@ -1021,6 +1021,10 @@ else
         var hasAPrazo = string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase);
 
+        // If payment date is overdue, highlight badge r5ed regardless of status
+        if (IsPaymentOverdue(p))
+            return "bg-danger text-white";
+
         var s = status.Trim().ToLowerInvariant();
         if (s == "finalizado" && hasAPrazo)
             return "bg-danger text-white"; // show red for finalized but still A Prazo
@@ -1041,8 +1045,8 @@ else
     {
         // keep dark background but add colored left border to indicate status
         if (p == null) return string.Empty;
-        // highlight overdue payments for orders "Em entrega" older than today
-        if (IsOverdue(p))
+        // highlight orders with overdue payment date (either prazo fields) regardless of status
+        if (IsPaymentOverdue(p))
             return "border-start border-4 border-danger";
         if (string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase))
             return "border-start border-4 border-success";
@@ -1079,13 +1083,17 @@ else
         return p.Status ?? string.Empty;
     }
 
-    private bool IsOverdue(Pedido p)
+    private bool IsPaymentOverdue(Pedido p)
     {
         if (p == null) return false;
-        if (!string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase)) return false;
-        if (!p.DataPedido.HasValue) return false;
-        // consider overdue if DataPedido date is before today
-        return p.DataPedido.Value.Date < DateTime.Today;
+        var today = DateTime.Today;
+        try
+        {
+            if (p.DataPagamentoPrazo.HasValue && p.DataPagamentoPrazo.Value.Date < today) return true;
+            if (p.DataPagamentoPrazo2.HasValue && p.DataPagamentoPrazo2.Value.Date < today) return true;
+        }
+        catch { }
+        return false;
     }
 
     private async Task ShowPedidoModal(int pedidoId)

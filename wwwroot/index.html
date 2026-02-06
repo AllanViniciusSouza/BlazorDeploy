@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rota019</title>
-    <base href="./" />
+    <base href="/" />
 
     <!-- ✅ Bootstrap via CDN (sem arquivos locais) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
@@ -156,11 +156,28 @@
     </script>
 
     <script>
-        // Register service worker only when supported. Wrap in try/catch to avoid
-        // breaking the app on browsers (or hosting environments) that reject
-        // service worker registration (e.g. some mobile browsers or GitHub Pages setups).
+        // Register service worker only when supported. Skip registration on iOS
+        // because some iOS/Safari combinations have caused issues with service
+        // workers (older WKWebView or limited support). Wrap in try/catch to avoid
+        // breaking the app on browsers that reject registration.
         try {
-            if ('serviceWorker' in navigator) {
+            // Detect iOS / iPadOS reliably: check platform and fallback to UA.
+            var isIOS = (function () {
+                try {
+                    var platform = navigator.platform || '';
+                    var ua = navigator.userAgent || '';
+                    if (/iP(hone|od|ad)/i.test(platform)) return true;
+                    // iPadOS 13+ reports as MacIntel but has touch support
+                    if (platform === 'MacIntel' && navigator.maxTouchPoints && navigator.maxTouchPoints > 1) return true;
+                    if (/iP(hone|od|ad)/i.test(ua)) return true;
+                } catch (ex) { }
+                return false;
+            })();
+
+            if (isIOS) {
+                console.warn('Service worker registration skipped on iOS.');
+            }
+            else if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('service-worker.js').catch(function (err) {
                     console.warn('Service worker registration failed:', err);
                 });

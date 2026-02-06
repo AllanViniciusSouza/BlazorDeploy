@@ -562,7 +562,14 @@
 
     private void MostrarFormulario()
     {
-        novoProduto = new Produto();
+        // ensure required numeric fields have sensible defaults to avoid backend validation/db errors
+        novoProduto = new Produto
+        {
+            PrecoCusto = 0.01m,
+            PrecoQuente = 0m,
+            PrecoGelada = 0m,
+            CategoriaId = categorias != null && categorias.Any() ? categorias.First().Id : 1
+        };
         exibirFormulario = true;
     }
 
@@ -573,7 +580,17 @@
 
     private async Task AdicionarProduto()
     {
-        await _apiService.AdicionarProdutoAsync(novoProduto);
+        // Defensive defaults before sending to backend
+        if (novoProduto.PrecoCusto <= 0) novoProduto.PrecoCusto = 0.01m;
+        if (novoProduto.CategoriaId == 0 && categorias != null && categorias.Any()) novoProduto.CategoriaId = categorias.First().Id;
+
+        var resp = await _apiService.AdicionarProdutoAsync(novoProduto);
+        // If API returns error, show it
+        if (resp == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Erro ao cadastrar produto: resposta nula do servidor.");
+            return;
+        }
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos ?? new List<Produto>();
         exibirFormulario = false;
@@ -583,7 +600,8 @@
     {
         bool ok = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este produto?");
         if (!ok) return;
-        var sucesso = await _apiService.ExcluirProdutoAsync(id);
+
+        var (sucesso, error) = await _apiService.ExcluirProdutoAsync(id);
         if (sucesso)
         {
             var (todosProdutos, _) = await _apiService.GetTodosProdutos();
@@ -591,7 +609,7 @@
         }
         else
         {
-            await JS.InvokeVoidAsync("alert", "Erro ao excluir o produto.");
+            await JS.InvokeVoidAsync("alert", "Erro ao excluir o produto: " + (error ?? "(sem detalhes)"));
         }
     }
 

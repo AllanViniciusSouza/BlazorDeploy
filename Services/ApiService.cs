@@ -681,11 +681,18 @@ public class ApiService
         }
     }
 
-    // Método para excluir um produto
-    public async Task<bool> ExcluirProdutoAsync(int idProduto)
+    // Método para excluir um produto. Returns success flag and optional error message.
+    public async Task<(bool Success, string? ErrorMessage)> ExcluirProdutoAsync(int idProduto)
     {
         var response = await DeleteRequest($"api/produtos/{idProduto}");
-        return response.IsSuccessStatusCode;
+        if (response == null) return (false, "No response from server");
+        if (response.IsSuccessStatusCode) return (true, null);
+
+        var body = string.Empty;
+        try { body = await response.Content.ReadAsStringAsync(); } catch { }
+        var msg = !string.IsNullOrWhiteSpace(body) ? body : response.ReasonPhrase ?? response.StatusCode.ToString();
+        _logger.LogWarning("Delete produto {Id} failed: {Status} - {Body}", idProduto, response.StatusCode, body);
+        return (false, msg);
     }
 
     public async Task<(Produto? ProdutoDetalhe, string? ErrorMessage)> GetProdutoDetalhe(int produtoId)
@@ -1332,6 +1339,8 @@ public class ApiService
         var enderecoUrl = BuildUrl(uri);
         try
         {
+            // ensure auth header present (consistent with PostRequest/PutRequest)
+            try { await AddAuthorizationHeader(); } catch { }
             var result = await _httpClient.DeleteAsync(enderecoUrl);
             return result;
         }

@@ -156,6 +156,38 @@
     </script>
 
     <script>
+        // Global client-side error capture to help diagnose white-screen issues on mobile.
+        // Stores a short JSON with message and stack into sessionStorage key 'lastClientError'.
+        (function () {
+            function saveError(obj) {
+                try {
+                    var payload = {
+                        message: obj && obj.message ? obj.message : (obj && obj.reason ? String(obj.reason) : String(obj)),
+                        stack: obj && obj.stack ? obj.stack : (obj && obj.reason && obj.reason.stack ? obj.reason.stack : null),
+                        time: new Date().toISOString(),
+                        userAgent: navigator.userAgent || null
+                    };
+                    try { console.error('Captured client error for diagnostics', payload); } catch (e) { }
+                    sessionStorage.setItem('lastClientError', JSON.stringify(payload));
+                } catch (e) { }
+            }
+
+            window.addEventListener('error', function (ev) {
+                try { saveError({ message: ev.message, stack: ev.error && ev.error.stack ? ev.error.stack : null }); } catch (e) { }
+            });
+
+            window.addEventListener('unhandledrejection', function (ev) {
+                try { saveError(ev.reason || ev); } catch (e) { }
+            });
+
+            // small helper to read last error from sessionStorage (callable from console)
+            window.__getLastClientError = function () {
+                try { return sessionStorage.getItem('lastClientError'); } catch (e) { return null; }
+            };
+        })();
+    </script>
+
+    <script>
         // Register service worker only when supported. Skip registration on iOS
         // because some iOS/Safari combinations have caused issues with service
         // workers (older WKWebView or limited support). Wrap in try/catch to avoid

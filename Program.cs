@@ -15,9 +15,12 @@ try
 {
     // Carrega appsettings.json de wwwroot
     using var http = new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) };
-    using var responseStream = await http.GetStreamAsync("appconfig.json");
-    var config = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(responseStream);
-    var apiBaseUrl = config?["ApiBaseUrl"] ?? throw new Exception("ApiBaseUrl not found");
+    try
+    {
+        using var responseStream = await http.GetStreamAsync("appconfig.json");
+        var config = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(responseStream);
+        var apiBaseUrl = builder.HostEnvironment.BaseAddress; // fallback default
+        if (config != null && config.TryGetValue("ApiBaseUrl", out var configured)) apiBaseUrl = configured;
 
         // set optional BarcodeLookup API key into AppConfig
         if (config != null && config.TryGetValue("BarcodeLookupApiKey", out var barcodeKey))
@@ -25,16 +28,23 @@ try
             BlazorDeploy.Models.AppConfig.BarcodeLookupApiKey = barcodeKey;
         }
 
-    // Registra HttpClient com URL da API
-    builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
-
-    
+        // Registra HttpClient com URL da API
+        builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
+    }
+    catch (Exception ex)
+    {
+        // don't stop the app if appconfig.json can't be loaded (mobile/network issues)
+        Console.WriteLine($"⚠️ Aviso: não foi possível carregar appconfig.json: {ex.Message}. Usando Host base como ApiBaseUrl.");
+        // fallback to app host base address
+        builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
+    }
 
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"❌ Erro ao carregar o appsettings.json: {ex.Message}");
-    throw; // Pra interromper e mostrar erro
+    // very defensive: log but continue with fallback
+    Console.WriteLine($"❌ Erro inesperado ao inicializar configuração: {ex.Message}");
+    builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 }
 
 builder.Services.AddScoped<LocalStorageService>();

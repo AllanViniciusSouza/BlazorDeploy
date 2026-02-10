@@ -1908,22 +1908,36 @@ private void OnUsarPagamento2Changed()
     {
         var total = activeCart.Items.Sum(p => p.Total);
 
-        // Determine how much was paid as primary cash
+        // use effective forms (cart-first, fallback to UI-local)
+        var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
+        var usingPagamento2 = activeCart.UsarPagamento2 || UsarPagamento2;
+
+        // Determine how much was paid as primary cash (prefer explicit cart fields)
         decimal paidPrimary = 0m;
-        if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(effectiveForma, "Dinheiro", StringComparison.OrdinalIgnoreCase))
         {
-            paidPrimary = (pagamento1.HasValue && pagamento1.Value > 0) ? pagamento1.Value : valorRecebidoDinheiro;
+            if (activeCart.Pagamento1.HasValue && activeCart.Pagamento1.Value > 0) paidPrimary = activeCart.Pagamento1.Value;
+            else if (activeCart.ValorRecebidoDinheiro > 0) paidPrimary = activeCart.ValorRecebidoDinheiro;
+            else if (pagamento1.HasValue && pagamento1.Value > 0) paidPrimary = pagamento1.Value;
+            else paidPrimary = valorRecebidoDinheiro;
         }
 
-        // Determine how much was paid as secondary cash (if any)
+        // Determine how much was paid as secondary cash (if any and if it's cash)
         decimal paidSecondary = 0m;
-        if (activeCart.UsarPagamento2 && string.Equals(activeCart.FormaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        if (usingPagamento2)
         {
-            paidSecondary = (activeCart.Pagamento2.HasValue && activeCart.Pagamento2.Value > 0) ? activeCart.Pagamento2.Value : activeCart.ValorRecebidoDinheiro2;
+            var effectiveForma2 = !string.IsNullOrEmpty(activeCart.FormaPagamento2) ? activeCart.FormaPagamento2 : formaPagamento2;
+            if (string.Equals(effectiveForma2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+            {
+                if (activeCart.Pagamento2.HasValue && activeCart.Pagamento2.Value > 0) paidSecondary = activeCart.Pagamento2.Value;
+                else if (activeCart.ValorRecebidoDinheiro2 > 0) paidSecondary = activeCart.ValorRecebidoDinheiro2;
+                else if (pagamento2.HasValue && pagamento2.Value > 0) paidSecondary = pagamento2.Value;
+                else paidSecondary = valorRecebidoDinheiro2;
+            }
         }
 
         // Secondary cash covers up to paidSecondary; remaining amount is covered by primary
-        var remainingForPrimary = Math.Max(0, total - paidSecondary);
+        var remainingForPrimary = Math.Max(0m, total - paidSecondary);
         var assignedToPrimary = Math.Min(paidPrimary, remainingForPrimary);
 
         var troco = paidPrimary - assignedToPrimary;
@@ -1934,15 +1948,30 @@ private void OnUsarPagamento2Changed()
     {
         var total = activeCart.Items.Sum(p => p.Total);
 
-        if (!(activeCart.UsarPagamento2 && string.Equals(activeCart.FormaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
+        var usingPagamento2 = activeCart.UsarPagamento2 || UsarPagamento2;
+        var effectiveForma2 = !string.IsNullOrEmpty(activeCart.FormaPagamento2) ? activeCart.FormaPagamento2 : formaPagamento2;
+        if (!(usingPagamento2 && string.Equals(effectiveForma2, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
             return 0m;
-        var paidSecondary = (activeCart.Pagamento2.HasValue && activeCart.Pagamento2.Value > 0) ? activeCart.Pagamento2.Value : activeCart.ValorRecebidoDinheiro2;
 
+        // determine paid secondary (cart-first)
+        decimal paidSecondary = 0m;
+        if (activeCart.Pagamento2.HasValue && activeCart.Pagamento2.Value > 0) paidSecondary = activeCart.Pagamento2.Value;
+        else if (activeCart.ValorRecebidoDinheiro2 > 0) paidSecondary = activeCart.ValorRecebidoDinheiro2;
+        else if (pagamento2.HasValue && pagamento2.Value > 0) paidSecondary = pagamento2.Value;
+        else paidSecondary = valorRecebidoDinheiro2;
+
+        // determine paid primary (cart-first)
         decimal paidPrimary = 0m;
-        if (string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
-            paidPrimary = (activeCart.Pagamento1.HasValue && activeCart.Pagamento1.Value > 0) ? activeCart.Pagamento1.Value : activeCart.ValorRecebidoDinheiro;
+        var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
+        if (string.Equals(effectiveForma, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        {
+            if (activeCart.Pagamento1.HasValue && activeCart.Pagamento1.Value > 0) paidPrimary = activeCart.Pagamento1.Value;
+            else if (activeCart.ValorRecebidoDinheiro > 0) paidPrimary = activeCart.ValorRecebidoDinheiro;
+            else if (pagamento1.HasValue && pagamento1.Value > 0) paidPrimary = pagamento1.Value;
+            else paidPrimary = valorRecebidoDinheiro;
+        }
 
-        var remainingForSecondary = Math.Max(0, total - paidPrimary);
+        var remainingForSecondary = Math.Max(0m, total - paidPrimary);
         var assignedToSecondary = Math.Min(paidSecondary, remainingForSecondary);
 
         var troco = paidSecondary - assignedToSecondary;

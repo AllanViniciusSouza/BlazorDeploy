@@ -188,6 +188,53 @@
     </script>
 
     <script>
+        // If Blazor shows the built-in error UI (#blazor-error-ui) make it display our captured error details
+        (function () {
+            try {
+                var raw = null;
+                try { raw = sessionStorage.getItem('lastClientError'); } catch (e) { raw = null; }
+                if (!raw) return;
+
+                function escapeHtml(s) {
+                    if (!s) return '';
+                    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                }
+
+                function inject() {
+                    try {
+                        var el = document.getElementById('blazor-error-ui');
+                        if (!el) return false;
+                        el.style.display = 'block';
+                        var parsed = null;
+                        try { parsed = JSON.parse(raw); } catch { parsed = null; }
+                        var message = parsed && parsed.message ? parsed.message : raw;
+                        var stack = parsed && parsed.stack ? parsed.stack : null;
+                        var content = '<div style="padding:0.5rem; max-height:50vh; overflow:auto;">'
+                            + '<div style="font-weight:700; margin-bottom:6px;">Erro detectado (detalhes abaixo)</div>'
+                            + '<pre style="white-space:pre-wrap; word-break:break-word; background:rgba(0,0,0,0.04); padding:8px; border-radius:4px;">' + escapeHtml(message) + '</pre>';
+                        if (stack) content += '<pre style="white-space:pre-wrap; word-break:break-word; margin-top:6px; font-size:0.85rem; opacity:0.9;">' + escapeHtml(stack) + '</pre>';
+                        content += '<div style="margin-top:8px; display:flex; gap:8px;"><button id="__copyBlazorError" class="btn btn-sm btn-light">Copiar</button><button id="__clearBlazorError" class="btn btn-sm btn-secondary">Fechar e limpar</button></div>';
+                        content += '</div>';
+                        el.innerHTML = content;
+                        try {
+                            var copy = document.getElementById('__copyBlazorError');
+                            if (copy) copy.addEventListener('click', function () { try { navigator.clipboard.writeText(raw); } catch (e) { window.prompt('Copiar (Ctrl+C):', raw); } });
+                            var clear = document.getElementById('__clearBlazorError');
+                            if (clear) clear.addEventListener('click', function () { try { sessionStorage.removeItem('lastClientError'); } catch (e) { } try { el.style.display = 'none'; } catch (e) { } });
+                        } catch { }
+                        return true;
+                    } catch { return false; }
+                }
+
+                if (!inject()) {
+                    var mo = new MutationObserver(function () { if (inject()) mo.disconnect(); });
+                    try { mo.observe(document.documentElement || document.body, { childList: true, subtree: true }); } catch { }
+                }
+            } catch (e) { }
+        })();
+    </script>
+
+    <script>
         // Register service worker only when supported. Skip registration on iOS
         // because some iOS/Safari combinations have caused issues with service
         // workers (older WKWebView or limited support). Wrap in try/catch to avoid
@@ -217,6 +264,88 @@
         } catch (e) {
             console.warn('Service worker registration error:', e);
         }
+    </script>
+
+    <script>
+        // If an error was captured earlier (before Blazor boot), show a small overlay
+        // so users on mobile (iPhone) can read the diagnostic without devtools.
+        (function () {
+            try {
+                var raw = null;
+                try { raw = sessionStorage.getItem('lastClientError'); } catch (e) { raw = null; }
+                if (!raw) return;
+                var data = null;
+                try { data = JSON.parse(raw); } catch (e) { data = { message: raw }; }
+
+                var overlay = document.createElement('div');
+                overlay.id = '__clientErrorOverlay';
+                overlay.style.position = 'fixed';
+                overlay.style.left = '8px';
+                overlay.style.right = '8px';
+                overlay.style.top = '8px';
+                overlay.style.zIndex = '2147483647';
+                overlay.style.background = 'rgba(0,0,0,0.85)';
+                overlay.style.color = '#fff';
+                overlay.style.padding = '12px';
+                overlay.style.borderRadius = '8px';
+                overlay.style.fontSize = '0.9rem';
+                overlay.style.maxHeight = '60vh';
+                overlay.style.overflow = 'auto';
+                overlay.style.boxShadow = '0 6px 20px rgba(0,0,0,0.5)';
+
+                var title = document.createElement('div');
+                title.style.fontWeight = '700';
+                title.style.marginBottom = '6px';
+                title.innerText = 'Erro no cliente (diagnóstico)';
+                overlay.appendChild(title);
+
+                var msg = document.createElement('div');
+                msg.style.whiteSpace = 'pre-wrap';
+                msg.style.wordBreak = 'break-word';
+                msg.innerText = (data && data.message) ? data.message : String(raw);
+                overlay.appendChild(msg);
+
+                if (data && data.stack) {
+                    var stack = document.createElement('div');
+                    stack.style.marginTop = '8px';
+                    stack.style.opacity = '0.9';
+                    stack.style.fontSize = '0.8rem';
+                    stack.style.whiteSpace = 'pre-wrap';
+                    stack.innerText = data.stack;
+                    overlay.appendChild(stack);
+                }
+
+                var buttons = document.createElement('div');
+                buttons.style.display = 'flex';
+                buttons.style.gap = '8px';
+                buttons.style.marginTop = '8px';
+
+                var copyBtn = document.createElement('button');
+                copyBtn.innerText = 'Copiar erro';
+                copyBtn.className = 'btn btn-sm btn-light';
+                copyBtn.onclick = function () {
+                    try {
+                        var toCopy = raw;
+                        navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(toCopy) : window.prompt('Copiar (Ctrl+C)', toCopy);
+                    } catch (e) { }
+                };
+                buttons.appendChild(copyBtn);
+
+                var clearBtn = document.createElement('button');
+                clearBtn.innerText = 'Fechar e limpar';
+                clearBtn.className = 'btn btn-sm btn-secondary';
+                clearBtn.onclick = function () {
+                    try { sessionStorage.removeItem('lastClientError'); } catch (e) { }
+                    try { overlay.remove(); } catch (e) { }
+                };
+                buttons.appendChild(clearBtn);
+
+                overlay.appendChild(buttons);
+
+                // inject bootstrap styles if available fallback to inline simple styles
+                try { document.body.appendChild(overlay); } catch (e) { }
+            } catch (e) { }
+        })();
     </script>
 </body>
 

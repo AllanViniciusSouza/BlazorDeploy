@@ -24,7 +24,7 @@
 @* compact vendor + client inputs shown at bottom (rendered near cart) *@
 
 
-    <div class="card shadow-sm p-3 mb-4 bg-dark text-white" @onkeydown:window="OnWindowKeyDown">
+    <div class="card shadow-sm p-3 mb-4 bg-dark text-white">
     <div class="d-flex align-items-center justify-content-between mb-2">
         <h4 class="fw-bold text-white mb-0">Produtos</h4>
         <button class="btn btn-sm btn-outline-primary ms-2" title="Abrir Leitor (câmera)" @onclick="OpenScanner" aria-label="Abrir leitor de códigos">
@@ -46,7 +46,7 @@
                        placeholder="Pesquisar por nome ou código de barras"
                        value="@searchTerm"
                        @oninput="@(e => { searchTerm = e?.Value?.ToString() ?? string.Empty; _ = SearchProducts(e); })"
-                       @onkeyup="OnSearchKeyUp" />
+                       @onkeydown="OnSearchKeyDown" />
             }
 
 @* keyboard handlers moved into @code block to avoid rendering as text *@
@@ -59,38 +59,31 @@
     private DotNetObjectReference<object>? _escDotRef;
     private bool focusSearchRequested = false;
 
-    private async Task OnWindowKeyDown(KeyboardEventArgs e)
+    [JSInvokable]
+    public async Task OnProductNumberShortcut(int number)
     {
-        // ignore when user is focused inside an input/textarea/select
-        string activeTag = string.Empty;
-        try
-        {
-            activeTag = (await JS.InvokeAsync<string>("eval", "(document.activeElement && document.activeElement.tagName) || ''"))?.ToUpperInvariant() ?? string.Empty;
-        }
-        catch { }
+        // Only works when product list is visible
+        if (!showProductList || !filteredProdutos.Any()) return;
 
-        if (activeTag == "INPUT" || activeTag == "TEXTAREA" || activeTag == "SELECT" || activeTag == "OPTION")
-            return;
-
-        if (e.Key == "Escape")
+        if (number >= 1 && number <= filteredProdutos.Count)
         {
-            ClearAllFilters();
-            StateHasChanged();
+            try 
+            { 
+                await JS.InvokeVoidAsync("console.log", $"OnProductNumberShortcut: Selecting product at index {number}"); 
+            } 
+            catch { }
+            
+            var selectedProduto = filteredProdutos[number - 1];
+            OpenQuantityModal(selectedProduto);
+            await InvokeAsync(StateHasChanged);
         }
-        else
-        {
-            // accept '+' from main keyboard (shift+'='), numpad or Add key
-            var isPlus = e.Key == "+" || e.Code == "NumpadAdd" || e.Key == "Add" || (e.Key == "=" && e.ShiftKey);
-            if (isPlus)
-            {
-                await AddBlankCartItem();
-                // allow render then focus description
-                await Task.Delay(50);
-                try { await JS.InvokeVoidAsync("focusFirstBlankDescricao"); } catch { }
-                StateHasChanged();
-            }
+    }
 
-        }
+    [JSInvokable]
+    public async Task OnPaymentShortcut(string formaPagamento)
+    {
+        await SetFormaPagamento(formaPagamento);
+        await InvokeAsync(StateHasChanged);
     }
 
     private void CloseAllModals()
@@ -158,9 +151,62 @@
     [JSInvokable]
     public async Task OnEscapePressed()
     {
-        // called from global JS handler
+        try { await JS.InvokeVoidAsync("console.log", $"[C#] OnEscapePressed called - showQuantityModal={showQuantityModal}, showCreateProductModal={showCreateProductModal}"); } catch { }
+        
+        // If quantity modal is open, close it instead of clearing filters
+        if (showQuantityModal)
+        {
+            try { await JS.InvokeVoidAsync("console.log", "[C#] Closing quantity modal, preserving filters"); } catch { }
+            CloseModal();
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // If create product modal is open, close it instead of clearing filters
+        if (showCreateProductModal)
+        {
+            try { await JS.InvokeVoidAsync("console.log", "[C#] Closing create product modal, preserving filters"); } catch { }
+            CancelCreateProduct();
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // No modals open - clear filters normally
+        try { await JS.InvokeVoidAsync("console.log", "[C#] No modals open, clearing filters"); } catch { }
         ClearAllFilters();
         try { await JS.InvokeVoidAsync("numericKeypad.hide"); } catch { }
+        await InvokeAsync(StateHasChanged);
+        
+        // Return focus to search input after clearing filters
+        await Task.Delay(50); // give UI time to update
+        try 
+        { 
+            await JS.InvokeVoidAsync("eval", "document.getElementById('searchInput')?.focus()"); 
+        } 
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task OnTemperatureShortcut(string? temperatura)
+    {
+        // Only works when quantity modal is open
+        if (!showQuantityModal) return;
+
+        selectedTemperatura = temperatura;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnVendedorShortcut(string vendedor)
+    {
+        OnVendedorSelected(vendedor);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnStatusShortcut(string status)
+    {
+        PedidoStatus = status;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -203,8 +249,8 @@
         </div>
     </div>
 
-    @* Brand quick-filter cards *@
-    @if (marcas != null && marcas.Any())
+    @* Brand quick-filter cards - only show when search is empty *@
+    @if (marcas != null && marcas.Any() && string.IsNullOrEmpty(searchTerm))
     {
         <div class="mb-3">
             <label class="form-label fw-bold">Marcas</label>
@@ -235,8 +281,8 @@
         </div>
     }
 
-    @* Size options for selected brand *@
-    @if (!string.IsNullOrEmpty(selectedMarca) && sizesForMarca != null && sizesForMarca.Any())
+    @* Size options for selected brand - only show when search is empty *@
+    @if (!string.IsNullOrEmpty(selectedMarca) && sizesForMarca != null && sizesForMarca.Any() && string.IsNullOrEmpty(searchTerm))
     {
         <div class="mb-3">
             <label class="form-label fw-bold">Opções para @selectedMarca</label>
@@ -251,8 +297,8 @@
         </div>
     }
 
-    @* Flavor cards shown after selecting size (if available) *@
-    @if (flavorsForSelection != null && flavorsForSelection.Any())
+    @* Flavor cards shown after selecting size (if available) - only show when search is empty *@
+    @if (flavorsForSelection != null && flavorsForSelection.Any() && string.IsNullOrEmpty(searchTerm))
     {
         <div class="mb-3">
             <label class="form-label fw-bold">Sabores para @selectedMarca @selectedSize</label>
@@ -272,23 +318,32 @@
     {
         <div style="max-height: 480px; overflow-y: auto;">
             <div class="row row-cols-2 row-cols-sm-3 row-cols-md-6 g-2">
-                @foreach (var Produto in filteredProdutos)
+                @for (int i = 0; i < filteredProdutos.Count; i++)
                 {
+                    var Produto = filteredProdutos[i];
+                    var index = i + 1;
+                    var hasShortcut = index >= 1 && index <= 9;
                     <div class="col">
-                    <div class="card h-100 shadow-sm small" style="cursor:pointer;">
-                            <div class="card-body p-1 d-flex flex-column" @onclick="() => OpenQuantityModal(Produto)">
-                                <div class="card-title mb-1" title="@Produto.Nome" style="font-size:0.95rem; white-space:normal;">@Produto.Nome</div>
-                                <div class="d-flex gap-2 mt-2 align-items-end">
+                    <div class="card h-100 shadow-sm small" style="cursor:pointer; position:relative; @(!hasShortcut ? "opacity:0.7;" : "")">
+                            <div class="card-body p-2 d-flex flex-column" @onclick="() => OpenQuantityModal(Produto)">
+                                <div class="card-title mb-2" title="@Produto.Nome" style="font-size:0.95rem; white-space:normal; font-weight:600; color:#212529;">@Produto.Nome</div>
+                                <div class="d-flex gap-3 mt-auto justify-content-center">
                                     <div class="text-center">
-                                        <div class="small text-white-50">Quente</div>
-                                        <div class="fw-bold">R$ @(Produto.PrecoQuente > 0 ? Produto.PrecoQuente.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                                        <div class="small mb-1" style="font-size:0.75rem; font-weight:600; color:#6c757d; text-transform:uppercase; letter-spacing:0.5px;">Quente</div>
+                                        <div class="fw-bold" style="font-size:1.15rem; color:#dc3545;">R$ @(Produto.PrecoQuente > 0 ? Produto.PrecoQuente.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
                                     </div>
                                     <div class="text-center">
-                                        <div class="small text-white-50">Gelado</div>
-                                        <div class="fw-bold">R$ @(Produto.PrecoGelada > 0 ? Produto.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
+                                        <div class="small mb-1" style="font-size:0.75rem; font-weight:600; color:#6c757d; text-transform:uppercase; letter-spacing:0.5px;">Gelado</div>
+                                        <div class="fw-bold" style="font-size:1.15rem; color:#0d6efd;">R$ @(Produto.PrecoGelada > 0 ? Produto.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(Produto).ToString("0.00"))</div>
                                     </div>
                                 </div>
                             </div>
+                            @if (hasShortcut)
+                            {
+                                <div style="position:absolute; bottom:4px; right:4px; z-index:10;">
+                                    <span class="badge bg-primary" style="font-size:0.9rem; font-weight:bold; padding:0.35rem 0.5rem;">@index</span>
+                                </div>
+                            }
                         </div>
                     </div>
                 }
@@ -430,153 +485,196 @@
         </tbody>
     </table>
 
-    <div class="row align-items-start">
-        <div class="col-md-8">
-            @* left column kept for cart table (already rendered above) *@
-        </div>
-        <div class="col-md-4">
-            <div class="d-flex flex-column align-items-end">
-                <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @activeCart.Items.Sum(p => p.Total).ToString("0.00")</h3>
-                @if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
-                {
-                    var troco = trocoDinheiro;
-                    var trocoClass = troco > 0 ? "text-danger" : "text-white";
-                    <h5 class="fw-bold mb-1 text-end @trocoClass" style="font-size:1.05rem;">
-                        Troco: R$ @troco.ToString("0.00")
-                    </h5>
-                }
-            </div>
+    <div class="d-flex flex-column align-items-end mb-3">
+        <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @activeCart.Items.Sum(p => p.Total).ToString("0.00")</h3>
+        @if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+        {
+            var troco = trocoDinheiro;
+            var trocoClass = troco > 0 ? "text-danger" : "text-white";
+            <h5 class="fw-bold mb-1 text-end @trocoClass" style="font-size:1.05rem;">
+                Troco: R$ @troco.ToString("0.00")
+            </h5>
+        }
+    </div>
 
-            <div class="card p-2 bg-transparent border-0">
-                <label class="form-label fw-bold text-white">Forma de Pagamento</label>
-                <div class="d-flex w-100">
-                    <div class="me-3">
-                        <div class="form-check d-flex flex-column">
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => SetFormaPagamento("Dinheiro")' /><label class="form-check-label ms-2 text-white">Dinheiro</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => SetFormaPagamento("Credito")' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => SetFormaPagamento("Debito")' /><label class="form-check-label ms-2 text-white">Débito</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => SetFormaPagamento("Pix")' /><label class="form-check-label ms-2 text-white">Pix</label></div>
-                            <div class="mb-2"><input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => SetFormaPagamento("A Prazo")' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
+    <div class="row g-3">
+                @* Left column: Vendedor, Cliente, Status *@
+                <div class="col-md-6">
+                    <!-- Vendedores -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Vendedor</label>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            @if (vendedores != null && vendedores.Any())
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Ronaldo" @onchange='() => OnVendedorSelected("Ronaldo")' checked="@(activeCart.VendedorNome == "Ronaldo")" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_Ronaldo" style="font-size:0.85rem;">R - Ronaldo</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Nathan" @onchange='() => OnVendedorSelected("Nathan")' checked="@(activeCart.VendedorNome == "Nathan")" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_Nathan" style="font-size:0.85rem;">N - Nathan</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Carlinhos" @onchange='() => OnVendedorSelected("Carlinhos")' checked="@(activeCart.VendedorNome == "Carlinhos")" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_Carlinhos" style="font-size:0.85rem;">E - Carlinhos</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Allan" @onchange='() => OnVendedorSelected("Allan")' checked="@(activeCart.VendedorNome == "Allan")" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_Allan" style="font-size:0.85rem;">V - Allan</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Beatriz" @onchange='() => OnVendedorSelected("Beatriz")' checked="@(activeCart.VendedorNome == "Beatriz")" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_Beatriz" style="font-size:0.85rem;">S - Beatriz</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Kayke" @onchange='() => OnVendedorSelected("Kayke")' checked="@(activeCart.VendedorNome == "Kayke")" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_Kayke" style="font-size:0.85rem;">K - Kayke</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_outro" @onchange="() => OnOtherVendedorSelected()" checked="@activeCart.IsOtherVendedorSelected" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_outro" style="font-size:0.85rem;">Outro</label>
+                                </div>
+                                @if (activeCart.IsOtherVendedorSelected)
+                                {
+                                    <input class="form-control form-control-sm" @bind="activeCart.VendedorNome" placeholder="Digite o nome" style="font-size:0.85rem; width: 150px;" />
+                                }
+                            }
                         </div>
                     </div>
-                    <div class="flex-fill">
-                        <label class="form-label text-white">Valor (principal)</label>
-                        <input id="pag1_input" type="text" inputmode="decimal" class="form-control" style="max-width:220px;" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!activeCart.UsarPagamento2) && !string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus:preventDefault @onblur:preventDefault />
-                        <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="usar_pag2" @bind="activeCart.UsarPagamento2" @bind:after="OnUsarPagamento2Changed" /><label class="form-check-label ms-2 text-white" for="usar_pag2">Adicionar forma de pagamento 2</label></div>
+
+                    @* Status do Pedido *@
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Status</label>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" value="Finalizado" checked='@(PedidoStatus == "Finalizado")' @onclick='() => PedidoStatus = "Finalizado"' />
+                                <label class="form-check-label ms-1 text-white" for="status_finalizado" style="font-size:0.85rem;">F - Finalizado</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" value="Retirada" checked='@(PedidoStatus == "Retirada")' @onclick='() => PedidoStatus = "Retirada"' />
+                                <label class="form-check-label ms-1 text-white" for="status_retirada" style="font-size:0.85rem;">T - Retirada</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" value="Em entrega" checked='@(PedidoStatus == "Em entrega")' @onclick='() => PedidoStatus = "Em entrega"' />
+                                <label class="form-check-label ms-1 text-white" for="status_entrega" style="font-size:0.85rem;">M - Em entrega</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Cliente inputs *@
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Cliente</label>
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <input type="text" class="form-control form-control-sm" @bind="activeCart.ClienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome" style="font-size:0.85rem;" />
+                            </div>
+                            @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryTelefone" placeholder="Telefone" style="font-size:0.85rem;" />
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryEndereco" placeholder="Endereço" style="font-size:0.85rem;" />
+                                </div>
+                            }
+                            <div class="col-12">
+                                <input type="text" class="form-control form-control-sm" @bind="observacoes" placeholder="Observações" style="font-size:0.85rem;" />
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                @if (activeCart.FormaPagamentoSelecionada == "A Prazo")
-                {
-                    <div class="mt-2">
-                        <label class="text-white">Data de Pagamento (prazo)</label>
-                        <InputDate @bind-Value="activeCart.DataPagamentoPrazo"
-                                   class="@GetDataPagamentoPrazoClass()"
-                                   style="transition: border-color .15s ease, box-shadow .15s ease;" />
-                    </div>
-                }
-
-                @if (activeCart.UsarPagamento2)
-                {
-                    <div class="mt-3">
-                        <label class="form-label fw-bold text-white">Forma de Pagamento 2 (opcional)</label>
-                        <div class="d-flex align-items-start">
-                            <div class="form-check d-flex flex-column me-2">
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(activeCart.FormaPagamento2 == "Credito")' @onclick='() => SetFormaPagamento2("Credito")' /><label class="form-check-label ms-2 text-white">Crédito</label></div>
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => SetFormaPagamento2("Debito")' /><label class="form-check-label ms-2 text-white">Débito</label></div>
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => SetFormaPagamento2("Pix")' /><label class="form-check-label ms-2 text-white">Pix</label></div>
-                                <div class="mb-2"><input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => SetFormaPagamento2("A Prazo")' /><label class="form-check-label ms-2 text-white">A Prazo</label></div>
+                @* Right column: Forma de Pagamento *@
+                <div class="col-md-6">
+                    <div class="card p-2 bg-transparent border-0">
+                        <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Forma de Pagamento</label>
+                        <div class="d-flex flex-column gap-1 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="pag1" value="Dinheiro" checked='@(formaPagamentoSelecionada == "Dinheiro")' @onclick='() => SetFormaPagamento("Dinheiro")' />
+                                <label class="form-check-label ms-1 text-white" for="pag1_dinheiro" style="font-size:0.85rem;">D - Dinheiro</label>
                             </div>
-                                <div class="ms-2">
-                                <input type="number" step="0.01" class="form-control" style="max-width:140px;" placeholder="Valor" @bind="activeCart.Pagamento2" disabled="@activeCart.SecondaryCalculated" />
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="pag1" value="Credito" checked='@(formaPagamentoSelecionada == "Credito")' @onclick='() => SetFormaPagamento("Credito")' />
+                                <label class="form-check-label ms-1 text-white" style="font-size:0.85rem;">C - Crédito</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="pag1" value="Debito" checked='@(formaPagamentoSelecionada == "Debito")' @onclick='() => SetFormaPagamento("Debito")' />
+                                <label class="form-check-label ms-1 text-white" style="font-size:0.85rem;">B - Débito</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="pag1" value="Pix" checked='@(formaPagamentoSelecionada == "Pix")' @onclick='() => SetFormaPagamento("Pix")' />
+                                <label class="form-check-label ms-1 text-white" style="font-size:0.85rem;">P - Pix</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="pag1" value="A Prazo" checked='@(formaPagamentoSelecionada == "A Prazo")' @onclick='() => SetFormaPagamento("A Prazo")' />
+                                <label class="form-check-label ms-1 text-white" style="font-size:0.85rem;">A - A Prazo</label>
                             </div>
                         </div>
-                    </div>
-                }
-            </div>
-        </div>
-    </div>
 
-            <!-- Vendedores: moved here to sit between payment and client input -->
-            <div class="mt-3">
-                <label class="form-label fw-bold text-white">Vendedor</label>
-                <div class="d-flex flex-wrap gap-2">
-                    @if (vendedores != null && vendedores.Any())
-                    {
-                    @foreach (var v in vendedores)
+                        @if (string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase) || activeCart.UsarPagamento2)
                         {
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_@v" @onchange="() => OnVendedorSelected(v)" checked="@(activeCart.VendedorNome == v)" />
-                                <label class="form-check-label ms-1 text-white" for="v_inline_@v">@v</label>
+                            <div class="mb-2">
+                                <label class="form-label text-white" style="font-size:0.85rem;">Valor</label>
+                                <input id="pag1_input" type="text" inputmode="decimal" class="form-control form-control-sm" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!activeCart.UsarPagamento2) && !string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus="OnPagamento1Focus" @onfocus:preventDefault @onblur:preventDefault style="font-size:0.85rem;" />
                             </div>
                         }
 
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_outro" @onchange="() => OnOtherVendedorSelected()" checked="@activeCart.IsOtherVendedorSelected" />
-                            <label class="form-check-label ms-1 text-white" for="v_inline_outro">Outro</label>
-                        </div>
-
-                        @if (activeCart.IsOtherVendedorSelected)
+                        @if (!string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada))
                         {
-                            <input class="form-control form-control-sm mt-2" style="max-width:220px;" @bind="activeCart.VendedorNome" placeholder="Digite o nome do vendedor" />
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="usar_pag2" @bind="activeCart.UsarPagamento2" @bind:after="OnUsarPagamento2Changed" />
+                                <label class="form-check-label ms-1 text-white" for="usar_pag2" style="font-size:0.8rem;">+ Pagamento 2</label>
+                            </div>
                         }
-                    }
+
+                        @if (activeCart.FormaPagamentoSelecionada == "A Prazo")
+                        {
+                            <div class="mb-2">
+                                <label class="text-white" style="font-size:0.85rem;">Data Prazo</label>
+                                <InputDate @bind-Value="activeCart.DataPagamentoPrazo"
+                                           class="@(GetDataPagamentoPrazoClass() + " form-control-sm")"
+                                           style="transition: border-color .15s ease, box-shadow .15s ease; font-size:0.85rem;" />
+                            </div>
+                        }
+
+                        @if (activeCart.UsarPagamento2)
+                        {
+                            <div class="mt-2">
+                                <label class="form-label fw-bold text-white" style="font-size:0.85rem;">Pagamento 2</label>
+                                <div class="d-flex flex-column gap-1 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="pag2" value="Credito" checked='@(activeCart.FormaPagamento2 == "Credito")' @onclick='() => SetFormaPagamento2("Credito")' />
+                                        <label class="form-check-label ms-1 text-white" style="font-size:0.8rem;">Crédito</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="pag2" value="Debito" checked='@(formaPagamento2 == "Debito")' @onclick='() => SetFormaPagamento2("Debito")' />
+                                        <label class="form-check-label ms-1 text-white" style="font-size:0.8rem;">Débito</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="pag2" value="Pix" checked='@(formaPagamento2 == "Pix")' @onclick='() => SetFormaPagamento2("Pix")' />
+                                        <label class="form-check-label ms-1 text-white" style="font-size:0.8rem;">Pix</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="pag2" value="A Prazo" checked='@(formaPagamento2 == "A Prazo")' @onclick='() => SetFormaPagamento2("A Prazo")' />
+                                        <label class="form-check-label ms-1 text-white" style="font-size:0.8rem;">A Prazo</label>
+                                    </div>
+                                </div>
+                                <input type="number" step="0.01" class="form-control form-control-sm" placeholder="Valor" @bind="activeCart.Pagamento2" disabled="@activeCart.SecondaryCalculated" style="font-size:0.85rem;" />
+                                
+                                @if (formaPagamento2 == "A Prazo")
+                                {
+                                    <div class="mt-2">
+                                        <label class="text-white" style="font-size:0.85rem;">Data Prazo 2</label>
+                                        <InputDate @bind-Value="dataPagamentoPrazo2"
+                                                   class="@(GetDataPagamentoPrazo2Class() + " form-control-sm")"
+                                                   style="transition: border-color .15s ease, box-shadow .15s ease; font-size:0.85rem;" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
                 </div>
             </div>
-
-   
-    @if (formaPagamento2 == "A Prazo")
-    {
-        <div class="mt-2">
-            <label class="fw-bold">Data de Pagamento 2 (prazo)</label>
-            <InputDate @bind-Value="dataPagamentoPrazo2"
-                       class="@GetDataPagamentoPrazo2Class()"
-                       style="transition: border-color .15s ease, box-shadow .15s ease;" />
-        </div>
-    }
-
-    
-    @* Compact input row: cliente (vendedor moved above) *@
-    <div class="d-flex gap-3 mt-3">
-        <div style="flex:1; display:flex; gap:8px; flex-direction:column;">
-            <div>
-                <input type="text" class="form-control form-control-sm" @bind="activeCart.ClienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome do cliente" />
-            </div>
-
-            @* Telefone e Endereço aparecem apenas quando pagamento for A Prazo (forma 1) ou formaPagamento2 for A Prazo *@
-            @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
-            {
-                <div>
-                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryTelefone" placeholder="Telefone" />
-                </div>
-                <div>
-                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryEndereco" placeholder="Endereço" />
-                </div>
-            }
-
-            <div>
-                <input type="text" class="form-control form-control-sm" @bind="observacoes" placeholder="Observações do pedido" />
-            </div>
-        </div>
-    </div>
-
-    <div class="mt-3">
-        <label class="form-label fw-bold">Status do Pedido</label>
-            <div class="d-flex gap-3 mt-2">
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="statusPedido" id="status_finalizado" value="Finalizado" checked='@(PedidoStatus == "Finalizado")' @onclick='() => PedidoStatus = "Finalizado"' />
-                    <label class="form-check-label ms-2" for="status_finalizado">Finalizado</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="statusPedido" id="status_retirada" value="Retirada" checked='@(PedidoStatus == "Retirada")' @onclick='() => PedidoStatus = "Retirada"' />
-                    <label class="form-check-label ms-2" for="status_retirada">Retirada</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="statusPedido" id="status_entrega" value="Em entrega" checked='@(PedidoStatus == "Em entrega")' @onclick='() => PedidoStatus = "Em entrega"' />
-                    <label class="form-check-label ms-2" for="status_entrega">Em entrega</label>
-                </div>
-            </div>
-        </div>
 
     @{ 
         // derive effective values from activeCart falling back to local UI vars so the check is robust
@@ -625,11 +723,11 @@
 
                 <div class="mb-3">
                     <input id="quantity_input" type="text" inputmode="numeric" pattern="[0-9xX]*" class="form-control form-control-lg text-center"
-                           placeholder="Quantidade (ex: 9x24 ou 216)" value="@selectedQuantityBuffer" @oninput="OnQuantityInput" @onkeydown="OnQuantityKeyDown" />
+                           placeholder="Quantidade (ex: 9x24 ou 216)" value="@selectedQuantityBuffer" @oninput="OnQuantityInput" @onkeydown="OnQuantityKeyDown" @onkeypress="OnQuantityKeyPress" />
                     <div class="small text-muted mt-1">Quantidade final: @RenderComputedQuantity()</div>
                 </div>
 
-                <div class="mb-2 d-flex flex-wrap gap-2 justify-content-center">
+                <div class="mb-2 d-flex flex-wrap gap-2 justify-content-center">2
                     @for (int n = 0; n <= 9; n++)
                     {
                         var digit = n; /* capture loop variable to avoid closure issue */
@@ -644,17 +742,17 @@
                     <div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="temp" id="temp_none" checked="@(string.IsNullOrEmpty(selectedTemperatura))" @onchange="() => OnSelectTemperatura(null)" />
-                            <label class="form-check-label ms-2" for="temp_none">Nenhuma</label>
+                            <label class="form-check-label ms-2" for="temp_none">N - Nenhuma</label>
                             <div class="small text-muted ms-4">Preço: R$ @(GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="temp" id="temp_quente" checked='@(selectedTemperatura == "Quente")' @onchange='() => OnSelectTemperatura("Quente")' />
-                            <label class="form-check-label ms-2" for="temp_quente">Quente</label>
+                            <label class="form-check-label ms-2" for="temp_quente">Q - Quente</label>
                             <div class="small text-muted ms-4">Preço: R$ @(selectedProduct != null && selectedProduct.PrecoQuente > 0 ? selectedProduct.PrecoQuente.ToString("0.00") : GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="temp" id="temp_gelada" checked='@(selectedTemperatura == "Gelada")' @onchange='() => OnSelectTemperatura("Gelada")' />
-                            <label class="form-check-label ms-2" for="temp_gelada">Gelada</label>
+                            <label class="form-check-label ms-2" for="temp_gelada">G - Gelada</label>
                             <div class="small text-muted ms-4">Preço: R$ @(selectedProduct != null && selectedProduct.PrecoGelada > 0 ? selectedProduct.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
                         </div>
                     </div>
@@ -1043,12 +1141,48 @@ private string? selectedTemperatura = null;
         isOtherVendedorSelected = true;
     }
 
-    private void SetFormaPagamento(string forma)
+    private async Task SetFormaPagamento(string forma)
     {
         formaPagamentoSelecionada = forma;
         try { activeCart.FormaPagamentoSelecionada = forma; } catch { }
         EnsurePagamento1State();
         StateHasChanged();
+        
+        // If Dinheiro is selected, focus the payment input after state update
+        if (forma == "Dinheiro")
+        {
+            await Task.Delay(100); // give UI time to render/enable the input
+            try 
+            { 
+                await JS.InvokeVoidAsync("eval", "document.getElementById('pag1_input')?.focus()"); 
+                await JS.InvokeVoidAsync("console.log", "Focused pag1_input after Dinheiro selection");
+            } 
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"Failed to focus pag1_input: {ex.Message}");
+            }
+        }
+        // If A Prazo is selected, focus and click the date input to open calendar
+        else if (forma == "A Prazo")
+        {
+            await Task.Delay(100); // give UI time to render the date input
+            try 
+            { 
+                await JS.InvokeVoidAsync("eval", @"
+                    var dateInput = document.querySelector('input[type=""date""]');
+                    if (dateInput) {
+                        dateInput.focus();
+                        dateInput.click();
+                        dateInput.showPicker && dateInput.showPicker();
+                    }
+                ");
+                await JS.InvokeVoidAsync("console.log", "Opened date picker after A Prazo selection");
+            } 
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"Failed to open date picker: {ex.Message}");
+            }
+        }
     }
 
     private void SetFormaPagamento2(string forma)
@@ -1057,6 +1191,17 @@ private string? selectedTemperatura = null;
         try { activeCart.FormaPagamento2 = forma; } catch { }
         RecalculateSecondary();
         StateHasChanged();
+    }
+
+    private async Task OnPagamento1Focus(FocusEventArgs e)
+    {
+        // Select all text when the payment input receives focus
+        try
+        {
+            await Task.Delay(10); // small delay to ensure input is ready
+            await JS.InvokeVoidAsync("eval", "document.getElementById('pag1_input')?.select()");
+        }
+        catch { }
     }
 
     private string Pagamento1Text
@@ -1177,8 +1322,9 @@ private string? selectedTemperatura = null;
         await ProcessBarcode(code);
     }
 
-    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
     {
+        // Only handle Enter to process barcode
         if (e.Key == "Enter")
         {
             await ProcessBarcode(searchTerm);
@@ -1509,6 +1655,12 @@ void CloseModal()
     _snapshotSearchTerm = null;
     SyncPriceInputs();
     StateHasChanged();
+    
+    // Return focus to search input after modal closes
+    _ = Task.Run(async () => {
+        await Task.Delay(50); // allow UI to update
+        try { await JS.InvokeVoidAsync("eval", "document.getElementById('searchInput')?.focus()"); } catch { }
+    });
 }
 
 // snapshot helper removed - modal must not alter filters
@@ -1746,6 +1898,14 @@ private async Task ConfirmAddToCart()
     // do not clear product filters or search when closing modal; keep current product list visible
     UpdateCartTotals();
     StateHasChanged();
+    
+    // Return focus to search input after adding to cart
+    await Task.Delay(50); // allow UI to update
+    try 
+    { 
+        await JS.InvokeVoidAsync("eval", "document.getElementById('searchInput')?.focus()"); 
+    } 
+    catch { }
 }
 
 private async Task OnQuantityKeyDown(KeyboardEventArgs e)
@@ -1758,6 +1918,27 @@ private async Task OnQuantityKeyDown(KeyboardEventArgs e)
     {
         CloseModal();
     }
+}
+
+private void OnQuantityKeyPress(KeyboardEventArgs e)
+{
+    // Only allow numbers (0-9) and 'x' or 'X' for multiplication
+    var key = e.Key;
+    
+    // Allow numbers 0-9
+    if (key.Length == 1 && char.IsDigit(key[0]))
+    {
+        return;
+    }
+    
+    // Allow 'x' or 'X' for multiplication
+    if (key == "x" || key == "X")
+    {
+        return;
+    }
+    
+    // Block all other keys (including letters like n, q, g)
+    // Note: This won't prevent the keystroke in Blazor WASM, but combined with JS preventDefault it will work
 }
 
 void UpdateCartTotals()
@@ -2027,7 +2208,7 @@ private void OnUsarPagamento2Changed()
             // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
             if (vendedores == null || !vendedores.Any())
             {
-                vendedores = new List<string> { "Ronaldo", "Nathan", "Carlinhos", "Juliana", "Beatriz", "Kayke" };
+                vendedores = new List<string> { "Ronaldo", "Nathan", "Carlinhos", "Allan", "Beatriz", "Kayke" };
             }
             try
             {

@@ -8,7 +8,21 @@
 
 <div id="produtos-barcode-scanner" style="display:none;"></div>
 
-<div class="d-flex align-items-center justify-content-end mb-3">
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <button class="btn btn-sm @(mostrarZeradosPrimeiro ? "btn-warning" : "btn-outline-warning")" 
+                title="@(mostrarZeradosPrimeiro ? "Mostrando produtos zerados primeiro" : "Mostrar produtos zerados primeiro")" 
+                @onclick="ToggleMostrarZeradosPrimeiro">
+            @if (mostrarZeradosPrimeiro)
+            {
+                <text>✓ Zerados Primeiro</text>
+            }
+            else
+            {
+                <text>Zerados Primeiro</text>
+            }
+        </button>
+    </div>
     <div class="d-flex align-items-center">
         <button class="btn btn-success btn-sm me-2" title="Adicionar novo produto" @onclick="MostrarFormulario" aria-label="Adicionar produto">+</button>
         <button class="btn btn-sm btn-outline-primary" title="Abrir leitor (câmera)" @onclick="OpenScanner" aria-label="Abrir leitor de códigos">
@@ -21,8 +35,15 @@
     </div>
 </div>
 
+<div class="row mb-3">
+    <div class="col-12">
+        <label class="form-label fw-bold">Pesquisar (nome ou código de barras)</label>
+        <input class="form-control" @bind="searchTerm" @oninput="Search" placeholder="Digite nome ou código" />
+    </div>
+</div>
+
 @* Brand quick-filter grouped by initial letter (from CaixaPage) *@
-@if (marcas != null && marcas.Any())
+@if (marcas != null && marcas.Any() && string.IsNullOrWhiteSpace(searchTerm))
 {
     <div class="mb-3">
         <label class="form-label fw-bold">Marcas</label>
@@ -151,16 +172,6 @@
     </div>
 }
 
-@if (string.IsNullOrEmpty(selectedMarca))
-{
-    <div class="row mb-3">
-        <div class="col-12">
-            <label class="form-label fw-bold">Pesquisar (nome ou código de barras)</label>
-            <input class="form-control" @bind="searchTerm" @oninput="Search" placeholder="Digite nome ou código" />
-        </div>
-    </div>
-}
-
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
     @if (filteredProdutos != null)
     {
@@ -284,6 +295,32 @@
     private List<string> flavorsForSelection = new();
     private Dictionary<string, Produto> flavorToProduct = new(StringComparer.OrdinalIgnoreCase);
     private List<Produto> allProdutos = new();
+    private bool mostrarZeradosPrimeiro = false;
+    
+    private void ToggleMostrarZeradosPrimeiro()
+    {
+        mostrarZeradosPrimeiro = !mostrarZeradosPrimeiro;
+        AplicarOrdenacao();
+    }
+
+    private void AplicarOrdenacao()
+    {
+        if (mostrarZeradosPrimeiro)
+        {
+            // Produtos com PrecoQuente e PrecoGelada zerados primeiro
+            filteredProdutos = filteredProdutos
+                .OrderByDescending(p => (p.PrecoQuente == 0 && p.PrecoGelada == 0) ? 1 : 0)
+                .ThenBy(p => p.Nome)
+                .ToList();
+        }
+        else
+        {
+            // Ordem alfabética normal
+            filteredProdutos = filteredProdutos
+                .OrderBy(p => p.Nome)
+                .ToList();
+        }
+    }
     
     private void PopulateMarcasFromProdutos(List<Produto> produtos)
     {
@@ -360,6 +397,7 @@
         {
             // reset to all
             filteredProdutos = allProdutos.ToList();
+            AplicarOrdenacao();
             return;
         }
 
@@ -377,6 +415,7 @@
 
         // filter product grid to this brand
         filteredProdutos = allProdutos.Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca)).ToList();
+        AplicarOrdenacao();
     }
 
     private string? ExtractSizeFromName(string? text)
@@ -460,6 +499,7 @@
         if (string.IsNullOrEmpty(size))
         {
             filteredProdutos = allProdutos.Where(p => ((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)).IndexOf(selectedMarca ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            AplicarOrdenacao();
             return;
         }
 
@@ -497,6 +537,7 @@
 
         // set filtered products to brand+size
         filteredProdutos = brandAndSize;
+        AplicarOrdenacao();
     }
 
     private void OnSelectFlavor(string flavor)
@@ -507,6 +548,7 @@
         filteredProdutos = allProdutos.Where(p => ((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)).IndexOf(selectedMarca ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0
             && (((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0))
             && (((p.Nome ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0))).ToList();
+        AplicarOrdenacao();
     }
 
     private void ClearFlavors()
@@ -534,6 +576,7 @@
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos ?? new List<Produto>();
         allProdutos = filteredProdutos.ToList();
+        AplicarOrdenacao();
         PopulateMarcasFromProdutos(allProdutos);
 
         var (cats, _) = await _apiService.GetCategorias();
@@ -550,14 +593,17 @@
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
             filteredProdutos = all;
-            return;
         }
-
-        var term = searchTerm.Trim();
-        filteredProdutos = all
-            .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(term, StringComparison.OrdinalIgnoreCase))
-                     || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Equals(term, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+        else
+        {
+            var term = searchTerm.Trim();
+            filteredProdutos = all
+                .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(term, StringComparison.OrdinalIgnoreCase))
+                         || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+        
+        AplicarOrdenacao();
     }
 
     private void MostrarFormulario()
@@ -593,6 +639,7 @@
         }
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
         filteredProdutos = todosProdutos ?? new List<Produto>();
+        AplicarOrdenacao();
         exibirFormulario = false;
     }
 
@@ -606,6 +653,7 @@
         {
             var (todosProdutos, _) = await _apiService.GetTodosProdutos();
             filteredProdutos = todosProdutos ?? new List<Produto>();
+            AplicarOrdenacao();
         }
         else
         {
@@ -672,6 +720,7 @@
                         .ToList();
                 }
 
+                AplicarOrdenacao();
                 PopulateMarcasFromProdutos(allProdutos);
             }
             else
@@ -683,6 +732,8 @@
                 // update item in filteredProdutos
                 var fi = filteredProdutos.FindIndex(p => p.Id == produto.Id);
                 if (fi >= 0) filteredProdutos[fi] = produto;
+                
+                AplicarOrdenacao();
             }
 
             // clear temp inputs for this produto

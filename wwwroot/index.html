@@ -19,9 +19,42 @@
     <link rel="apple-touch-icon" sizes="512x512" href="logo.png" />
     <link rel="apple-touch-icon" sizes="192x192" href="logo.png" />
 
-    <!-- Google Places API (mantido, caso ainda use) -->
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBy_9neF5tiB38rjc9FiZjbP7H13JS-OZI&libraries=places&v=weekly&region=BR&language=pt-BR&components=element"></script>
-    <script type="module" src="https://unpkg.com/@googlemaps/places-widget-element/dist/places-widget-element.js"></script>
+    <!-- Google Places API (load dynamically with error capture). Skip on iOS to avoid blocking issues there. -->
+    <script>
+        (function(){
+            try {
+                var isIOS = false;
+                try {
+                    var platform = navigator.platform || '';
+                    var ua = navigator.userAgent || '';
+                    if (/iP(hone|od|ad)/i.test(platform)) isIOS = true;
+                    if (platform === 'MacIntel' && navigator.maxTouchPoints && navigator.maxTouchPoints > 1) isIOS = true;
+                    if (/iP(hone|od|ad)/i.test(ua)) isIOS = true;
+                } catch(e) { }
+
+                if (isIOS) {
+                    console.warn('Skipping Google Places script load on iOS to avoid CORS/initialization issues');
+                    return;
+                }
+
+                // load Google Maps API async with error handler
+                var gmapsScript = document.createElement('script');
+                gmapsScript.async = true;
+                gmapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyBy_9neF5tiB38rjc9FiZjbP7H13JS-OZI&libraries=places&v=weekly&region=BR&language=pt-BR&components=element';
+                gmapsScript.onload = function(){ try{ console.log('Google Maps script loaded'); }catch{} };
+                gmapsScript.onerror = function(ev){ try{ sessionStorage.setItem('lastClientError', JSON.stringify({ message: 'Failed to load Google Maps script', detail: String(ev), time: new Date().toISOString() })); }catch{} };
+                document.head.appendChild(gmapsScript);
+
+                // load Places widget module via jsDelivr as module
+                var widgetScript = document.createElement('script');
+                widgetScript.type = 'module';
+                widgetScript.crossOrigin = 'anonymous';
+                widgetScript.src = 'https://cdn.jsdelivr.net/npm/@googlemaps/places-widget-element/dist/places-widget-element.js';
+                widgetScript.onerror = function(ev){ try{ sessionStorage.setItem('lastClientError', JSON.stringify({ message: 'Failed to load places-widget module', detail: String(ev), time: new Date().toISOString() })); }catch{} };
+                document.head.appendChild(widgetScript);
+            } catch(e) { try{ sessionStorage.setItem('lastClientError', JSON.stringify({ message: 'places loader exception', detail: e && e.message ? e.message : String(e), time: new Date().toISOString() })); }catch{} }
+        })();
+    </script>
     <script src="js/autocomplete.js"></script>
     <script src="js/triggerFileInput.js"></script>
     <script src="js/barcodeScanner.js"></script>
@@ -75,23 +108,264 @@
         // Global ESC handler registration for Blazor pages
         (function () {
             var dotRef = null;
+            
+            // Log when handler is set up
+            console.log('[JS] Global ESC handler module loaded');
+            
             function onKeyDown(e) {
+                // Log every keypress for debugging
+                if (e.key === 'Escape') {
+                    console.log('[JS] ESC key pressed');
+                }
+                
                 try {
-                    // Always handle Escape: hide numeric keypad and notify .NET
+                    // For ESC key, ALWAYS call C# first and let it decide what to do
                     if (e.key === 'Escape') {
-                        try { if (window.numericKeypad && typeof window.numericKeypad.hide === 'function') window.numericKeypad.hide(); } catch (ex) { }
+                        console.log('[JS] ESC pressed - calling C# to handle it');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
                         if (dotRef) {
-                            try { dotRef.invokeMethodAsync('OnEscapePressed'); } catch { }
+                            try { 
+                                dotRef.invokeMethodAsync('OnEscapePressed'); 
+                            } catch (ex) { 
+                                console.error('[JS] Error calling OnEscapePressed:', ex);
+                            }
+                        } else {
+                            console.warn('[JS] dotRef is null - cannot call C#');
                         }
+                        return;
+                    }
+                } catch (ex) { 
+                    console.error('[JS] ESC handler error:', ex);
+                }
+
+                try {
+                    // Check if quantity modal is open - if so, handle temperature shortcuts regardless of focus
+                    var quantityModal = document.querySelector('.modal.d-block');
+                    var quantityInput = document.getElementById('quantity_input');
+                    
+                    if (quantityModal && quantityInput) {
+                        // Modal is open - handle temperature shortcuts N, Q, G
+                        var key = e.key ? e.key.toLowerCase() : '';
+                        
+                        if (key === 'n') {
+                            e.preventDefault(); // prevent the 'n' from being typed in the input
+                            if (dotRef) {
+                                try { dotRef.invokeMethodAsync('OnTemperatureShortcut', null); } catch { }
+                            }
+                            return;
+                        }
+                        else if (key === 'q') {
+                            e.preventDefault(); // prevent the 'q' from being typed in the input
+                            if (dotRef) {
+                                try { dotRef.invokeMethodAsync('OnTemperatureShortcut', 'Quente'); } catch { }
+                            }
+                            return;
+                        }
+                        else if (key === 'g') {
+                            e.preventDefault(); // prevent the 'g' from being typed in the input
+                            if (dotRef) {
+                                try { dotRef.invokeMethodAsync('OnTemperatureShortcut', 'Gelada'); } catch { }
+                            }
+                            return;
+                        }
+                        
+                        // Don't process other shortcuts while modal is open
+                        return;
+                    }
+                } catch (ex) { 
+                    console.error('Temperature shortcut error:', ex);
+                }
+
+                try {
+                    // Check if user is typing in specific inputs where shortcuts should be blocked
+                    var activeEl = document.activeElement;
+                    var isTypingInBlockedInput = false;
+                    
+                    if (activeEl && activeEl.tagName) {
+                        var tag = activeEl.tagName.toUpperCase();
+                        var elId = activeEl.id || '';
+                        var elPlaceholder = (activeEl.placeholder || '').toLowerCase();
+                        
+                        // Block shortcuts in textareas (product description in cart)
+                        if (tag === 'TEXTAREA') {
+                            isTypingInBlockedInput = true;
+                        }
+                        
+                        // Block shortcuts in select elements
+                        if (tag === 'SELECT' || tag === 'OPTION') {
+                            isTypingInBlockedInput = true;
+                        }
+                        
+                        // For inputs, check specific ones where shortcuts should be blocked
+                        if (tag === 'INPUT') {
+                            var inputType = (activeEl.type || '').toLowerCase();
+                            
+                            // ✅ SPECIAL: searchInput allows NUMBER shortcuts (1-9) but blocks LETTER shortcuts
+                            if (elId === 'searchInput') {
+                                // Will be handled separately below
+                                isTypingInBlockedInput = false; // for numbers
+                            }
+                            // ✅ Block in ALL cart table inputs (price, quantity, etc)
+                            // Check if ID starts with price_ or qty_ (cart table inputs)
+                            else if (elId.startsWith('price_') || elId.startsWith('qty_')) {
+                                isTypingInBlockedInput = true;
+                            }
+                            // ✅ Block in payment value input
+                            else if (elId === 'pag1_input') {
+                                isTypingInBlockedInput = true;
+                            }
+                            // Block in client name input
+                            else if (elPlaceholder.includes('nome do cliente')) {
+                                isTypingInBlockedInput = true;
+                            }
+                            // Block in address input
+                            else if (elPlaceholder.includes('endereço')) {
+                                isTypingInBlockedInput = true;
+                            }
+                            // Block in phone input
+                            else if (elPlaceholder.includes('telefone')) {
+                                isTypingInBlockedInput = true;
+                            }
+                            // Block in observations input
+                            else if (elPlaceholder.includes('observações') || elPlaceholder.includes('observacoes')) {
+                                isTypingInBlockedInput = true;
+                            }
+                            // Block in vendedor name input (when "Outro" is selected)
+                            else if (elPlaceholder.includes('digite o nome do vendedor')) {
+                                isTypingInBlockedInput = true;
+                            }
+                            // ✅ Block in number inputs (type="number")
+                            else if (inputType === 'number') {
+                                isTypingInBlockedInput = true;
+                            }
+                            // ✅ Block in decimal inputs (inputmode="decimal")
+                            else if (activeEl.inputMode === 'decimal' || activeEl.inputMode === 'numeric') {
+                                isTypingInBlockedInput = true;
+                            }
+                            // Block in all text-type inputs (but allow radio/checkbox to work)
+                            else if (inputType !== 'radio' && inputType !== 'checkbox') {
+                                isTypingInBlockedInput = true;
+                            }
+                        }
+                    }
+                    
+                    // Handle number keys 1-9 for product selection
+                    // Works when NO input has focus OR when searchInput has focus
+                    if (!isTypingInBlockedInput) {
+                        var numKey = e.key;
+                        if (numKey && numKey.length === 1 && numKey >= '1' && numKey <= '9') {
+                            // Call .NET method to select product by index
+                            if (dotRef) {
+                                try { 
+                                    dotRef.invokeMethodAsync('OnProductNumberShortcut', parseInt(numKey)); 
+                                    console.log('Product number shortcut: ' + numKey);
+                                } catch { }
+                            }
+                            return;
+                        }
+                    }
+                    
+                    // ✅ Block ALL letter shortcuts when typing in ANY input (including searchInput)
+                    if (isTypingInBlockedInput || (activeEl && activeEl.tagName === 'INPUT')) {
                         return;
                     }
                 } catch (ex) { }
 
-                try {
-                    // ignore other keys when typing in inputs/textareas/selects
-                    var tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toUpperCase() : '';
-                    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return;
-                } catch (ex) { }
+                var key = e.key ? e.key.toLowerCase() : '';
+
+                // Vendedor shortcuts: R=Ronaldo, N=Nathan, E=Carlinhos, V=Allan, S=Beatriz, K=Kayke
+                if (key === 'r') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Ronaldo'); } catch { }
+                    }
+                    return;
+                }
+                // N is handled in modal for temperature, so only handle if modal is not open
+                if (key === 'n' && !quantityModal) {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Nathan'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'e') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Carlinhos'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'v') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Allan'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 's') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Beatriz'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'k') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Kayke'); } catch { }
+                    }
+                    return;
+                }
+
+                // Status shortcuts: F=Finalizado, R=Retirada (conflicts with Ronaldo, R is already used)
+                // Let's use F=Finalizado, T=reTirada (R already used for Ronaldo), M=eM entrega
+                if (key === 'f') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnStatusShortcut', 'Finalizado'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 't') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnStatusShortcut', 'Retirada'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'm') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnStatusShortcut', 'Em entrega'); } catch { }
+                    }
+                    return;
+                }
+
+                // Payment method shortcuts: D=Dinheiro, C=Credito, B=Debito, P=Pix, A=A Prazo
+                if (key === 'd') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnPaymentShortcut', 'Dinheiro'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'c') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnPaymentShortcut', 'Credito'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'b') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnPaymentShortcut', 'Debito'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'p') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnPaymentShortcut', 'Pix'); } catch { }
+                    }
+                    return;
+                }
+                if (key === 'a') {
+                    if (dotRef) {
+                        try { dotRef.invokeMethodAsync('OnPaymentShortcut', 'A Prazo'); } catch { }
+                    }
+                    return;
+                }
 
                 // detect plus: main keyboard '+' (Shift+'='), Numpad add
                 var isPlus = false;
@@ -111,16 +385,25 @@
                 }
             }
             window.addGlobalEscHandler = function (dref) {
+                console.log('[JS] addGlobalEscHandler called, dotRef:', dref ? 'VALID' : 'NULL');
                 try {
                     dotRef = dref;
-                    window.addEventListener('keydown', onKeyDown);
-                } catch { }
+                    // Use capture phase (true) to catch ESC before it reaches inputs
+                    window.addEventListener('keydown', onKeyDown, true);
+                    console.log('[JS] ESC handler registered successfully (capture phase)');
+                } catch (ex) { 
+                    console.error('[JS] Error registering ESC handler:', ex);
+                }
             };
             window.removeGlobalEscHandler = function () {
+                console.log('[JS] removeGlobalEscHandler called');
                 try {
-                    window.removeEventListener('keydown', onKeyDown);
+                    window.removeEventListener('keydown', onKeyDown, true);
                     dotRef = null;
-                } catch { }
+                    console.log('[JS] ESC handler removed');
+                } catch (ex) { 
+                    console.error('[JS] Error removing ESC handler:', ex);
+                }
             };
         // helper to focus the last blank descricao textarea (prefer the most recently added)
         window.focusFirstBlankDescricao = function () {

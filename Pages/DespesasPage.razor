@@ -5,13 +5,13 @@
 @inject NavigationManager Navigation
 
 <h4 class="text-bg-primary text-center">
-    Despesas
+    Saídas
 </h4>
 
 @if (!exibirFormulario)
 {
     <div class="text-center my-3">
-        <button class="btn btn-success btn-lg rounded-circle" style="width:56px;height:56px;font-size:24px;" @onclick="MostrarFormularioAsync" aria-label="Adicionar nova despesa">+</button>
+        <button class="btn btn-success btn-lg rounded-circle" style="width:40px;height:40px;font-size:22px;" @onclick="MostrarFormularioAsync" aria-label="Adicionar nova despesa">+</button>
     </div>
 }
 
@@ -90,8 +90,6 @@
 }
 @if (filteredDespesas is not null && filteredDespesas.Any())
 {
-    <h4 class="mt-5">Despesas</h4>
-
     <table class="table table-bordered mt-3">
         <thead>
             <tr>

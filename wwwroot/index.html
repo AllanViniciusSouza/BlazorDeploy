@@ -110,9 +110,13 @@
             var dotRef = null;
             
             // Log when handler is set up
-            console.log('[JS] Global ESC handler module loaded');
+            console.log('[JS] Global ESC handler module loaded at:', new Date().toISOString());
+            console.log('[JS] Document state:', document.readyState);
             
             function onKeyDown(e) {
+                // Log EVERY keypress for debugging (can be removed later)
+                console.log('[JS] Key pressed:', e.key, 'dotRef:', dotRef ? 'valid' : 'NULL');
+                
                 // Log every keypress for debugging
                 if (e.key === 'Escape') {
                     console.log('[JS] ESC key pressed');
@@ -443,11 +447,16 @@
             }
             window.addGlobalEscHandler = function (dref) {
                 console.log('[JS] addGlobalEscHandler called, dotRef:', dref ? 'VALID' : 'NULL');
+                console.log('[JS] User Agent:', navigator.userAgent);
+                console.log('[JS] Document ready state:', document.readyState);
                 try {
                     dotRef = dref;
                     // Use capture phase (true) to catch ESC before it reaches inputs
                     window.addEventListener('keydown', onKeyDown, true);
                     console.log('[JS] ESC handler registered successfully (capture phase)');
+                    
+                    // Test log to confirm handler works
+                    console.log('[JS] Keyboard shortcuts ready. Try pressing R, N, D, etc.');
                 } catch (ex) { 
                     console.error('[JS] Error registering ESC handler:', ex);
                 }

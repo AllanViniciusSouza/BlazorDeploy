@@ -133,10 +133,19 @@
         {
             try
             {
+                // Aguardar um pouco para garantir que o JavaScript está carregado
+                await Task.Delay(100);
+                
                 _escDotRef ??= DotNetObjectReference.Create((object)this);
                 await JS.InvokeVoidAsync("addGlobalEscHandler", _escDotRef);
+                
+                // Log para debug (visível no console do navegador)
+                await JS.InvokeVoidAsync("console.log", "[Blazor] Global keyboard handlers registered successfully");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"[Blazor] Failed to register keyboard handlers: {ex.Message}");
+            }
             // request focus for search input on first render
             focusSearchRequested = true;
         }
@@ -799,7 +808,7 @@
                     <div class="small text-muted mt-1">Quantidade final: @RenderComputedQuantity()</div>
                 </div>
 
-                <div class="mb-2 d-flex flex-wrap gap-2 justify-content-center">2
+                <div class="mb-2 d-flex flex-wrap gap-2 justify-content-center">
                     @for (int n = 0; n <= 9; n++)
                     {
                         var digit = n; /* capture loop variable to avoid closure issue */

@@ -201,19 +201,42 @@
                         // For inputs, check specific ones where shortcuts should be blocked
                         if (tag === 'INPUT') {
                             var inputType = (activeEl.type || '').toLowerCase();
+                            var hasPaymentInputClass = activeEl.classList && activeEl.classList.contains('payment-input-shortcut');
                             
+                            // ✅ SPECIAL: payment inputs (pag1_input, pag2_input) ALLOW shortcuts
+                            if (hasPaymentInputClass || elId === 'pag1_input' || elId === 'pag2_input') {
+                                // Allow shortcuts to work
+                                isTypingInBlockedInput = false;
+                                
+                                // But prevent non-numeric keys from being typed
+                                var key = e.key;
+                                var isNumeric = (key >= '0' && key <= '9') || key === '.' || key === ',';
+                                var isControl = key === 'Backspace' || key === 'Delete' || key === 'ArrowLeft' || key === 'ArrowRight' || key === 'Tab' || key === 'Enter' || key === 'Escape';
+                                var isShortcut = key.length === 1 && /[a-z]/i.test(key); // any letter is a potential shortcut
+                                
+                                if (!isNumeric && !isControl && isShortcut) {
+                                    // It's a letter shortcut - prevent it from being typed into the input
+                                    e.preventDefault();
+                                }
+                                
+                                // Don't block shortcut processing - continue to handle shortcuts below
+                            }
                             // ✅ SPECIAL: searchInput allows NUMBER shortcuts (1-9) but blocks LETTER shortcuts
-                            if (elId === 'searchInput') {
-                                // Will be handled separately below
-                                isTypingInBlockedInput = false; // for numbers
+                            else if (elId === 'searchInput') {
+                                // Block all letter shortcuts when typing in search input
+                                // Only allow number shortcuts (1-9) for product selection
+                                var key = e.key;
+                                var isNumber = key.length === 1 && key >= '1' && key <= '9';
+                                
+                                if (!isNumber) {
+                                    // Block letter shortcuts (vendedor, payment, status, etc)
+                                    isTypingInBlockedInput = true;
+                                }
+                                // If it's a number (1-9), allow it to pass through for product selection
                             }
                             // ✅ Block in ALL cart table inputs (price, quantity, etc)
                             // Check if ID starts with price_ or qty_ (cart table inputs)
                             else if (elId.startsWith('price_') || elId.startsWith('qty_')) {
-                                isTypingInBlockedInput = true;
-                            }
-                            // ✅ Block in payment value input
-                            else if (elId === 'pag1_input') {
                                 isTypingInBlockedInput = true;
                             }
                             // Block in client name input
@@ -267,13 +290,47 @@
                         }
                     }
                     
-                    // ✅ Block ALL letter shortcuts when typing in ANY input (including searchInput)
-                    if (isTypingInBlockedInput || (activeEl && activeEl.tagName === 'INPUT')) {
-                        return;
+                    // ✅ IMPORTANT: Allow letter shortcuts in searchInput AND payment inputs
+                    // Block letter shortcuts only when typing in blocked inputs (cart table, cliente, observações, etc)
+                    if (isTypingInBlockedInput) {
+                        return; // Block all shortcuts when in blocked inputs
                     }
                 } catch (ex) { }
 
                 var key = e.key ? e.key.toLowerCase() : '';
+
+                // Handle Enter key to finalize purchase (if button is visible)
+                if (key === 'enter') {
+                    // Check if we're NOT in an input that should handle Enter normally
+                    var activeEl = document.activeElement;
+                    var tag = activeEl ? activeEl.tagName.toUpperCase() : '';
+                    
+                    // Don't trigger finalize if typing in textarea or specific inputs
+                    if (tag === 'TEXTAREA') return;
+                    if (tag === 'INPUT') {
+                        var inputType = (activeEl.type || '').toLowerCase();
+                        // Allow Enter in text inputs (search, cliente, etc) - those have their own handlers
+                        if (inputType === 'text' || inputType === 'date' || inputType === 'number') return;
+                    }
+                    
+                    // Check if finalize button is visible - updated selector to match new button class
+                    var finalizeBtn = document.querySelector('button.btn-success.btn-lg.w-100.mt-2');
+                    if (!finalizeBtn) {
+                        // Fallback to old selector for backwards compatibility
+                        finalizeBtn = document.querySelector('button.btn-success.btn-lg.w-100.mt-3');
+                    }
+                    
+                    if (finalizeBtn && finalizeBtn.textContent.includes('Finalizar Compra')) {
+                        e.preventDefault();
+                        if (dotRef) {
+                            try { 
+                                dotRef.invokeMethodAsync('OnEnterToFinalize');
+                                console.log('[JS] Enter pressed - triggering finalize purchase');
+                            } catch { }
+                        }
+                        return;
+                    }
+                }
 
                 // Vendedor shortcuts: R=Ronaldo, N=Nathan, E=Carlinhos, V=Allan, S=Beatriz, K=Kayke
                 if (key === 'r') {

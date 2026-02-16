@@ -210,6 +210,49 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    [JSInvokable]
+    public async Task OnEnterToFinalize()
+    {
+        // Only finalize if button is visible (all conditions met)
+        if (CanShowFinalizeButton())
+        {
+            await FinalizePurchase();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool CanShowFinalizeButton()
+    {
+        var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
+        var effectiveVendedor = !string.IsNullOrEmpty(activeCart.VendedorNome) ? activeCart.VendedorNome : vendedorNome;
+        var effectivePedido = !string.IsNullOrEmpty(activeCart.PedidoStatus) ? activeCart.PedidoStatus : pedidoStatus;
+
+        bool canShowFinalize = activeCart.Items.Any()
+            && !string.IsNullOrEmpty(effectiveForma)
+            && !string.IsNullOrEmpty(effectivePedido)
+            && !isProcessing
+            && !string.IsNullOrEmpty(effectiveVendedor);
+
+        if (string.Equals(effectiveForma, "A Prazo", StringComparison.OrdinalIgnoreCase))
+        {
+            var due = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo;
+            var cliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+            canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(cliente);
+        }
+
+        if (canShowFinalize)
+        {
+            var totalCarrinho = activeCart.Items.Sum(p => p.Total);
+            var valorPag1 = activeCart.Pagamento1 ?? 0m;
+            var valorPag2 = activeCart.UsarPagamento2 ? (activeCart.Pagamento2 ?? 0m) : 0m;
+            var somaPagamentos = valorPag1 + valorPag2;
+            
+            canShowFinalize = somaPagamentos >= totalCarrinho;
+        }
+
+        return canShowFinalize;
+    }
+
     private void PrevCart()
     {
         if (carts.Count <= 1) return;
@@ -485,21 +528,9 @@
         </tbody>
     </table>
 
-    <div class="d-flex flex-column align-items-end mb-3">
-        <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @activeCart.Items.Sum(p => p.Total).ToString("0.00")</h3>
-        @if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
-        {
-            var troco = trocoDinheiro;
-            var trocoClass = troco > 0 ? "text-danger" : "text-white";
-            <h5 class="fw-bold mb-1 text-end @trocoClass" style="font-size:1.05rem;">
-                Troco: R$ @troco.ToString("0.00")
-            </h5>
-        }
-    </div>
-
-    <div class="row g-3">
-                @* Left column: Vendedor, Cliente, Status *@
-                <div class="col-md-6">
+    <div class="row g-3 mb-3">
+        @* Coluna 1: Vendedor e Status *@
+        <div class="col-md-4 order-md-1">
                     <!-- Vendedores -->
                     <div class="mb-3">
                         <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Vendedor</label>
@@ -560,32 +591,10 @@
                             </div>
                         </div>
                     </div>
-
-                    @* Cliente inputs *@
-                    <div class="mb-3">
-                        <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Cliente</label>
-                        <div class="row g-2">
-                            <div class="col-12">
-                                <input type="text" class="form-control form-control-sm" @bind="activeCart.ClienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome" style="font-size:0.85rem;" />
-                            </div>
-                            @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
-                            {
-                                <div class="col-md-6">
-                                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryTelefone" placeholder="Telefone" style="font-size:0.85rem;" />
-                                </div>
-                                <div class="col-md-6">
-                                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryEndereco" placeholder="Endereço" style="font-size:0.85rem;" />
-                                </div>
-                            }
-                            <div class="col-12">
-                                <input type="text" class="form-control form-control-sm" @bind="observacoes" placeholder="Observações" style="font-size:0.85rem;" />
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                @* Right column: Forma de Pagamento *@
-                <div class="col-md-6">
+        @* Coluna 2: Forma de Pagamento *@
+        <div class="col-md-4 order-md-2">
                     <div class="card p-2 bg-transparent border-0">
                         <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Forma de Pagamento</label>
                         <div class="d-flex flex-column gap-1 mb-2">
@@ -610,14 +619,6 @@
                                 <label class="form-check-label ms-1 text-white" style="font-size:0.85rem;">A - A Prazo</label>
                             </div>
                         </div>
-
-                        @if (string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase) || activeCart.UsarPagamento2)
-                        {
-                            <div class="mb-2">
-                                <label class="form-label text-white" style="font-size:0.85rem;">Valor</label>
-                                <input id="pag1_input" type="text" inputmode="decimal" class="form-control form-control-sm" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!activeCart.UsarPagamento2) && !string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus="OnPagamento1Focus" @onfocus:preventDefault @onblur:preventDefault style="font-size:0.85rem;" />
-                            </div>
-                        }
 
                         @if (!string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada))
                         {
@@ -659,7 +660,6 @@
                                         <label class="form-check-label ms-1 text-white" style="font-size:0.8rem;">A Prazo</label>
                                     </div>
                                 </div>
-                                <input type="number" step="0.01" class="form-control form-control-sm" placeholder="Valor" @bind="activeCart.Pagamento2" disabled="@activeCart.SecondaryCalculated" style="font-size:0.85rem;" />
                                 
                                 @if (formaPagamento2 == "A Prazo")
                                 {
@@ -674,39 +674,111 @@
                         }
                     </div>
                 </div>
+
+        @* Coluna 3: Total, Valores e Troco *@
+        <div class="col-md-4 order-md-3">
+            <div class="d-flex flex-column align-items-end">
+                <h3 class="fw-bold text-success mb-1" style="font-size:1.25rem;">Total: R$ @activeCart.Items.Sum(p => p.Total).ToString("0.00")</h3>
+                
+                @* Valor de pagamento 1 - com input *@
+                @if (string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase) || activeCart.UsarPagamento2)
+                {
+                    <div class="d-flex align-items-center mb-1 w-100 justify-content-end">
+                        <label class="text-white me-2 mb-0" style="font-size:1.05rem; font-weight:600;">Valor Pagamento 1:</label>
+                        <input id="pag1_input" type="text" inputmode="decimal" pattern="[0-9.,]*" class="form-control form-control-sm text-end payment-input-shortcut" placeholder="Valor" @bind="Pagamento1Text" disabled="@((!activeCart.UsarPagamento2) && !string.Equals(activeCart.FormaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))" @onfocus="OnPagamento1Focus" @onfocus:preventDefault @onblur:preventDefault style="font-size:0.95rem; max-width: 150px;" />
+                    </div>
+                }
+
+                @* Valor de pagamento 2 - calculado automaticamente *@
+                @if (activeCart.UsarPagamento2)
+                {
+                    var valorPagamento2 = CalcularValorPagamento2();
+                    <h5 class="fw-bold mb-1 text-end text-white" style="font-size:1.05rem;">
+                        Valor Pagamento 2: R$ @valorPagamento2.ToString("0.00")
+                    </h5>
+                }
+                
+                @* Troco *@
+                @if (string.Equals(formaPagamentoSelecionada, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+                {
+                    var troco = trocoDinheiro;
+                    var trocoClass = troco > 0 ? "text-danger" : "text-white";
+                    <h5 class="fw-bold mb-1 text-end @trocoClass" style="font-size:1.05rem;">
+                        Troco: R$ @troco.ToString("0.00")
+                    </h5>
+                }
+
+                @* Botão Finalizar Compra - logo abaixo do troco *@
+                @{ 
+                    // derive effective values from activeCart falling back to local UI vars so the check is robust
+                    var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
+                    var effectiveVendedor = !string.IsNullOrEmpty(activeCart.VendedorNome) ? activeCart.VendedorNome : vendedorNome;
+                    var effectivePedido = !string.IsNullOrEmpty(activeCart.PedidoStatus) ? activeCart.PedidoStatus : pedidoStatus;
+
+                    bool canShowFinalize = activeCart.Items.Any()
+                        && !string.IsNullOrEmpty(effectiveForma)
+                        && !string.IsNullOrEmpty(effectivePedido)
+                        && !isProcessing
+                        && !string.IsNullOrEmpty(effectiveVendedor);
+
+                    // when payment is 'A Prazo' require a selected due date and a client name before showing the button
+                    if (string.Equals(effectiveForma, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var due = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo;
+                        var cliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+                        canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(cliente);
+                    }
+
+                    // Verificar se a soma dos pagamentos é maior ou igual ao total do carrinho
+                    if (canShowFinalize)
+                    {
+                        var totalCarrinho = activeCart.Items.Sum(p => p.Total);
+                        var valorPag1 = activeCart.Pagamento1 ?? 0m;
+                        var valorPag2 = activeCart.UsarPagamento2 ? (activeCart.Pagamento2 ?? 0m) : 0m;
+                        var somaPagamentos = valorPag1 + valorPag2;
+                        
+                        // Só mostra o botão se a soma dos pagamentos for >= total
+                        canShowFinalize = somaPagamentos >= totalCarrinho;
+                    }
+                }
+
+                @if (canShowFinalize)
+                {
+                    <button class="btn btn-success btn-lg w-100 mt-2" @onclick="FinalizePurchase">
+                        <span>Finalizar Compra (ENTER)</span>
+                    </button>
+                }
             </div>
+        </div>
+    </div>
 
-    @{ 
-        // derive effective values from activeCart falling back to local UI vars so the check is robust
-        var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
-        var effectiveVendedor = !string.IsNullOrEmpty(activeCart.VendedorNome) ? activeCart.VendedorNome : vendedorNome;
-        var effectivePedido = !string.IsNullOrEmpty(activeCart.PedidoStatus) ? activeCart.PedidoStatus : pedidoStatus;
-
-        bool canShowFinalize = activeCart.Items.Any()
-            && !string.IsNullOrEmpty(effectiveForma)
-            && !string.IsNullOrEmpty(effectivePedido)
-            && !isProcessing
-            && !string.IsNullOrEmpty(effectiveVendedor);
-
-        // when payment is 'A Prazo' require a selected due date and a client name before showing the button
-        if (string.Equals(effectiveForma, "A Prazo", StringComparison.OrdinalIgnoreCase))
-        {
-            var due = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo;
-            var cliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
-            canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(cliente);
-        }
-    }
-
-    @if (canShowFinalize)
-    {
-        <button class="btn btn-success btn-lg w-100 mt-3" @onclick="FinalizePurchase">
-            <span>Finalizar Compra</span>
-        </button>
-    }
-    else
-    {
-        <div class="mt-3"></div>
-    }
+    @* Segunda linha: Cliente *@
+    <div class="row g-3">
+        @* Cliente *@
+        <div class="col-12">
+                    @* Cliente inputs *@
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-white" style="font-size:0.9rem;">Cliente</label>
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <input type="text" class="form-control form-control-sm" @bind="activeCart.ClienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome" style="font-size:0.85rem;" />
+                            </div>
+                            @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryTelefone" placeholder="Telefone" style="font-size:0.85rem;" />
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control form-control-sm" @bind="activeCart.EntryEndereco" placeholder="Endereço" style="font-size:0.85rem;" />
+                                </div>
+                            }
+                            <div class="col-12">
+                                <input type="text" class="form-control form-control-sm" @bind="observacoes" placeholder="Observações" style="font-size:0.85rem;" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 </div>
 
 
@@ -1217,6 +1289,36 @@ private string? selectedTemperatura = null;
             else if (TryParseDecimalFlexible(activeCart.Pagamento1Text, out var v))
             {
                 activeCart.Pagamento1 = Math.Round(v, 2);
+            }
+            // Atualizar Pagamento2 automaticamente
+            if (activeCart.UsarPagamento2)
+            {
+                activeCart.Pagamento2 = CalcularValorPagamento2();
+            }
+            RecalculateSecondary();
+        }
+    }
+
+    private decimal CalcularValorPagamento2()
+    {
+        var total = activeCart.Items.Sum(p => p.Total);
+        var pagamento1Valor = activeCart.Pagamento1 ?? 0m;
+        var valorRestante = total - pagamento1Valor;
+        return Math.Max(0m, Math.Round(valorRestante, 2));
+    }
+
+    private string Pagamento2Text
+    {
+        get => activeCart.Pagamento2?.ToString("0.00", CultureInfo.CurrentCulture) ?? string.Empty;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                activeCart.Pagamento2 = null;
+            }
+            else if (TryParseDecimalFlexible(value, out var v))
+            {
+                activeCart.Pagamento2 = Math.Round(v, 2);
             }
             RecalculateSecondary();
         }
@@ -2069,11 +2171,16 @@ private void OnUsarPagamento2Changed()
     if (activeCart.UsarPagamento2)
     {
         activeCart.Pagamento1 = null;
+        activeCart.Pagamento1Text = string.Empty;
+        // Calcular automaticamente o valor do pagamento 2
+        activeCart.Pagamento2 = CalcularValorPagamento2();
     }
     else
     {
         // If disabling payment2, set pagamento1 to cart total and lock it
         activeCart.Pagamento1 = Math.Round(activeCart.Items.Sum(p => p.Total), 2);
+        activeCart.Pagamento1Text = activeCart.Pagamento1.Value.ToString("0.00", CultureInfo.CurrentCulture);
+        activeCart.Pagamento2 = null;
     }
 
     RecalculateSecondary();

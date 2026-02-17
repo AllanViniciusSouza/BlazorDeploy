@@ -22,109 +22,113 @@
     /* (removed fixed-card padding) */
 </style>
 
-<!-- Date selector and actions placed inline above the status filter -->
-<div class="mb-3 d-flex align-items-center">
-    <label class="me-2 fw-bold">Selecionar Data:</label>
-    <InputDate @bind-Value="dataSelecionada" class="form-control w-auto me-2" />
-    <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
-    <button class="btn btn-outline-secondary ms-2" @onclick="RefreshPageAsync" title="Atualizar página">⟳</button>
-</div>
-
-    
-
-
-    <!-- Summary card: visible on all sizes. On small screens a compact variant is shown, on md+ the original layout is used. -->
-    <div class="d-block d-md-none mb-3">@* compact for xs-sm *@
-        <div class="card shadow-sm p-2">
-            <div class="small text-muted">Total Vendido</div>
-            <div class="fw-bold fs-6 text-success">R$ @totalVendido.ToString("F2")</div>
-            <hr />
-            <div class="small text-muted mb-1">Resumo por Forma</div>
-            <div class="small">
-                <div>Dinheiro: <strong>R$ @totalDinheiro.ToString("F2")</strong></div>
-                <div>Débito: <strong>R$ @totalDebito.ToString("F2")</strong></div>
-                <div>Crédito: <strong>R$ @totalCredito.ToString("F2")</strong></div>
-                <div>Pix: <strong>R$ @totalPix.ToString("F2")</strong></div>
-                <div>A prazo: <strong>R$ @totalAPrazo.ToString("F2")</strong></div>
-            </div>
-        </div>
+@* Top row: Date selector on left, Status filter on right *@
+<div class="mb-3 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+    @* Left: Date selector *@
+    <div class="d-flex align-items-center">
+        <label class="me-2 fw-bold">Selecionar Data:</label>
+        <InputDate @bind-Value="dataSelecionada" class="form-control w-auto me-2" />
+        <button class="btn btn-primary" @onclick="BuscarPedidosPorData">Buscar</button>
+        <button class="btn btn-outline-secondary ms-2" @onclick="RefreshPageAsync" title="Atualizar página">⟳</button>
     </div>
 
-    <!-- Inline summary card for md+ screens -->
-    <div class="d-none d-md-block mb-3">
-        <div class="card shadow-sm p-3" style="max-width:360px;">
-            <div class="small text-muted">Total Vendido</div>
-            <div class="fw-bold fs-5 text-success">R$ @totalVendido.ToString("F2")</div>
-            <hr />
-            <div class="small text-muted mb-2">Resumo por Forma de Pagamento</div>
-            <ul class="list-unstyled mb-0">
-                <li class="mb-2">Dinheiro<br /><strong>R$ @totalDinheiro.ToString("F2")</strong></li>
-                <li class="mb-2">Débito<br /><strong>R$ @totalDebito.ToString("F2")</strong></li>
-                <li class="mb-2">Crédito<br /><strong>R$ @totalCredito.ToString("F2")</strong></li>
-                <li class="mb-2">Pix<br /><strong>R$ @totalPix.ToString("F2")</strong></li>
-                <li class="mb-0">A prazo<br /><strong>R$ @totalAPrazo.ToString("F2")</strong></li>
-            </ul>
-        </div>
-    </div>
-
-    @* (fixed duplicates removed) *@
-
-    @* Top sellers chart (most pedidos by vendedor) - shows after summary and before orders list *@
-    <div class="mb-3">
-        <label class="form-label fw-bold">Vendedores (maior número de pedidos)</label>
-        @if (topSellers != null && topSellers.Any())
-        {
-            <div>
-                @foreach (var s in topSellers)
-                {
-                    <div class="d-flex align-items-center mb-1">
-                        <div style="width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@s.Name</div>
-                        <div class="flex-grow-1 mx-2" style="min-width:80px;">
-                            <div class="bg-secondary" style="height:14px; border-radius:.25rem; position:relative; overflow:hidden;">
-                                <div class="bg-success" style="height:100%; width:@(s.Percentage.ToString("0.##"))%;"></div>
-                            </div>
-                        </div>
-                        <div style="width:48px; text-align:right;">@s.Count</div>
-                    </div>
-                }
-            </div>
-        }
-        else
-        {
-            <div class="text-muted small">Sem dados de vendedores para a data selecionada.</div>
-        }
-    </div>
-
-    @* Status filter: radio buttons horizontal, 'Todos' preselected *@
-    <div class="mb-3 d-flex align-items-center gap-3">
-        <label class="fw-bold me-2">Filtrar status:</label>
-        <div class="d-flex flex-row flex-wrap">
-            <div class="form-check form-check-inline">
+    @* Right: Status filter *@
+    <div class="d-flex align-items-center gap-2">
+        <label class="fw-bold me-2 mb-0">Filtrar:</label>
+        <div class="d-flex flex-row flex-wrap gap-2">
+            <div class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="radio" name="statusFilter" id="status_all" value="" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.IsNullOrEmpty(statusFilter))" />
                 <label class="form-check-label" for="status_all">Todos</label>
             </div>
-            <div class="form-check form-check-inline">
+            <div class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="radio" name="statusFilter" id="status_em_entrega" value="Em entrega" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Em entrega", StringComparison.OrdinalIgnoreCase))" />
-                <label class="form-check-label" for="status_em_entrega">Em entrega</label>
+                <label class="form-check-label" for="status_em_entrega">Entrega</label>
             </div>
-            <div class="form-check form-check-inline">
+            <div class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="radio" name="statusFilter" id="status_retirada" value="Retirada" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Retirada", StringComparison.OrdinalIgnoreCase))" />
                 <label class="form-check-label" for="status_retirada">Retirada</label>
             </div>
-            <div class="form-check form-check-inline">
+            <div class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="radio" name="statusFilter" id="status_a_prazo" value="A Prazo" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase))" />
                 <label class="form-check-label" for="status_a_prazo">A Prazo</label>
             </div>
-            <div class="form-check form-check-inline">
+            <div class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="radio" name="statusFilter" id="status_atrasados" value="Atrasados" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Atrasados", StringComparison.OrdinalIgnoreCase))" />
                 <label class="form-check-label" for="status_atrasados">Atrasados</label>
             </div>
-            <div class="form-check form-check-inline">
+            <div class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="radio" name="statusFilter" id="status_finalizado" value="Finalizado" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Finalizado", StringComparison.OrdinalIgnoreCase))" />
                 <label class="form-check-label" for="status_finalizado">Finalizado</label>
             </div>
         </div>
     </div>
+</div>
+
+@* Summary card: horizontal layout to save vertical space *@
+<div class="mb-3">
+    <div class="card shadow-sm p-3">
+        <div class="row align-items-center">
+            @* Total Vendido *@
+            <div class="col-12 col-md-3 mb-3 mb-md-0">
+                <div class="small text-muted">Total Vendido</div>
+                <div class="fw-bold fs-5 text-success">R$ @totalVendido.ToString("F2")</div>
+            </div>
+            
+            @* Resumo por Forma de Pagamento - horizontal em telas maiores *@
+            <div class="col-12 col-md-9">
+                <div class="small text-muted mb-2">Resumo por Forma de Pagamento</div>
+                <div class="row g-2">
+                    <div class="col-6 col-sm-4 col-lg">
+                        <div class="small text-muted">Dinheiro</div>
+                        <strong>R$ @totalDinheiro.ToString("F2")</strong>
+                    </div>
+                    <div class="col-6 col-sm-4 col-lg">
+                        <div class="small text-muted">Débito</div>
+                        <strong>R$ @totalDebito.ToString("F2")</strong>
+                    </div>
+                    <div class="col-6 col-sm-4 col-lg">
+                        <div class="small text-muted">Crédito</div>
+                        <strong>R$ @totalCredito.ToString("F2")</strong>
+                    </div>
+                    <div class="col-6 col-sm-4 col-lg">
+                        <div class="small text-muted">Pix</div>
+                        <strong>R$ @totalPix.ToString("F2")</strong>
+                    </div>
+                    <div class="col-6 col-sm-4 col-lg">
+                        <div class="small text-muted">A prazo</div>
+                        <strong>R$ @totalAPrazo.ToString("F2")</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Top sellers chart (most pedidos by vendedor) - shows after summary and before orders list *@
+<div class="mb-3">
+    <label class="form-label fw-bold">Vendedores (maior número de pedidos)</label>
+    @if (topSellers != null && topSellers.Any())
+    {
+        <div>
+            @foreach (var s in topSellers)
+            {
+                <div class="d-flex align-items-center mb-1">
+                    <div style="width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@s.Name</div>
+                    <div class="flex-grow-1 mx-2" style="min-width:80px;">
+                        <div class="bg-secondary" style="height:14px; border-radius:.25rem; position:relative; overflow:hidden;">
+                            <div class="bg-success" style="height:100%; width:@(s.Percentage.ToString("0.##"))%;"></div>
+                        </div>
+                    </div>
+                    <div style="width:48px; text-align:right;">@s.Count</div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="text-muted small">Sem dados de vendedores para a data selecionada.</div>
+    }
+</div>
 
 @if (pedidosHoje == null || !pedidosHoje.Any())
 {
@@ -798,6 +802,8 @@ else
     {
         var p = pedidosPorData.FirstOrDefault(x => x.Id == pedidoId);
         if (p != null) return p;
+        p = todosNaoFinalizados.FirstOrDefault(x => x.Id == pedidoId);
+        if (p != null) return p;
         p = prazoOrders.FirstOrDefault(x => x.Id == pedidoId);
         if (p != null) return p;
         return pedidosHoje.FirstOrDefault(x => x.Id == pedidoId);
@@ -938,42 +944,34 @@ else
     private List<Pedido> pedidosPorData = new();
     // extra: all orders that have a payment marked as 'A Prazo' (may be outside selected date)
     private List<Pedido> prazoOrders = new();
+    // TODOS os pedidos não finalizados (para o filtro "Atrasados")
+    private List<Pedido> todosNaoFinalizados = new();
     private List<Pedido> pedidosHoje = new();
 
     private IEnumerable<Pedido> pedidosExibidos
     {
         get
         {
-            // prazo orders that are not already included in the date list
-            var prazoOnly = prazoOrders.Where(p => !pedidosPorData.Any(d => d.Id == p.Id));
-
-            if (string.IsNullOrEmpty(statusFilter))
-            {
-                return pedidosPorData.Concat(prazoOnly);
-            }
-
-            // If user selected 'Atrasados' show any order with overdue payment regardless of status
+            // ✅ Filtro "Atrasados": mostra TODOS os pedidos não finalizados de TODAS as datas
             if (string.Equals(statusFilter, "Atrasados", StringComparison.OrdinalIgnoreCase))
             {
-                // consider overdue when DataPagamentoPrazo or DataPagamentoPrazo2 is before today
-                var source = pedidosPorData.Concat(prazoOnly).Concat(prazoOrders).Concat(pedidosHoje)
-                    .GroupBy(p => p.Id).Select(g => g.First());
-                var atrasados = source.Where(p => (
-                    (p.DataPagamentoPrazo.HasValue && p.DataPagamentoPrazo.Value.Date < DateTime.Today)
-                    || (p.DataPagamentoPrazo2.HasValue && p.DataPagamentoPrazo2.Value.Date < DateTime.Today)
-                ));
-                return atrasados;
+                // Retorna TODOS os pedidos não finalizados (Em entrega, A prazo, Retirada)
+                // inclusive do passado
+                return todosNaoFinalizados;
+            }
+            
+            // ✅ MOSTRAR APENAS pedidos criados na data selecionada (pedidosPorData)
+            if (string.IsNullOrEmpty(statusFilter))
+            {
+                // Retorna apenas os pedidos da data selecionada
+                return pedidosPorData;
             }
 
             // use effective status: consider Finalizado with payment A Prazo as 'A Prazo'
-            // only rely on EffectiveStatus for filtering to avoid mismatches
+            // Filtra apenas os pedidos da data selecionada pelo status
             var filteredDate = pedidosPorData.Where(p => string.Equals(EffectiveStatus(p), statusFilter, StringComparison.OrdinalIgnoreCase));
 
-            // also filter the prazoOnly list when a specific status filter is applied
-            var filteredPrazoOnly = prazoOnly.Where(p => string.Equals(EffectiveStatus(p), statusFilter, StringComparison.OrdinalIgnoreCase));
-
-            // per requirement: status filter should apply only to the orders of the selected date and prazoOrders
-            return filteredDate.Concat(filteredPrazoOnly);
+            return filteredDate;
         }
     }
     private HashSet<int> expanded = new();
@@ -1220,24 +1218,11 @@ else
             .Where(c => string.Equals(c.FormaPagamento, "Ifood", StringComparison.OrdinalIgnoreCase))
             .Sum(c => c.ValorTotal);
 
-        // compute A prazo totals across all known orders regardless of payment date or order status
-        try
-        {
-            var allOrders = (pedidosPorData ?? Enumerable.Empty<Pedido>())
-                .Concat(prazoOrders ?? Enumerable.Empty<Pedido>())
-                .Concat(pedidosHoje ?? Enumerable.Empty<Pedido>())
-                .GroupBy(p => p.Id)
-                .Select(g => g.First());
-
-            totalAPrazo = allOrders
-                .Where(c => string.Equals(c.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
-                         || string.Equals(c.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
-                .Sum(c => c.ValorTotal);
-        }
-        catch
-        {
-            totalAPrazo = 0;
-        }
+        // ✅ Calcular A prazo apenas da lista fornecida (data selecionada)
+        totalAPrazo = valid
+            .Where(c => string.Equals(c.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(c.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.ValorTotal);
     }
 
     private void ComputeTopSellers()
@@ -1274,14 +1259,14 @@ else
             Navigation.NavigateTo("login");
             return;
         }
-        // load pedidos for the initial date (today) and prazo orders
+        
+        // Carregar pedidos para a data inicial (hoje)
         try
         {
-        // fetch pedidos for the selected date (today)
-        var (comandasHoje, errHoje) = await _apiService.GetPedidosPorData(DateTime.Today);
+            var (comandasHoje, errHoje) = await _apiService.GetPedidosPorData(DateTime.Today);
             if (string.IsNullOrEmpty(errHoje) && comandasHoje != null)
             {
-                // exclude cancelled
+                // Excluir cancelados
                 pedidosPorData = comandasHoje.Where(p => !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
             }
             else
@@ -1289,46 +1274,35 @@ else
                 pedidosPorData = new List<Pedido>();
             }
 
-            // also fetch all orders that have payment 'A Prazo' (either formaPagamento or formaPagamento2)
-            var (todos, errAll) = await _apiService.GetAllPedidos();
-            if (!string.IsNullOrEmpty(errAll) || todos == null)
+            // Carregar TODOS os pedidos não finalizados para o filtro "Atrasados"
+            var (todos, errTodos) = await _apiService.GetAllPedidos();
+            if (string.IsNullOrEmpty(errTodos) && todos != null)
             {
-                prazoOrders = new List<Pedido>();
+                todosNaoFinalizados = todos.Where(p => 
+                    !string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
             }
             else
             {
-                prazoOrders = todos
-                    .Where(p => (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
-                                 || string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
-                                && !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
+                todosNaoFinalizados = new List<Pedido>();
             }
 
-            // initial visible list uses pedidosPorData (today) and prazoOrders merged by the property above
+            // pedidosHoje usa apenas pedidosPorData (pedidos da data selecionada)
             pedidosHoje = pedidosPorData.ToList();
+            
+            // Computar resumo para hoje
+            ComputeSummaryFromList(pedidosHoje);
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Exceção ao carregar todos pedidos: " + ex.Message);
+            Console.WriteLine("Exceção ao carregar pedidos: " + ex.Message);
             pedidosHoje = new List<Pedido>();
-        }
-
-        // compute summary specifically for today
-        try
-        {
-            var (comandasHoje, errHoje) = await _apiService.GetPedidosPorData(DateTime.Today);
-            if (string.IsNullOrEmpty(errHoje) && comandasHoje != null)
-            {
-                ComputeSummaryFromList(comandasHoje);
-            }
-            else
-            {
-                ComputeSummaryFromList(new List<Pedido>());
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exceção ao carregar resumo de hoje: " + ex.Message);
+            todosNaoFinalizados = new List<Pedido>();
             ComputeSummaryFromList(new List<Pedido>());
         }
     }
@@ -1342,25 +1316,30 @@ else
             return;
         }
 
-        // for selected date, exclude cancelled
+        // Para a data selecionada, excluir cancelados
         pedidosPorData = (comandas ?? new List<Pedido>()).Where(p => !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
 
-        // recompute prazoOrders in case they changed
+        // Recarregar TODOS os pedidos não finalizados para o filtro "Atrasados"
         try
         {
-            var (todos, errAll) = await _apiService.GetAllPedidos();
-            if (string.IsNullOrEmpty(errAll) && todos != null)
+            var (todos, errTodos) = await _apiService.GetAllPedidos();
+            if (string.IsNullOrEmpty(errTodos) && todos != null)
             {
-                prazoOrders = todos
-                    .Where(p => (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
-                                 || string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
-                                 && !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
+                todosNaoFinalizados = todos.Where(p => 
+                    !string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
             }
         }
         catch { }
 
+        // pedidosHoje sempre usa pedidosPorData (pedidos da data selecionada)
         pedidosHoje = pedidosPorData.ToList();
+        
         await RecomputeTotals();
         StateHasChanged();
     }

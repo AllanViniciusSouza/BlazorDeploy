@@ -72,8 +72,8 @@
         </svg>
         <div class="loading-progress-text"></div>
     </div>
-    <script src="_framework/blazor.webassembly.js"></script>
-
+    
+    <!-- ✅ CRITICAL: Load keyboard handlers BEFORE blazor.webassembly.js -->
     <script>
         // keyHandler: expose F1 handler that calls .NET OnF1Key via DotNetObjectReference
         (function () {
@@ -502,6 +502,12 @@
             backspace: function (elementId) { try { /* no-op */ } catch (e) { } },
             commit: function (elementId) { try { /* no-op */ } catch (e) { } }
         };
+        
+        console.log('[JS] All keyboard handlers defined and ready');
+    </script>
+    
+    <!-- ✅ Load Blazor AFTER all JavaScript is defined -->
+    <script src="_framework/blazor.webassembly.js"></script>
     </script>
 
     <script>

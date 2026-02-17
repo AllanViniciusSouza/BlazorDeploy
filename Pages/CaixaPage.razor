@@ -954,7 +954,7 @@
         var sizes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in allProdutos ?? new List<Produto>())
         {
-            if (BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
+            if (p.Disponivel && BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
             {
                 var s = ExtractSizeFromName(p.Nome) ?? ExtractSizeFromName(p.Detalhe);
                 if (!string.IsNullOrEmpty(s)) sizes.Add(s);
@@ -969,9 +969,9 @@
 
         sizesForMarca = sizes.OrderBy(s => s).ToList();
 
-        // set filtered products to this brand
+        // set filtered products to this brand (apenas disponíveis)
         filteredProdutos = (allProdutos ?? new List<Produto>())
-            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
+            .Where(p => p.Disponivel && BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
             .ToList();
         showProductList = filteredProdutos.Any();
     }
@@ -979,6 +979,7 @@
     private Produto? FindProductForBrandAndSize(string marca, string size)
     {
         return (allProdutos ?? new List<Produto>()).FirstOrDefault(p =>
+            p.Disponivel &&
             BrandMatch(((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)), marca)
             && (((p.Nome ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0))
         );
@@ -1017,7 +1018,7 @@
         {
             foreach (var p in allProdutos ?? new List<Produto>())
             {
-                if (!BrandMatch(((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)), selectedMarca ?? string.Empty))
+                if (!p.Disponivel || !BrandMatch(((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty)), selectedMarca ?? string.Empty))
                     continue;
 
                 // match size
@@ -1051,9 +1052,9 @@
     private void OnSelectSize(string size)
     {
         selectedSize = size;
-        // filter products by brand+size
+        // filter products by brand+size (apenas disponíveis)
         filteredProdutos = (allProdutos ?? new List<Produto>())
-            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+            .Where(p => p.Disponivel && BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
                 && (((p.Nome ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(size, StringComparison.OrdinalIgnoreCase) >= 0)))
             .ToList();
 
@@ -1079,9 +1080,9 @@
     private void OnSelectFlavor(string flavor)
     {
         if (string.IsNullOrEmpty(flavor)) return;
-        // filter products for current brand + size + flavor
+        // filter products for current brand + size + flavor (apenas disponíveis)
         filteredProdutos = (allProdutos ?? new List<Produto>())
-            .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+            .Where(p => p.Disponivel && BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
                 && (string.IsNullOrEmpty(selectedSize) || ((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0))
                 && (((p.Nome ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(flavor, StringComparison.OrdinalIgnoreCase) >= 0)))
             .ToList();
@@ -1096,18 +1097,18 @@
     {
         flavorsForSelection.Clear();
         flavorToProduct.Clear();
-        // when clearing flavors, if a size is selected, keep filteredProdutos to brand+size
+        // when clearing flavors, if a size is selected, keep filteredProdutos to brand+size (apenas disponíveis)
         if (!string.IsNullOrEmpty(selectedMarca) && !string.IsNullOrEmpty(selectedSize))
         {
             filteredProdutos = (allProdutos ?? new List<Produto>())
-                .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
+                .Where(p => p.Disponivel && BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty)
                     && (((p.Nome ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0) || ((p.Detalhe ?? string.Empty).IndexOf(selectedSize ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0)))
                 .ToList();
         }
         else if (!string.IsNullOrEmpty(selectedMarca))
         {
             filteredProdutos = (allProdutos ?? new List<Produto>())
-                .Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty))
+                .Where(p => p.Disponivel && BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), selectedMarca ?? string.Empty))
                 .ToList();
         }
         StateHasChanged();
@@ -1372,6 +1373,9 @@ private string? selectedTemperatura = null;
                     newProductForBarcode.CategoriaId = 1; // fallback
             }
 
+            // ✅ Marcar produto como disponível por padrão
+            newProductForBarcode.Disponivel = true;
+
             // call API to create product
             var response = await _apiService.AdicionarProdutoAsync(newProductForBarcode);
             if (!string.IsNullOrEmpty(response.ErrorMessage))
@@ -1459,7 +1463,7 @@ private string? selectedTemperatura = null;
             return;
         }
 
-        // attempt exact barcode match first
+        // attempt exact barcode match first (apenas disponíveis)
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
         if (todosProdutos == null)
         {
@@ -1468,7 +1472,7 @@ private string? selectedTemperatura = null;
             return;
         }
 
-        var byBarcode = todosProdutos.Where(p => !string.IsNullOrWhiteSpace(p.Barcode) && p.Barcode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+        var byBarcode = todosProdutos.Where(p => p.Disponivel && !string.IsNullOrWhiteSpace(p.Barcode) && p.Barcode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
         if (byBarcode.Any())
         {
             filteredProdutos = byBarcode;
@@ -1476,8 +1480,8 @@ private string? selectedTemperatura = null;
             return;
         }
 
-        // fallback to name search
-        filteredProdutos = todosProdutos.Where(p => p.Nome != null && p.Nome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+        // fallback to name search (apenas disponíveis)
+        filteredProdutos = todosProdutos.Where(p => p.Disponivel && p.Nome != null && p.Nome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
         showProductList = filteredProdutos.Any();
     }
 
@@ -2314,11 +2318,12 @@ private void OnUsarPagamento2Changed()
             }
 
             var (produtosMaisVendidos, errorMessage) = await _apiService.GetProdutosMaisVendidos();
-            filteredProdutos = produtosMaisVendidos ?? new List<Produto>();
+            // Filtrar apenas produtos disponíveis
+            filteredProdutos = (produtosMaisVendidos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
 
-            // load all products once for brand/size quick filters
+            // load all products once for brand/size quick filters (apenas disponíveis)
             var (all, errAll) = await _apiService.GetTodosProdutos();
-            allProdutos = all ?? new List<Produto>();
+            allProdutos = (all ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
             PopulateMarcasFromProdutos(allProdutos);
 
             // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão

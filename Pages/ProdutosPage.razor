@@ -237,12 +237,28 @@
 
                     @* removed duplicate barcode overlay; barcode now shown inline with name *@
 
-                    <div class="card-footer bg-transparent d-flex justify-content-end">
-                        @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
-                        {
-                            <button class="btn btn-success btn-sm me-1" @onclick:stopPropagation="true" @onclick="() => SalvarEdicao(produto)">Salvar</button>
-                            <button class="btn btn-secondary btn-sm" @onclick:stopPropagation="true" @onclick="() => CancelarEdicao(produto.Id)">Cancelar</button>
-                        }
+                    <div class="card-footer bg-transparent d-flex justify-content-between align-items-center">
+                        <div>
+                            @if (produto.Disponivel)
+                            {
+                                <button class="btn btn-sm btn-warning" @onclick:stopPropagation="true" @onclick="() => ToggleDisponibilidade(produto)">
+                                    Marcar Indisponível
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-success" @onclick:stopPropagation="true" @onclick="() => ToggleDisponibilidade(produto)">
+                                    Marcar Disponível
+                                </button>
+                            }
+                        </div>
+                        <div>
+                            @if (editandoProdutos.ContainsKey(produto.Id) && editandoProdutos[produto.Id])
+                            {
+                                <button class="btn btn-success btn-sm me-1" @onclick:stopPropagation="true" @onclick="() => SalvarEdicao(produto)">Salvar</button>
+                                <button class="btn btn-secondary btn-sm" @onclick:stopPropagation="true" @onclick="() => CancelarEdicao(produto.Id)">Cancelar</button>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -395,7 +411,7 @@
         // filter product grid immediately for this brand
         if (string.IsNullOrEmpty(marca))
         {
-            // reset to all
+            // reset to all (apenas disponíveis)
             filteredProdutos = allProdutos.ToList();
             AplicarOrdenacao();
             return;
@@ -574,7 +590,8 @@
         }
 
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-        filteredProdutos = todosProdutos ?? new List<Produto>();
+        // ✅ Filtrar apenas produtos disponíveis
+        filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
         allProdutos = filteredProdutos.ToList();
         AplicarOrdenacao();
         PopulateMarcasFromProdutos(allProdutos);
@@ -588,7 +605,8 @@
         searchTerm = e.Value?.ToString() ?? string.Empty;
 
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-        var all = todosProdutos ?? new List<Produto>();
+        // ✅ Filtrar apenas produtos disponíveis
+        var all = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
 
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -614,7 +632,8 @@
             PrecoCusto = 0.01m,
             PrecoQuente = 0m,
             PrecoGelada = 0m,
-            CategoriaId = categorias != null && categorias.Any() ? categorias.First().Id : 1
+            CategoriaId = categorias != null && categorias.Any() ? categorias.First().Id : 1,
+            Disponivel = true // ✅ Marcar produto como disponível por padrão
         };
         exibirFormulario = true;
     }
@@ -638,7 +657,9 @@
             return;
         }
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-        filteredProdutos = todosProdutos ?? new List<Produto>();
+        // ✅ Filtrar apenas produtos disponíveis
+        filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
+        allProdutos = filteredProdutos.ToList();
         AplicarOrdenacao();
         exibirFormulario = false;
     }
@@ -652,13 +673,52 @@
         if (sucesso)
         {
             var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-            filteredProdutos = todosProdutos ?? new List<Produto>();
+            // ✅ Filtrar apenas produtos disponíveis
+            filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
+            allProdutos = filteredProdutos.ToList();
             AplicarOrdenacao();
         }
         else
         {
             await JS.InvokeVoidAsync("alert", "Erro ao excluir o produto: " + (error ?? "(sem detalhes)"));
         }
+    }
+
+    private async Task ToggleDisponibilidade(Produto produto)
+    {
+        var novoStatus = !produto.Disponivel;
+        var mensagem = novoStatus 
+            ? $"Tem certeza que deseja marcar '{produto.Nome}' como DISPONÍVEL?" 
+            : $"Tem certeza que deseja marcar '{produto.Nome}' como INDISPONÍVEL?\n\nEle não aparecerá mais no caixa e cardápio.";
+        
+        bool ok = await JS.InvokeAsync<bool>("confirm", mensagem);
+        if (!ok) return;
+
+        // Atualizar o status de disponibilidade
+        produto.Disponivel = novoStatus;
+
+        // Salvar no backend
+        var sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
+        if (sucesso)
+        {
+            // Recarregar a lista para refletir a mudança
+            var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+            // ✅ Filtrar apenas produtos disponíveis
+            filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
+            allProdutos = filteredProdutos.ToList();
+            AplicarOrdenacao();
+            
+            var statusTexto = novoStatus ? "disponível" : "indisponível";
+            await JS.InvokeVoidAsync("alert", $"Produto '{produto.Nome}' marcado como {statusTexto}.");
+        }
+        else
+        {
+            // Reverter a mudança local se falhou
+            produto.Disponivel = !novoStatus;
+            await JS.InvokeVoidAsync("alert", "Erro ao atualizar disponibilidade do produto.");
+        }
+        
+        StateHasChanged();
     }
 
     private void EditarProduto(int id)
@@ -705,7 +765,8 @@
             if (string.IsNullOrEmpty(selectedMarca))
             {
                 var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-                allProdutos = todosProdutos ?? new List<Produto>();
+                // ✅ Filtrar apenas produtos disponíveis
+                allProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
 
                 if (string.IsNullOrWhiteSpace(searchTerm))
                 {

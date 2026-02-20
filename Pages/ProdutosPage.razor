@@ -742,6 +742,9 @@
 
     private async Task SalvarEdicao(Produto produto)
     {
+        // ✅ Preservar o status de disponibilidade original antes de qualquer edição
+        var disponibilidadeOriginal = produto.Disponivel;
+        
         // If user typed new prices in the temporary inputs, apply them to the model before saving
         if (editPrecoQuenteInputs.TryGetValue(produto.Id, out var precoQStr) && !string.IsNullOrWhiteSpace(precoQStr))
         {
@@ -754,6 +757,9 @@
             if (TryParseDecimalFlexible(precoGStr, out var precoG))
                 produto.PrecoGelada = Math.Round(precoG, 2);
         }
+
+        // ✅ Garantir que o status de disponibilidade não seja alterado na edição de preços
+        produto.Disponivel = disponibilidadeOriginal;
 
         var sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
             if (sucesso)

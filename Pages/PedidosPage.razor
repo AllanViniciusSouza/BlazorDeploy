@@ -130,6 +130,27 @@
     }
 </div>
 
+@* Search by client name - only visible when "A Prazo" filter is active *@
+@if (string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase))
+{
+    <div class="mb-3">
+        <div class="card shadow-sm p-3">
+            <label class="form-label fw-bold mb-2">Pesquisar Cliente</label>
+            <input type="text" 
+                   class="form-control" 
+                   placeholder="Digite o nome do cliente..." 
+                   value="@searchClienteNome"
+                   @oninput="OnClienteSearchInput" />
+            @if (!string.IsNullOrWhiteSpace(searchClienteNome))
+            {
+                <small class="text-muted mt-1">
+                    Mostrando @pedidosExibidosFiltradosPorNome.Count() de @todosAPrazo.Count pedidos
+                </small>
+            }
+        </div>
+    </div>
+}
+
 @if (pedidosHoje == null || !pedidosHoje.Any())
 {
     <p>Nenhum pedido na data selecionada.</p>
@@ -404,7 +425,7 @@ else
     <div>
         @* Build groups in requested order and render separators *@
         @{
-            var displayed = pedidosExibidos.Where(p => !(string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) && dataSelecionada.Date != DateTime.Today)).ToList();
+            var displayed = pedidosExibidosFiltradosPorNome.Where(p => !(string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) && dataSelecionada.Date != DateTime.Today)).ToList();
 
             var emEntrega = displayed.Where(p => string.Equals(EffectiveStatus(p), "Em entrega", StringComparison.OrdinalIgnoreCase)).ToList();
             var retirada = displayed.Where(p => string.Equals(EffectiveStatus(p), "Retirada", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -940,12 +961,15 @@ else
         }
     }
     private string statusFilter = string.Empty;
+    private string searchClienteNome = string.Empty;
     // pedidos for the currently selected date (dataSelecionada)
     private List<Pedido> pedidosPorData = new();
     // extra: all orders that have a payment marked as 'A Prazo' (may be outside selected date)
     private List<Pedido> prazoOrders = new();
     // TODOS os pedidos não finalizados (para o filtro "Atrasados")
     private List<Pedido> todosNaoFinalizados = new();
+    // TODOS os pedidos A Prazo (para o filtro "A Prazo")
+    private List<Pedido> todosAPrazo = new();
     private List<Pedido> pedidosHoje = new();
 
     private IEnumerable<Pedido> pedidosExibidos
@@ -958,6 +982,14 @@ else
                 // Retorna TODOS os pedidos não finalizados (Em entrega, A prazo, Retirada)
                 // inclusive do passado
                 return todosNaoFinalizados;
+            }
+            
+            // ✅ Filtro "A Prazo": mostra TODOS os pedidos A Prazo de TODAS as datas
+            if (string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase))
+            {
+                // Retorna TODOS os pedidos A Prazo (finalizados ou não)
+                // inclusive do passado
+                return todosAPrazo;
             }
             
             // ✅ MOSTRAR APENAS pedidos criados na data selecionada (pedidosPorData)
@@ -973,6 +1005,35 @@ else
 
             return filteredDate;
         }
+    }
+
+    // ✅ Lista filtrada por nome de cliente (apenas quando filtro A Prazo está ativo)
+    private IEnumerable<Pedido> pedidosExibidosFiltradosPorNome
+    {
+        get
+        {
+            var basePedidos = pedidosExibidos;
+            
+            // Se o filtro "A Prazo" está ativo E há um termo de busca
+            if (string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase) 
+                && !string.IsNullOrWhiteSpace(searchClienteNome))
+            {
+                var searchTerm = searchClienteNome.Trim();
+                return basePedidos.Where(p => 
+                    !string.IsNullOrEmpty(p.ClienteNome) && 
+                    p.ClienteNome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Caso contrário, retorna a lista base sem filtro adicional
+            return basePedidos;
+        }
+    }
+
+    private void OnClienteSearchInput(ChangeEventArgs e)
+    {
+        searchClienteNome = e?.Value?.ToString() ?? string.Empty;
+        StateHasChanged();
     }
     private HashSet<int> expanded = new();
     private Dictionary<int, List<PedidoDetalhe>> detalhes = new();
@@ -1286,10 +1347,18 @@ else
                      string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
                 ).ToList();
+                
+                // ✅ Carregar TODOS os pedidos A Prazo (finalizados ou não) para o filtro "A Prazo"
+                todosAPrazo = todos.Where(p => 
+                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
             }
             else
             {
                 todosNaoFinalizados = new List<Pedido>();
+                todosAPrazo = new List<Pedido>();
             }
 
             // pedidosHoje usa apenas pedidosPorData (pedidos da data selecionada)
@@ -1331,6 +1400,13 @@ else
                     (string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
+                
+                // ✅ Recarregar TODOS os pedidos A Prazo (finalizados ou não) para o filtro "A Prazo"
+                todosAPrazo = todos.Where(p => 
+                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
                 ).ToList();
             }
@@ -1430,6 +1506,10 @@ else
     private void SetStatusFilter(string value)
     {
         statusFilter = value ?? string.Empty;
+        
+        // Limpar pesquisa de cliente quando mudar de filtro
+        searchClienteNome = string.Empty;
+        
         // Apply filter locally to currently loaded lists and re-render
         StateHasChanged();
     }

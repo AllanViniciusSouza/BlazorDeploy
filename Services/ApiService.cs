@@ -386,14 +386,14 @@ public class ApiService
                     : $"Erro ao enviar requisição HTTP: {response.StatusCode}";
 
                 _logger.LogError($"Erro ao enviar requisição HTTP: {response.StatusCode}");
-                return new ApiResponse<bool> { Data = false };
+                return new ApiResponse<bool> { Data = false, ErrorMessage = errorMessage };
             }
             return new ApiResponse<bool> { Data = true };
         }
         catch (Exception ex)
         {
             _logger.LogError($"Erro ao confirmar pedido: {ex.Message}");
-            return new ApiResponse<bool> { ErrorMessage = ex.Message };
+            return new ApiResponse<bool> { ErrorMessage = ex.Message, Data = false };
         }
     }
 

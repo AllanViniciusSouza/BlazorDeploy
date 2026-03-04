@@ -551,8 +551,8 @@
                                     <label class="form-check-label ms-1 text-white" for="v_inline_Ronaldo" style="font-size:0.85rem;">R - Ronaldo</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Nathan" @onchange='() => OnVendedorSelected("Nathan")' checked="@(activeCart.VendedorNome == "Nathan")" />
-                                    <label class="form-check-label ms-1 text-white" for="v_inline_Nathan" style="font-size:0.85rem;">N - Nathan</label>
+                                    <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Faby" @onchange='() => OnVendedorSelected("Faby")' checked="@(activeCart.VendedorNome == "Faby")" />
+                                    <label class="form-check-label ms-1 text-white" for="v_inline_Faby" style="font-size:0.85rem;">N - Faby</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="vendedor_inline" id="v_inline_Carlinhos" @onchange='() => OnVendedorSelected("Carlinhos")' checked="@(activeCart.VendedorNome == "Carlinhos")" />
@@ -723,6 +723,7 @@
                     var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
                     var effectiveVendedor = !string.IsNullOrEmpty(activeCart.VendedorNome) ? activeCart.VendedorNome : vendedorNome;
                     var effectivePedido = !string.IsNullOrEmpty(activeCart.PedidoStatus) ? activeCart.PedidoStatus : pedidoStatus;
+                    var effectiveCliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
 
                     bool canShowFinalize = activeCart.Items.Any()
                         && !string.IsNullOrEmpty(effectiveForma)
@@ -734,8 +735,7 @@
                     if (string.Equals(effectiveForma, "A Prazo", StringComparison.OrdinalIgnoreCase))
                     {
                         var due = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo;
-                        var cliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
-                        canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(cliente);
+                        canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(effectiveCliente);
                     }
 
                     // Verificar se a soma dos pagamentos é maior ou igual ao total do carrinho
@@ -749,12 +749,26 @@
                         // Só mostra o botão se a soma dos pagamentos for >= total
                         canShowFinalize = somaPagamentos >= totalCarrinho;
                     }
+
+                    // ✅ Condições para mostrar botão "Criar Comanda" (nome do cliente, vendedor e itens no carrinho)
+                    bool canShowCriarComanda = activeCart.Items.Any()
+                        && !isProcessing
+                        && !string.IsNullOrWhiteSpace(effectiveCliente)
+                        && !string.IsNullOrEmpty(effectiveVendedor);
                 }
 
                 @if (canShowFinalize)
                 {
                     <button class="btn btn-success btn-lg w-100 mt-2" @onclick="FinalizePurchase">
                         <span>Finalizar Compra (ENTER)</span>
+                    </button>
+                }
+                
+                @* Botão para Criar Comanda - aparece com condições diferentes *@
+                @if (canShowCriarComanda)
+                {
+                    <button class="btn btn-warning btn-lg w-100 mt-2" @onclick="CriarComandaDoCarrinho">
+                        <span>Criar Comanda</span>
                     </button>
                 }
             </div>
@@ -1463,7 +1477,7 @@ private string? selectedTemperatura = null;
             return;
         }
 
-        // attempt exact barcode match first (apenas disponíveis)
+        // buscar todos os produtos disponíveis
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
         if (todosProdutos == null)
         {
@@ -1472,16 +1486,15 @@ private string? selectedTemperatura = null;
             return;
         }
 
-        var byBarcode = todosProdutos.Where(p => p.Disponivel && !string.IsNullOrWhiteSpace(p.Barcode) && p.Barcode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (byBarcode.Any())
-        {
-            filteredProdutos = byBarcode;
-            showProductList = true;
-            return;
-        }
-
-        // fallback to name search (apenas disponíveis)
-        filteredProdutos = todosProdutos.Where(p => p.Disponivel && p.Nome != null && p.Nome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+        var term = searchTerm.Trim();
+        
+        // ✅ Busca unificada: nome OU barcode (mesma lógica do ProdutosPage)
+        filteredProdutos = todosProdutos
+            .Where(p => p.Disponivel && 
+                       ((!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(term, StringComparison.OrdinalIgnoreCase))
+                     || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Contains(term, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+        
         showProductList = filteredProdutos.Any();
     }
 
@@ -2329,7 +2342,7 @@ private void OnUsarPagamento2Changed()
             // Preencher lista de vendedores aqui (OnInitializedAsync) e selecionar o primeiro por padrão
             if (vendedores == null || !vendedores.Any())
             {
-                vendedores = new List<string> { "Ronaldo", "Nathan", "Carlinhos", "Allan", "Beatriz", "Kayke" };
+                vendedores = new List<string> { "Ronaldo", "Faby", "Carlinhos", "Allan", "Beatriz", "Kayke", "Faby" };
             }
             try
             {
@@ -2821,6 +2834,189 @@ private void OnUsarPagamento2Changed()
         catch (Exception ex)
         {
             Console.WriteLine($"Erro ao criar ou atualizar comanda: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task CriarComandaDoCarrinho()
+    {
+        if (isProcessing)
+            return;
+
+        // Validações
+        var effectiveCliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+        if (string.IsNullOrEmpty(effectiveCliente))
+        {
+            await ShowAlert("Por favor, informe o nome do cliente para criar a comanda.");
+            return;
+        }
+
+        if (!activeCart.Items.Any())
+        {
+            await ShowAlert("Adicione pelo menos um item ao carrinho antes de criar a comanda.");
+            return;
+        }
+
+        isProcessing = true;
+
+        try
+        {
+            // Verificar se já existe uma comanda com este nome
+            var (comandaExistente, erro) = await _apiService.GetComandaPorNome(effectiveCliente);
+
+            if (comandaExistente != null)
+            {
+                // Comanda já existe - adicionar itens a ela
+                foreach (var cartItem in activeCart.Items)
+                {
+                    var itemComanda = new ItemComanda
+                    {
+                        Nome = effectiveCliente,
+                        PrecoUnitario = cartItem.PrecoUnitario,
+                        Quantidade = cartItem.Quantidade,
+                        ProdutoId = cartItem.Produto.Id,
+                        NomeProduto = cartItem.Produto.Nome,
+                        UrlImagem = cartItem.Produto.UrlImagem
+                    };
+
+                    // Log para debug - verificar valores antes de enviar
+                    await JS.InvokeVoidAsync("console.log", $"Adicionando item: Nome={itemComanda.Nome}, ProdutoId={itemComanda.ProdutoId}, PrecoUnitario={itemComanda.PrecoUnitario}, Quantidade={itemComanda.Quantidade}");
+
+                    var responseAddItem = await _apiService.AdicionaItemNaComanda(itemComanda);
+                    if (!responseAddItem.Data)
+                    {
+                        await ShowAlert($"Falha ao adicionar item '{cartItem.Produto.Nome}': {responseAddItem.ErrorMessage}");
+                        isProcessing = false;
+                        return;
+                    }
+
+                    // Registrar saída do estoque
+                    for (int i = 0; i < cartItem.Quantidade; i++)
+                    {
+                        var movimentacao = new MovimentacaoEstoque()
+                        {
+                            ProdutoId = cartItem.Produto.Id,
+                            Tipo = TipoMovimentacao.Venda,
+                            Quantidade = 1,
+                            DataMovimentacao = DateTime.Now
+                        };
+                        await _apiService.MovimentarEstoqueAsync(movimentacao);
+                    }
+                }
+
+                // Atualizar valor total da comanda
+                var (itensComanda, _) = await _apiService.GetItensComanda(effectiveCliente);
+                comandaExistente.ValorTotal = (itensComanda ?? new List<ItemComanda>()).Sum(p => p.Quantidade * p.PrecoUnitario);
+                await _apiService.AtualizarComanda(comandaExistente);
+
+                await ShowAlert($"Itens adicionados à comanda '{effectiveCliente}' com sucesso!");
+            }
+            else
+            {
+                // Criar nova comanda
+                var effectiveTelefone = !string.IsNullOrWhiteSpace(activeCart.EntryTelefone) ? activeCart.EntryTelefone : entryTelefone;
+                var effectiveEndereco = !string.IsNullOrWhiteSpace(activeCart.EntryEndereco) ? activeCart.EntryEndereco : entryEndereco;
+
+                // Verificar/criar cliente se tiver telefone
+                if (!string.IsNullOrEmpty(effectiveTelefone))
+                {
+                    var (existeCliente, _) = await _apiService.GetClienteByPhoneAsync(effectiveTelefone);
+                    if (existeCliente == null)
+                    {
+                        var novoCliente = new Clientes
+                        {
+                            Nome = effectiveCliente,
+                            Telefone = effectiveTelefone,
+                            Endereco = effectiveEndereco
+                        };
+                        await _apiService.AddClienteAsync(novoCliente);
+                    }
+                }
+
+                // Criar a comanda
+                var novaComanda = new Comanda()
+                {
+                    Nome = effectiveCliente,
+                    Telefone = effectiveTelefone,
+                    Endereco = effectiveEndereco,
+                    DataAbertura = DateTime.Now,
+                    ValorTotal = activeCart.Items.Sum(p => p.Total),
+                    Status = "Aberta",
+                    Itens = new List<ItemComanda>()
+                };
+
+                var responseComanda = await _apiService.CriarComanda(novaComanda);
+                if (responseComanda.Data == 0)
+                {
+                    await ShowAlert($"Falha ao criar comanda: {responseComanda.ErrorMessage}");
+                    isProcessing = false;
+                    return;
+                }
+
+                // Adicionar itens à comanda
+                foreach (var cartItem in activeCart.Items)
+                {
+                    var itemComanda = new ItemComanda
+                    {
+                        Nome = effectiveCliente,
+                        PrecoUnitario = cartItem.PrecoUnitario,
+                        Quantidade = cartItem.Quantidade,
+                        ProdutoId = cartItem.Produto.Id,
+                        NomeProduto = cartItem.Produto.Nome,
+                        UrlImagem = cartItem.Produto.UrlImagem
+                    };
+
+                    // Log para debug - verificar valores antes de enviar
+                    await JS.InvokeVoidAsync("console.log", $"Adicionando item na nova comanda: Nome={itemComanda.Nome}, ProdutoId={itemComanda.ProdutoId}, PrecoUnitario={itemComanda.PrecoUnitario}, Quantidade={itemComanda.Quantidade}, NomeProduto={itemComanda.NomeProduto}");
+
+                    var responseAddItem = await _apiService.AdicionaItemNaComanda(itemComanda);
+                    if (!responseAddItem.Data)
+                    {
+                        await ShowAlert($"Falha ao adicionar item '{cartItem.Produto.Nome}': {responseAddItem.ErrorMessage}");
+                        isProcessing = false;
+                        return;
+                    }
+
+                    // Registrar saída do estoque
+                    for (int i = 0; i < cartItem.Quantidade; i++)
+                    {
+                        var movimentacao = new MovimentacaoEstoque()
+                        {
+                            ProdutoId = cartItem.Produto.Id,
+                            Tipo = TipoMovimentacao.Venda,
+                            Quantidade = 1,
+                            DataMovimentacao = DateTime.Now
+                        };
+                        await _apiService.MovimentarEstoqueAsync(movimentacao);
+                    }
+                }
+
+                await ShowAlert($"Comanda '{effectiveCliente}' criada com sucesso!");
+            }
+
+            // Limpar carrinho após criar comanda
+            activeCart.Items.Clear();
+            activeCart.ClienteNome = string.Empty;
+            activeCart.EntryTelefone = string.Empty;
+            activeCart.EntryEndereco = string.Empty;
+            activeCart.Observacoes = string.Empty;
+            
+            // Limpar variáveis locais
+            clienteNome = string.Empty;
+            entryTelefone = string.Empty;
+            entryEndereco = string.Empty;
+            observacoes = string.Empty;
+            
+            SyncPriceInputs();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro ao criar comanda: {ex.Message}");
+            await ShowAlert($"Erro ao criar comanda: {ex.Message}");
         }
         finally
         {

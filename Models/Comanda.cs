@@ -16,4 +16,4 @@ public class Comanda
     public decimal? ValorRecebido { get; set; }
     public string? FormaPagamento { get; set; }
     public List<ItemComanda>? Itens { get; set; }
-}  
+}

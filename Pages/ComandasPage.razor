@@ -52,10 +52,16 @@ else
                                 @foreach (var item in comanda.Itens)
                                 {
                                     <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center">
-                                        <div class="fw-bold w-100">@item.NomeProduto</div>
+                                        <div class="fw-bold w-100 mb-2">@item.NomeProduto</div>
 
                                         <div class="d-flex align-items-center my-1">
-                                            <span class="me-2">R$ @item.PrecoUnitario</span>
+                                            <span class="me-2">Preço Unit.:</span>
+                                            <input type="number" 
+                                                   class="form-control form-control-sm text-end" 
+                                                   style="width: 100px;" 
+                                                   step="0.01" 
+                                                   @bind="item.PrecoUnitario" 
+                                                   @bind:after="() => AtualizarValorItem(item, comanda.Nome)" />
                                         </div>
 
                                         <div class="d-flex align-items-center my-1">
@@ -64,7 +70,10 @@ else
                                             <button class="btn btn-secondary btn-sm" @onclick="() => Incrementar(item, comanda.Nome)">+</button>
                                         </div>
 
-                                        <div class="text-center fw-bold my-1">R$ @item.ValorTotal</div>
+                                        <div class="text-center fw-bold my-1">
+                                            <div class="small text-muted">Total</div>
+                                            R$ @item.ValorTotal.ToString("F2")
+                                        </div>
 
                                         <div class="text-end my-1 w-100">
                                             <button class="btn btn-danger btn-sm w-100" @onclick="() => DeletarItem(item, comanda.Nome)">Excluir</button>
@@ -295,6 +304,13 @@ else
             comanda.ValorTotal = comanda.Itens.Sum(item => item.PrecoUnitario * item.Quantidade);
             await _apiService.AtualizarComanda(comanda);
         }
+    }
+
+    private async Task AtualizarValorItem(ItemComanda item, string nomeComanda)
+    {
+        // Atualiza o valor total da comanda após editar o preço unitário
+        await AtualizaPrecoTotal(nomeComanda);
+        StateHasChanged();
     }
 
     private async Task EntradaNoEstoque(ItemComanda item)

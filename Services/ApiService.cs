@@ -1143,8 +1143,26 @@ public class ApiService
 
     public async Task<bool> DeletarComanda(string nome)
     {
-        var response = await _httpClient.DeleteAsync($"api/comandas/{nome}");
-        return response.IsSuccessStatusCode;
+        try
+        {
+            await AddAuthorizationHeader();
+            var enderecoUrl = BuildUrl($"api/comandas/{Uri.EscapeDataString(nome)}");
+            var response = await _httpClient.DeleteAsync(enderecoUrl);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                string body = string.Empty;
+                try { body = await response.Content.ReadAsStringAsync(); } catch { }
+                _logger.LogError("DELETE comanda {Nome} returned {Status} - {Body}", nome, response.StatusCode, body);
+            }
+            
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao deletar comanda {Nome}", nome);
+            return false;
+        }
     }
 
     public async Task<bool> AtualizarProduto (int id, Produto produto)

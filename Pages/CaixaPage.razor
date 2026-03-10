@@ -723,7 +723,7 @@
                     var effectiveForma = !string.IsNullOrEmpty(activeCart.FormaPagamentoSelecionada) ? activeCart.FormaPagamentoSelecionada : formaPagamentoSelecionada;
                     var effectiveVendedor = !string.IsNullOrEmpty(activeCart.VendedorNome) ? activeCart.VendedorNome : vendedorNome;
                     var effectivePedido = !string.IsNullOrEmpty(activeCart.PedidoStatus) ? activeCart.PedidoStatus : pedidoStatus;
-                    var effectiveCliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+                    var effectiveClienteFinalize = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
 
                     bool canShowFinalize = activeCart.Items.Any()
                         && !string.IsNullOrEmpty(effectiveForma)
@@ -735,7 +735,7 @@
                     if (string.Equals(effectiveForma, "A Prazo", StringComparison.OrdinalIgnoreCase))
                     {
                         var due = activeCart.DataPagamentoPrazo ?? dataPagamentoPrazo;
-                        canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(effectiveCliente);
+                        canShowFinalize = canShowFinalize && due.HasValue && !string.IsNullOrWhiteSpace(effectiveClienteFinalize);
                     }
 
                     // Verificar se a soma dos pagamentos é maior ou igual ao total do carrinho
@@ -749,26 +749,12 @@
                         // Só mostra o botão se a soma dos pagamentos for >= total
                         canShowFinalize = somaPagamentos >= totalCarrinho;
                     }
-
-                    // ✅ Condições para mostrar botão "Criar Comanda" (nome do cliente, vendedor e itens no carrinho)
-                    bool canShowCriarComanda = activeCart.Items.Any()
-                        && !isProcessing
-                        && !string.IsNullOrWhiteSpace(effectiveCliente)
-                        && !string.IsNullOrEmpty(effectiveVendedor);
                 }
 
                 @if (canShowFinalize)
                 {
                     <button class="btn btn-success btn-lg w-100 mt-2" @onclick="FinalizePurchase">
                         <span>Finalizar Compra (ENTER)</span>
-                    </button>
-                }
-                
-                @* Botão para Criar Comanda - aparece com condições diferentes *@
-                @if (canShowCriarComanda)
-                {
-                    <button class="btn btn-warning btn-lg w-100 mt-2" @onclick="CriarComandaDoCarrinho">
-                        <span>Criar Comanda</span>
                     </button>
                 }
             </div>
@@ -800,6 +786,20 @@
                             </div>
                         </div>
                     </div>
+
+                    @* Botão Criar Comanda - logo abaixo dos inputs do cliente *@
+                    @{
+                        var effectiveCliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+                        bool canShowCriarComanda = activeCart.Items.Any()
+                            && !isProcessing
+                            && !string.IsNullOrWhiteSpace(effectiveCliente);
+                    }
+                    @if (canShowCriarComanda)
+                    {
+                        <button class="btn btn-warning btn-lg w-100" @onclick="CriarComandaDoCarrinho">
+                            <span>Criar Comanda</span>
+                        </button>
+                    }
                 </div>
             </div>
 </div>
@@ -838,7 +838,7 @@
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="temp" id="temp_none" checked="@(string.IsNullOrEmpty(selectedTemperatura))" @onchange="() => OnSelectTemperatura(null)" />
                             <label class="form-check-label ms-2" for="temp_none">N - Nenhuma</label>
-                            <div class="small text-muted ms-4">Preço: R$ @(GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
+                            <div class="small text-muted ms-4">Preço: R$ @(selectedProduct != null && selectedProduct.PrecoGelada > 0 ? selectedProduct.PrecoGelada.ToString("0.00") : GetProdutoDisplayPrice(selectedProduct).ToString("0.00"))</div>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="temp" id="temp_quente" checked='@(selectedTemperatura == "Quente")' @onchange='() => OnSelectTemperatura("Quente")' />
@@ -1390,6 +1390,9 @@ private string? selectedTemperatura = null;
             // ✅ Marcar produto como disponível por padrão
             newProductForBarcode.Disponivel = true;
 
+            // Log para debug - verificar se Disponivel está sendo enviado corretamente
+            await JS.InvokeVoidAsync("console.log", $"CreateProductFromBarcode: Enviando produto com Disponivel={newProductForBarcode.Disponivel}, Nome={newProductForBarcode.Nome}, Barcode={newProductForBarcode.Barcode}");
+
             // call API to create product
             var response = await _apiService.AdicionarProdutoAsync(newProductForBarcode);
             if (!string.IsNullOrEmpty(response.ErrorMessage))
@@ -1724,6 +1727,43 @@ private string? selectedTemperatura = null;
         }
     }
 
+    private async Task RestaurarDadosComandaAsync()
+    {
+        try
+        {
+            // Ler dados individuais do sessionStorage
+            var clienteNome = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaNome");
+            var telefone = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaTelefone");
+            var endereco = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaEndereco");
+            var obs = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaObservacoes");
+
+            // Se não houver dados, retornar
+            if (string.IsNullOrWhiteSpace(clienteNome)) return;
+
+            // Pré-preencher campos do carrinho ativo
+            activeCart.ClienteNome = clienteNome;
+            activeCart.EntryTelefone = telefone ?? string.Empty;
+            activeCart.EntryEndereco = endereco ?? string.Empty;
+            activeCart.Observacoes = obs ?? string.Empty;
+            observacoes = activeCart.Observacoes;
+
+            // Remover os dados do sessionStorage após usar
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaNome");
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaTelefone");
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaEndereco");
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaObservacoes");
+            
+            // Log para debug
+            await JS.InvokeVoidAsync("console.log", $"Dados da comanda restaurados: Cliente={activeCart.ClienteNome}, Tel={activeCart.EntryTelefone}");
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Erro ao restaurar dados da comanda: {ex.Message}");
+        }
+    }
+
     private void EnsurePagamento1State()
     {
         // If second payment not used, primary should be cart total and disabled
@@ -1977,28 +2017,77 @@ private async Task ConfirmAddToCart()
     var targetCart = activeCart.Items;
 
     // consider product identity + temperatura when merging items
-    try { _ = JS.InvokeVoidAsync("console.log", $"ConfirmAddToCart -> active={activeCartIndex} selectedProductId={selectedProduct?.Id} qty={qty}"); } catch { }
+    try { _ = JS.InvokeVoidAsync("console.log", $"ConfirmAddToCart -> active={activeCartIndex} selectedProductId={selectedProduct?.Id} qty={qty} temp={selectedTemperatura ?? "null"}"); } catch { }
     var existing = targetCart.FirstOrDefault(c => c.Produto.Id == selectedProduct.Id && (c.Temperatura ?? string.Empty) == (selectedTemperatura ?? string.Empty));
 
     if (existing == null)
     {
-            var precoUnit = selectedProduct.Preco;
-            // treat 'Nenhuma' (null) as Quente — prefer PrecoQuente when available
-            var temp = selectedTemperatura ?? "Quente";
-            if (temp == "Quente")
+            // ✅ CORREÇÃO: Determinar preço baseado na temperatura selecionada
+            var precoUnit = selectedProduct.Preco; // fallback padrão
+            
+            // ✅ Log para debug - valores ANTES de aplicar lógica
+            try { _ = JS.InvokeVoidAsync("console.log", $"ANTES -> Produto: {selectedProduct.Nome} | Preco: {selectedProduct.Preco} | PrecoQuente: {selectedProduct.PrecoQuente} | PrecoGelada: {selectedProduct.PrecoGelada} | Temp Selecionada: {selectedTemperatura ?? "null"}"); } catch { }
+            
+            // ✅ Aplicar preço baseado na temperatura SELECIONADA (não mais tratar null como Quente)
+            if (string.IsNullOrEmpty(selectedTemperatura))
             {
-                if (selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
+                // NENHUMA temperatura selecionada -> usar preço GELADA (igual ao Gelada)
+                if (selectedProduct.PrecoGelada > 0)
+                {
+                    precoUnit = selectedProduct.PrecoGelada;
+                }
+                else if (selectedProduct.Preco > 0)
+                {
+                    precoUnit = selectedProduct.Preco;
+                }
+                else
+                {
+                    // Fallback: se PrecoGelada e Preco padrão forem 0, usar o primeiro preço disponível
+                    if (selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
+                    else if (selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
+                    else if (selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
+                }
             }
-            else if (temp == "Gelada")
+            else if (selectedTemperatura == "Quente")
             {
-                if (selectedProduct.PrecoGelada > 0) precoUnit = selectedProduct.PrecoGelada;
+                // QUENTE selecionada
+                if (selectedProduct.PrecoQuente > 0)
+                {
+                    precoUnit = selectedProduct.PrecoQuente;
+                }
+                else
+                {
+                    // Fallback: usar Preco padrão se PrecoQuente for 0
+                    precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
+                }
+            }
+            else if (selectedTemperatura == "Gelada")
+            {
+                // GELADA selecionada
+                if (selectedProduct.PrecoGelada > 0)
+                {
+                    precoUnit = selectedProduct.PrecoGelada;
+                }
+                else
+                {
+                    // Fallback: usar Preco padrão se PrecoGelada for 0
+                    precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
+                }
             }
             else
             {
-                // fallback: if order status indicates retirada/entrega, use those prices
-                if (pedidoStatus == "Retirada" && selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
-                if (pedidoStatus == "Em entrega" && selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
+                // Temperatura desconhecida - usar preço padrão
+                precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
             }
+            
+            // ✅ Garantir que o preço nunca seja 0
+            if (precoUnit <= 0)
+            {
+                precoUnit = GetProdutoDisplayPrice(selectedProduct);
+            }
+            
+            // ✅ Log para debug - valores DEPOIS de aplicar lógica
+            try { _ = JS.InvokeVoidAsync("console.log", $"DEPOIS -> Preco Final Aplicado: {precoUnit} | Quantidade: {qty} | Total: {precoUnit * qty}"); } catch { }
 
         // If current order status is delivery, apply surcharge to the price we add
         var cartItem = new CartItem
@@ -2300,6 +2389,9 @@ private void OnUsarPagamento2Changed()
         {
             // try to restore previous caixa state if any
             await RestoreCaixaStateIfAnyAsync();
+
+            // ✅ NOVO: Restaurar dados da comanda se vier da página de comandas
+            await RestaurarDadosComandaAsync();
 
             // If opened via external scanner app it may include ?scanned=CODE in the URL -> handle it
             try
@@ -2659,17 +2751,25 @@ private void OnUsarPagamento2Changed()
             return;
         }
 
-        // registrar movimentações de estoque
+        // registrar movimentações de estoque - uma movimentação para cada unidade vendida
         foreach (var item in activeCart.Items)
         {
-            var movimentacao = new MovimentacaoEstoque()
+            // Se o produto tem ID válido (não é item livre/personalizado)
+            if (item.Produto.Id > 0)
             {
-                ProdutoId = item.Produto.Id,
-                Tipo = TipoMovimentacao.Venda,
-                Quantidade = 1,
-                DataMovimentacao = DateTime.Now
-            };
-            await _apiService.MovimentarEstoqueAsync(movimentacao);
+                // Registrar uma movimentação para cada unidade vendida
+                for (int i = 0; i < item.Quantidade; i++)
+                {
+                    var movimentacao = new MovimentacaoEstoque()
+                    {
+                        ProdutoId = item.Produto.Id,
+                        Tipo = TipoMovimentacao.Venda,
+                        Quantidade = 1,
+                        DataMovimentacao = DateTime.Now
+                    };
+                    await _apiService.MovimentarEstoqueAsync(movimentacao);
+                }
+            }
         }
 
         // If payment includes cash, open cash drawer via print service

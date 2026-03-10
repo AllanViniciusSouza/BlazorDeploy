@@ -186,6 +186,7 @@
                     // Check if user is typing in specific inputs where shortcuts should be blocked
                     var activeEl = document.activeElement;
                     var isTypingInBlockedInput = false;
+                    var blockNumberShortcuts = false; // NEW: flag to specifically block number shortcuts
                     
                     if (activeEl && activeEl.tagName) {
                         var tag = activeEl.tagName.toUpperCase();
@@ -195,11 +196,13 @@
                         // Block shortcuts in textareas (product description in cart)
                         if (tag === 'TEXTAREA') {
                             isTypingInBlockedInput = true;
+                            blockNumberShortcuts = true;
                         }
                         
                         // Block shortcuts in select elements
                         if (tag === 'SELECT' || tag === 'OPTION') {
                             isTypingInBlockedInput = true;
+                            blockNumberShortcuts = true;
                         }
                         
                         // For inputs, check specific ones where shortcuts should be blocked
@@ -207,12 +210,15 @@
                             var inputType = (activeEl.type || '').toLowerCase();
                             var hasPaymentInputClass = activeEl.classList && activeEl.classList.contains('payment-input-shortcut');
                             
-                            // ✅ SPECIAL: payment inputs (pag1_input, pag2_input) ALLOW shortcuts
+                            // ✅ SPECIAL: payment inputs (pag1_input, pag2_input) ALLOW LETTER shortcuts but BLOCK NUMBER shortcuts (1-9)
                             if (hasPaymentInputClass || elId === 'pag1_input' || elId === 'pag2_input') {
-                                // Allow shortcuts to work
+                                // Allow LETTER shortcuts to work (D, C, B, P, A, etc)
                                 isTypingInBlockedInput = false;
                                 
-                                // But prevent non-numeric keys from being typed
+                                // But BLOCK NUMBER shortcuts (1-9) so user can type numbers
+                                blockNumberShortcuts = true;
+                                
+                                // Prevent non-numeric keys from being typed
                                 var key = e.key;
                                 var isNumeric = (key >= '0' && key <= '9') || key === '.' || key === ',';
                                 var isControl = key === 'Backspace' || key === 'Delete' || key === 'ArrowLeft' || key === 'ArrowRight' || key === 'Tab' || key === 'Enter' || key === 'Escape';
@@ -223,7 +229,7 @@
                                     e.preventDefault();
                                 }
                                 
-                                // Don't block shortcut processing - continue to handle shortcuts below
+                                // Don't block LETTER shortcut processing - continue to handle shortcuts below
                             }
                             // ✅ SPECIAL: searchInput allows NUMBER shortcuts (1-9) but blocks LETTER shortcuts
                             else if (elId === 'searchInput') {
@@ -237,50 +243,60 @@
                                     isTypingInBlockedInput = true;
                                 }
                                 // If it's a number (1-9), allow it to pass through for product selection
+                                blockNumberShortcuts = false; // Explicitly allow number shortcuts
                             }
                             // ✅ Block in ALL cart table inputs (price, quantity, etc)
                             // Check if ID starts with price_ or qty_ (cart table inputs)
                             else if (elId.startsWith('price_') || elId.startsWith('qty_')) {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // Block in client name input
-                            else if (elPlaceholder.includes('nome do cliente')) {
+                            else if (elPlaceholder.includes('nome do cliente') || elPlaceholder.includes('nome')) {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // Block in address input
                             else if (elPlaceholder.includes('endereço')) {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // Block in phone input
                             else if (elPlaceholder.includes('telefone')) {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // Block in observations input
                             else if (elPlaceholder.includes('observações') || elPlaceholder.includes('observacoes')) {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // Block in vendedor name input (when "Outro" is selected)
-                            else if (elPlaceholder.includes('digite o nome do vendedor')) {
+                            else if (elPlaceholder.includes('digite o nome')) {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // ✅ Block in number inputs (type="number")
                             else if (inputType === 'number') {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // ✅ Block in decimal inputs (inputmode="decimal")
                             else if (activeEl.inputMode === 'decimal' || activeEl.inputMode === 'numeric') {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                             // Block in all text-type inputs (but allow radio/checkbox to work)
                             else if (inputType !== 'radio' && inputType !== 'checkbox') {
                                 isTypingInBlockedInput = true;
+                                blockNumberShortcuts = true;
                             }
                         }
                     }
                     
                     // Handle number keys 1-9 for product selection
-                    // Works when NO input has focus OR when searchInput has focus
-                    if (!isTypingInBlockedInput) {
+                    // Only works when blockNumberShortcuts is FALSE
+                    if (!blockNumberShortcuts) {
                         var numKey = e.key;
                         if (numKey && numKey.length === 1 && numKey >= '1' && numKey <= '9') {
                             // Call .NET method to select product by index
@@ -336,7 +352,7 @@
                     }
                 }
 
-                // Vendedor shortcuts: R=Ronaldo, N=Nathan, E=Carlinhos, V=Allan, S=Beatriz, K=Kayke
+                // Vendedor shortcuts: R=Ronaldo, N=Faby, E=Carlinhos, V=Allan, S=Beatriz, K=Kayke
                 if (key === 'r') {
                     if (dotRef) {
                         try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Ronaldo'); } catch { }
@@ -346,7 +362,7 @@
                 // N is handled in modal for temperature, so only handle if modal is not open
                 if (key === 'n' && !quantityModal) {
                     if (dotRef) {
-                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Nathan'); } catch { }
+                        try { dotRef.invokeMethodAsync('OnVendedorShortcut', 'Faby'); } catch { }
                     }
                     return;
                 }

@@ -304,12 +304,56 @@
                                 </dd>
 
                                 <dt class="col-6">Valor Pago</dt>
-                                <dd class="col-6">R$ @(currentPedido.ValorPago1?.ToString("F2") ?? "0.00")
+                                <dd class="col-6">
+                                    @if (isEditingPedido && (string.Equals(currentPedido.FormaPagamento, "Dinheiro", StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        <input type="number" step="0.01" class="form-control form-control-sm text-end" 
+                                               @bind="editValorPago1" 
+                                               @bind:after="CalcularTroco"
+                                               @onfocus="CancelScheduledSave" 
+                                               @onblur="ScheduleSaveOnBlur" />
+                                    }
+                                    else
+                                    {
+                                        <span style="cursor:pointer;" @onclick="() => EnablePaymentEditing()">
+                                            R$ @(currentPedido.ValorPago1?.ToString("F2") ?? "0.00")
+                                        </span>
+                                    }
                                     @if (currentPedido.ValorPago2.HasValue && currentPedido.ValorPago2.Value > 0)
                                     {
-                                        <div>R$ @currentPedido.ValorPago2.Value.ToString("F2")</div>
+                                        <div class="mt-1">
+                                            @if (isEditingPedido && string.Equals(currentPedido.FormaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <input type="number" step="0.01" class="form-control form-control-sm text-end" 
+                                                       @bind="editValorPago2" 
+                                                       @bind:after="CalcularTroco"
+                                                       @onfocus="CancelScheduledSave" 
+                                                       @onblur="ScheduleSaveOnBlur" />
+                                            }
+                                            else
+                                            {
+                                                <span>R$ @currentPedido.ValorPago2.Value.ToString("F2")</span>
+                                            }
+                                        </div>
                                     }
                                 </dd>
+
+                                @* Exibir troco se pagamento for em Dinheiro *@
+                                @if (string.Equals(currentPedido.FormaPagamento, "Dinheiro", StringComparison.OrdinalIgnoreCase) 
+                                    || string.Equals(currentPedido.FormaPagamento2, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <dt class="col-6">Troco</dt>
+                                    <dd class="col-6">
+                                        @{
+                                            var valorPago1Num = currentPedido.ValorPago1 ?? 0;
+                                            var valorPago2Num = currentPedido.ValorPago2 ?? 0;
+                                            var totalPago = valorPago1Num + valorPago2Num;
+                                            var troco = totalPago - currentPedido.ValorTotal;
+                                            var trocoClass = troco > 0 ? "text-danger fw-bold" : "";
+                                        }
+                                        <span class="@trocoClass">R$ @(troco > 0 ? troco.ToString("F2") : "0.00")</span>
+                                    </dd>
+                                }
                                 <dt class="col-6">Forma(s) 2</dt>
                                 <dd class="col-6">
                                     @if (isEditingPedido)
@@ -801,21 +845,66 @@ else
     private string? editFormaPagamento2;
     private DateTime? editDataPagamentoPrazo;
     private DateTime? editDataPagamentoPrazo2;
+    private decimal? editValorPago1;
+    private decimal? editValorPago2;
 
     private void StartEdit(string field)
     {
         if (currentPedido == null) return;
         isEditingPedido = true;
         editingField = field;
+        // ✅ Sempre inicializar TODAS as variáveis de edição quando qualquer campo entra em modo de edição
         editClienteNome = currentPedido.ClienteNome;
         editTelefone = currentPedido.Telefone;
         editEndereco = currentPedido.Endereco;
         editObservacoes = currentPedido.Observacoes;
+        editValorPago1 = currentPedido.ValorPago1;
+        editValorPago2 = currentPedido.ValorPago2;
+        editFormaPagamento = currentPedido.FormaPagamento;
+        editFormaPagamento2 = currentPedido.FormaPagamento2;
+        editDataPagamentoPrazo = currentPedido.DataPagamentoPrazo;
+        editDataPagamentoPrazo2 = currentPedido.DataPagamentoPrazo2;
+        
+        // Log para debug
+        try { JS.InvokeVoidAsync("console.log", $"StartEdit({field}): Telefone={editTelefone}, Observacoes={editObservacoes}"); } catch { }
     }
 
     private void EnableItemEditing()
     {
         isEditingPedido = true;
+        if (currentPedido != null)
+        {
+            editValorPago1 = currentPedido.ValorPago1;
+            editValorPago2 = currentPedido.ValorPago2;
+        }
+        StateHasChanged();
+    }
+
+    private void EnablePaymentEditing()
+    {
+        isEditingPedido = true;
+        if (currentPedido != null)
+        {
+            editValorPago1 = currentPedido.ValorPago1;
+            editValorPago2 = currentPedido.ValorPago2;
+        }
+        StateHasChanged();
+    }
+
+    private void CalcularTroco()
+    {
+        if (currentPedido == null) return;
+        
+        // Atualizar valores localmente para cálculo imediato
+        if (editValorPago1.HasValue)
+        {
+            currentPedido.ValorPago1 = editValorPago1;
+        }
+        if (editValorPago2.HasValue)
+        {
+            currentPedido.ValorPago2 = editValorPago2;
+        }
+        
         StateHasChanged();
     }
 
@@ -826,6 +915,8 @@ else
         p = todosNaoFinalizados.FirstOrDefault(x => x.Id == pedidoId);
         if (p != null) return p;
         p = prazoOrders.FirstOrDefault(x => x.Id == pedidoId);
+        if (p != null) return p;
+        p = todosAPrazo.FirstOrDefault(x => x.Id == pedidoId);
         if (p != null) return p;
         return pedidosHoje.FirstOrDefault(x => x.Id == pedidoId);
     }
@@ -858,12 +949,20 @@ else
     {
         if (currentPedido == null) return;
 
+        // ✅ Log para debug - verificar valores ANTES de salvar
+        try 
+        { 
+            await JS.InvokeVoidAsync("console.log", $"SalvarEdicoes ANTES: Telefone={editTelefone ?? "(null)"}, Observacoes={editObservacoes ?? "(null)"}"); 
+        } 
+        catch { }
+
+        // ✅ SEMPRE enviar todos os campos, mesmo que não tenham sido editados
         var dto = new Dictionary<string, object?>
         {
-            ["ClienteNome"] = editClienteNome,
-            ["Telefone"] = editTelefone,
-            ["Endereco"] = editEndereco,
-            ["Observacoes"] = editObservacoes
+            ["ClienteNome"] = !string.IsNullOrWhiteSpace(editClienteNome) ? editClienteNome : currentPedido.ClienteNome,
+            ["Telefone"] = !string.IsNullOrWhiteSpace(editTelefone) ? editTelefone : currentPedido.Telefone,
+            ["Endereco"] = !string.IsNullOrWhiteSpace(editEndereco) ? editEndereco : currentPedido.Endereco,
+            ["Observacoes"] = !string.IsNullOrWhiteSpace(editObservacoes) ? editObservacoes : currentPedido.Observacoes
         };
 
         // include payment edits when present
@@ -871,6 +970,18 @@ else
         if (!string.IsNullOrEmpty(editFormaPagamento2)) dto["FormaPagamento2"] = editFormaPagamento2;
         if (editDataPagamentoPrazo.HasValue) dto["DataPagamentoPrazo"] = editDataPagamentoPrazo.Value;
         if (editDataPagamentoPrazo2.HasValue) dto["DataPagamentoPrazo2"] = editDataPagamentoPrazo2.Value;
+        
+        // ✅ Incluir valores pagos quando editados (para pagamentos em Dinheiro)
+        if (editValorPago1.HasValue) dto["ValorPago1"] = editValorPago1.Value;
+        if (editValorPago2.HasValue) dto["ValorPago2"] = editValorPago2.Value;
+
+        // ✅ Log para debug - verificar DTO antes de enviar
+        try 
+        { 
+            var dtoJson = System.Text.Json.JsonSerializer.Serialize(dto);
+            await JS.InvokeVoidAsync("console.log", $"SalvarEdicoes DTO: {dtoJson}"); 
+        } 
+        catch { }
 
         var result = await _apiService.AtualizarPedidoParcial(currentPedido.Id, dto);
         if (!string.IsNullOrEmpty(result.ErrorMessage) || !result.Data)
@@ -879,15 +990,26 @@ else
             return;
         }
 
-        currentPedido.ClienteNome = editClienteNome;
-        currentPedido.Telefone = editTelefone;
-        currentPedido.Endereco = editEndereco;
-        currentPedido.Observacoes = editObservacoes;
+        // ✅ Atualizar TODOS os campos localmente após salvar com sucesso
+        currentPedido.ClienteNome = !string.IsNullOrWhiteSpace(editClienteNome) ? editClienteNome : currentPedido.ClienteNome;
+        currentPedido.Telefone = !string.IsNullOrWhiteSpace(editTelefone) ? editTelefone : currentPedido.Telefone;
+        currentPedido.Endereco = !string.IsNullOrWhiteSpace(editEndereco) ? editEndereco : currentPedido.Endereco;
+        currentPedido.Observacoes = !string.IsNullOrWhiteSpace(editObservacoes) ? editObservacoes : currentPedido.Observacoes;
+        
         // persist payment-field edits locally as well
         if (!string.IsNullOrEmpty(editFormaPagamento)) currentPedido.FormaPagamento = editFormaPagamento;
         if (!string.IsNullOrEmpty(editFormaPagamento2)) currentPedido.FormaPagamento2 = editFormaPagamento2;
         if (editDataPagamentoPrazo.HasValue) currentPedido.DataPagamentoPrazo = editDataPagamentoPrazo;
         if (editDataPagamentoPrazo2.HasValue) currentPedido.DataPagamentoPrazo2 = editDataPagamentoPrazo2;
+        if (editValorPago1.HasValue) currentPedido.ValorPago1 = editValorPago1;
+        if (editValorPago2.HasValue) currentPedido.ValorPago2 = editValorPago2;
+
+        // ✅ Log para debug - verificar valores DEPOIS de salvar
+        try 
+        { 
+            await JS.InvokeVoidAsync("console.log", $"SalvarEdicoes DEPOIS: Telefone={currentPedido.Telefone ?? "(null)"}, Observacoes={currentPedido.Observacoes ?? "(null)"}"); 
+        } 
+        catch { }
 
         // also update in list
         var pedido = pedidosHoje.FirstOrDefault(p => p.Id == currentPedido.Id);
@@ -897,6 +1019,8 @@ else
             pedido.Telefone = currentPedido.Telefone;
             pedido.Endereco = currentPedido.Endereco;
             pedido.Observacoes = currentPedido.Observacoes;
+            if (editValorPago1.HasValue) pedido.ValorPago1 = editValorPago1;
+            if (editValorPago2.HasValue) pedido.ValorPago2 = editValorPago2;
         }
 
         isEditingPedido = false;
@@ -1168,6 +1292,8 @@ else
             editFormaPagamento2 = currentPedido.FormaPagamento2;
             editDataPagamentoPrazo = currentPedido.DataPagamentoPrazo;
             editDataPagamentoPrazo2 = currentPedido.DataPagamentoPrazo2;
+            editValorPago1 = currentPedido.ValorPago1;
+            editValorPago2 = currentPedido.ValorPago2;
         }
         showPedidoModal = true;
         StateHasChanged();

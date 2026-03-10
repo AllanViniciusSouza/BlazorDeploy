@@ -9,7 +9,7 @@
 <div id="produtos-barcode-scanner" style="display:none;"></div>
 
 <div class="d-flex align-items-center justify-content-between mb-3">
-    <div>
+    <div class="d-flex gap-2 flex-wrap">
         <button class="btn btn-sm @(mostrarZeradosPrimeiro ? "btn-warning" : "btn-outline-warning")" 
                 title="@(mostrarZeradosPrimeiro ? "Mostrando produtos zerados primeiro" : "Mostrar produtos zerados primeiro")" 
                 @onclick="ToggleMostrarZeradosPrimeiro">
@@ -22,6 +22,43 @@
                 <text>Zerados Primeiro</text>
             }
         </button>
+        
+        <button class="btn btn-sm @(mostrarTodos ? "btn-info" : "btn-outline-info")" 
+                title="@(mostrarTodos ? "Mostrando TODOS os produtos" : "Mostrar todos os produtos (incluindo indisponíveis)")" 
+                @onclick="ToggleMostrarTodos">
+            @if (mostrarTodos)
+            {
+                <text>✓ Mostrar Todos</text>
+            }
+            else
+            {
+                <text>Mostrar Todos</text>
+            }
+        </button>
+        
+        <button class="btn btn-sm @(mostrarApenasIndisponiveis ? "btn-danger" : "btn-outline-danger")" 
+                title="@(mostrarApenasIndisponiveis ? "Mostrando apenas indisponíveis" : "Mostrar apenas produtos indisponíveis")" 
+                @onclick="ToggleMostrarApenasIndisponiveis">
+            @if (mostrarApenasIndisponiveis)
+            {
+                <text>✓ Apenas Indisponíveis</text>
+            }
+            else
+            {
+                <text>Apenas Indisponíveis</text>
+            }
+        </button>
+        
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dropdownOrdenacao" data-bs-toggle="dropdown" aria-expanded="false">
+                Ordenar: @GetOrdenacaoTexto()
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="dropdownOrdenacao">
+                <li><a class="dropdown-item @(tipoOrdenacao == TipoOrdenacao.Alfabetica ? "active" : "")" href="#" @onclick="() => SetOrdenacao(TipoOrdenacao.Alfabetica)" @onclick:preventDefault>Alfabética (A-Z)</a></li>
+                <li><a class="dropdown-item @(tipoOrdenacao == TipoOrdenacao.UltimosAdicionados ? "active" : "")" href="#" @onclick="() => SetOrdenacao(TipoOrdenacao.UltimosAdicionados)" @onclick:preventDefault>Últimos Adicionados</a></li>
+                <li><a class="dropdown-item @(tipoOrdenacao == TipoOrdenacao.ZeradosPrimeiro ? "active" : "")" href="#" @onclick="() => SetOrdenacao(TipoOrdenacao.ZeradosPrimeiro)" @onclick:preventDefault>Zerados Primeiro</a></li>
+            </ul>
+        </div>
     </div>
     <div class="d-flex align-items-center">
         <button class="btn btn-success btn-sm me-2" title="Adicionar novo produto" @onclick="MostrarFormulario" aria-label="Adicionar produto">+</button>
@@ -41,6 +78,35 @@
         <input class="form-control" @bind="searchTerm" @oninput="Search" placeholder="Digite nome ou código" />
     </div>
 </div>
+
+@* Filtro de Categorias *@
+@if (categorias != null && categorias.Any() && string.IsNullOrWhiteSpace(searchTerm))
+{
+    <div class="mb-3">
+        <label class="form-label fw-bold">Filtrar por Categoria</label>
+        <div class="d-flex flex-wrap gap-2">
+            @if (selectedCategoriaId == null)
+            {
+                <button class="btn btn-sm btn-secondary" disabled>Todas as Categorias</button>
+                @foreach (var cat in categorias.OrderBy(c => c.Nome))
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectCategoria(cat.Id)">
+                        @cat.Nome
+                    </button>
+                }
+            }
+            else
+            {
+                <button class="btn btn-sm btn-primary">
+                    @categorias.FirstOrDefault(c => c.Id == selectedCategoriaId)?.Nome
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnSelectCategoria(null)">
+                    Limpar Filtro
+                </button>
+            }
+        </div>
+    </div>
+}
 
 @* Brand quick-filter grouped by initial letter (from CaixaPage) *@
 @if (marcas != null && marcas.Any() && string.IsNullOrWhiteSpace(searchTerm))
@@ -178,7 +244,15 @@
         @foreach (var produto in filteredProdutos)
         {
             <div class="col">
-                <div class="card bg-dark text-white h-100 position-relative" style="cursor:pointer;" @onclick="@(() => EditRowClicked(produto.Id))">
+                <div class="card @(produto.Disponivel ? "bg-dark" : "bg-secondary") text-white h-100 position-relative @(produto.Disponivel ? "" : "opacity-75")" style="cursor:pointer;" @onclick="@(() => EditRowClicked(produto.Id))">
+                    @* Badge "INDISPONÍVEL" para produtos não disponíveis *@
+                @*     @if (!produto.Disponivel)
+                    {
+                        <div class="position-absolute top-0 start-0 m-2">
+                            <span class="badge bg-danger">INDISPONÍVEL</span>
+                        </div>
+                    } *@
+                    
                     @* small delete X in top-right; stopPropagation so clicking it doesn't open edit *@
                     <button class="btn btn-sm btn-outline-light position-absolute" style="top:6px; right:6px; padding:0.15rem 0.4rem; font-size:0.9rem; line-height:1;" @onclick:stopPropagation="true" @onclick="() => ExcluirProduto(produto.Id)">×</button>
 
@@ -267,9 +341,16 @@
 </div>
 
 @code {
-    private DotNetObjectReference<object>? _dotNetRefProdutos;
-    [JSInvokable]
-    public async Task OnBarcodeScanned_Produtos(string code)
+private enum TipoOrdenacao
+{
+    Alfabetica,
+    UltimosAdicionados,
+    ZeradosPrimeiro
+}
+    
+private DotNetObjectReference<object>? _dotNetRefProdutos;
+[JSInvokable]
+public async Task OnBarcodeScanned_Produtos(string code)
     {
         // put code into search field and trigger search
         searchTerm = code;
@@ -306,35 +387,140 @@
     private List<Produto> filteredProdutos = new();
     private List<string> marcas = new();
     private string? selectedMarca = null;
+    private int? selectedCategoriaId = null;
     private List<string> sizesForMarca = new();
     private string? selectedSize = null;
     private List<string> flavorsForSelection = new();
     private Dictionary<string, Produto> flavorToProduct = new(StringComparer.OrdinalIgnoreCase);
     private List<Produto> allProdutos = new();
     private bool mostrarZeradosPrimeiro = false;
+    private bool mostrarTodos = false;
+    private bool mostrarApenasIndisponiveis = false;
+    private TipoOrdenacao tipoOrdenacao = TipoOrdenacao.Alfabetica;
+    
+    private string GetOrdenacaoTexto()
+    {
+        return tipoOrdenacao switch
+        {
+            TipoOrdenacao.Alfabetica => "Alfabética",
+            TipoOrdenacao.UltimosAdicionados => "Últimos Adicionados",
+            TipoOrdenacao.ZeradosPrimeiro => "Zerados Primeiro",
+            _ => "Alfabética"
+        };
+    }
+    
+    private void SetOrdenacao(TipoOrdenacao tipo)
+    {
+        tipoOrdenacao = tipo;
+        
+        // Se selecionar "Zerados Primeiro" no dropdown, desativar o botão antigo
+        if (tipo == TipoOrdenacao.ZeradosPrimeiro)
+        {
+            mostrarZeradosPrimeiro = false;
+        }
+        
+        AplicarOrdenacao();
+    }
     
     private void ToggleMostrarZeradosPrimeiro()
     {
         mostrarZeradosPrimeiro = !mostrarZeradosPrimeiro;
+        
+        // Quando ativar o botão, ajustar o dropdown
+        if (mostrarZeradosPrimeiro)
+        {
+            tipoOrdenacao = TipoOrdenacao.ZeradosPrimeiro;
+        }
+        else
+        {
+            tipoOrdenacao = TipoOrdenacao.Alfabetica;
+        }
+        
         AplicarOrdenacao();
+    }
+    
+    private void ToggleMostrarTodos()
+    {
+        mostrarTodos = !mostrarTodos;
+        
+        // Se ativar "Mostrar Todos", desativar "Apenas Indisponíveis"
+        if (mostrarTodos)
+        {
+            mostrarApenasIndisponiveis = false;
+        }
+        
+        // Recarregar a lista completa
+        _ = RecarregarProdutos();
+    }
+    
+    private void ToggleMostrarApenasIndisponiveis()
+    {
+        mostrarApenasIndisponiveis = !mostrarApenasIndisponiveis;
+        
+        // Se ativar "Apenas Indisponíveis", desativar "Mostrar Todos"
+        if (mostrarApenasIndisponiveis)
+        {
+            mostrarTodos = false;
+        }
+        
+        // Recarregar a lista completa
+        _ = RecarregarProdutos();
+    }
+    
+    private async Task RecarregarProdutos()
+    {
+        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
+        
+        if (mostrarTodos)
+        {
+            // Mostrar TODOS os produtos (disponíveis e indisponíveis)
+            filteredProdutos = (todosProdutos ?? new List<Produto>()).ToList();
+            allProdutos = filteredProdutos.ToList();
+        }
+        else if (mostrarApenasIndisponiveis)
+        {
+            // Mostrar APENAS produtos indisponíveis
+            filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => !p.Disponivel).ToList();
+            allProdutos = filteredProdutos.ToList();
+        }
+        else
+        {
+            // Filtrar apenas produtos disponíveis (comportamento padrão)
+            filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
+            allProdutos = filteredProdutos.ToList();
+        }
+        
+        AplicarOrdenacao();
+        PopulateMarcasFromProdutos(allProdutos);
+        StateHasChanged();
     }
 
     private void AplicarOrdenacao()
     {
-        if (mostrarZeradosPrimeiro)
+        switch (tipoOrdenacao)
         {
-            // Produtos com PrecoQuente e PrecoGelada zerados primeiro
-            filteredProdutos = filteredProdutos
-                .OrderByDescending(p => (p.PrecoQuente == 0 && p.PrecoGelada == 0) ? 1 : 0)
-                .ThenBy(p => p.Nome)
-                .ToList();
-        }
-        else
-        {
-            // Ordem alfabética normal
-            filteredProdutos = filteredProdutos
-                .OrderBy(p => p.Nome)
-                .ToList();
+            case TipoOrdenacao.Alfabetica:
+                // Ordem alfabética normal
+                filteredProdutos = filteredProdutos
+                    .OrderBy(p => p.Nome)
+                    .ToList();
+                break;
+                
+            case TipoOrdenacao.UltimosAdicionados:
+                // Ordenar por ID decrescente (assumindo que IDs maiores = mais recentes)
+                // Se o backend tiver uma propriedade DataCriacao, usar aquela seria melhor
+                filteredProdutos = filteredProdutos
+                    .OrderByDescending(p => p.Id)
+                    .ToList();
+                break;
+                
+            case TipoOrdenacao.ZeradosPrimeiro:
+                // Produtos com PrecoQuente e PrecoGelada zerados primeiro
+                filteredProdutos = filteredProdutos
+                    .OrderByDescending(p => (p.PrecoQuente == 0 && p.PrecoGelada == 0) ? 1 : 0)
+                    .ThenBy(p => p.Nome)
+                    .ToList();
+                break;
         }
     }
     
@@ -411,14 +597,20 @@
         // filter product grid immediately for this brand
         if (string.IsNullOrEmpty(marca))
         {
-            // reset to all (apenas disponíveis)
-            filteredProdutos = allProdutos.ToList();
+            // reset to all (apenas disponíveis) - aplicar filtro de categoria se houver
+            filteredProdutos = selectedCategoriaId.HasValue 
+                ? allProdutos.Where(p => p.CategoriaId == selectedCategoriaId.Value).ToList()
+                : allProdutos.ToList();
             AplicarOrdenacao();
             return;
         }
 
         var sizes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in allProdutos)
+        var produtosBase = selectedCategoriaId.HasValue 
+            ? allProdutos.Where(p => p.CategoriaId == selectedCategoriaId.Value).ToList()
+            : allProdutos;
+            
+        foreach (var p in produtosBase)
         {
             if (BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca))
             {
@@ -429,9 +621,38 @@
         if (!sizes.Any()) sizes.UnionWith(new[] { "600ml", "350ml", "1L", "2L", "269ml", "dose" });
         sizesForMarca = sizes.OrderBy(s => s).ToList();
 
-        // filter product grid to this brand
-        filteredProdutos = allProdutos.Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca)).ToList();
+        // filter product grid to this brand (e categoria se selecionada)
+        filteredProdutos = produtosBase.Where(p => BrandMatch((p.Nome ?? string.Empty) + " " + (p.Detalhe ?? string.Empty), marca)).ToList();
         AplicarOrdenacao();
+    }
+
+    private void OnSelectCategoria(int? categoriaId)
+    {
+        selectedCategoriaId = categoriaId;
+        
+        // Limpar filtros de marca quando mudar categoria
+        selectedMarca = null;
+        sizesForMarca.Clear();
+        selectedSize = null;
+        flavorsForSelection.Clear();
+        flavorToProduct.Clear();
+
+        // Aplicar filtro de categoria
+        if (categoriaId.HasValue)
+        {
+            filteredProdutos = allProdutos.Where(p => p.CategoriaId == categoriaId.Value).ToList();
+        }
+        else
+        {
+            filteredProdutos = allProdutos.ToList();
+        }
+        
+        AplicarOrdenacao();
+        
+        // Atualizar marcas disponíveis para a categoria selecionada
+        PopulateMarcasFromProdutos(filteredProdutos);
+        
+        StateHasChanged();
     }
 
     private string? ExtractSizeFromName(string? text)
@@ -589,12 +810,7 @@
             return;
         }
 
-        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-        // ✅ Filtrar apenas produtos disponíveis
-        filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
-        allProdutos = filteredProdutos.ToList();
-        AplicarOrdenacao();
-        PopulateMarcasFromProdutos(allProdutos);
+        await RecarregarProdutos();
 
         var (cats, _) = await _apiService.GetCategorias();
         categorias = cats ?? new List<Categoria>();
@@ -605,8 +821,28 @@
         searchTerm = e.Value?.ToString() ?? string.Empty;
 
         var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-        // ✅ Filtrar apenas produtos disponíveis
-        var all = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
+        
+        // Aplicar filtro de disponibilidade baseado nos toggles
+        List<Produto> all;
+        
+        if (mostrarTodos)
+        {
+            all = (todosProdutos ?? new List<Produto>()).ToList();
+        }
+        else if (mostrarApenasIndisponiveis)
+        {
+            all = (todosProdutos ?? new List<Produto>()).Where(p => !p.Disponivel).ToList();
+        }
+        else
+        {
+            all = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
+        }
+
+        // Aplicar filtro de categoria se houver
+        if (selectedCategoriaId.HasValue)
+        {
+            all = all.Where(p => p.CategoriaId == selectedCategoriaId.Value).ToList();
+        }
 
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -656,11 +892,8 @@
             await JS.InvokeVoidAsync("alert", "Erro ao cadastrar produto: resposta nula do servidor.");
             return;
         }
-        var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-        // ✅ Filtrar apenas produtos disponíveis
-        filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
-        allProdutos = filteredProdutos.ToList();
-        AplicarOrdenacao();
+        
+        await RecarregarProdutos();
         exibirFormulario = false;
     }
 
@@ -672,11 +905,7 @@
         var (sucesso, error) = await _apiService.ExcluirProdutoAsync(id);
         if (sucesso)
         {
-            var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-            // ✅ Filtrar apenas produtos disponíveis
-            filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
-            allProdutos = filteredProdutos.ToList();
-            AplicarOrdenacao();
+            await RecarregarProdutos();
         }
         else
         {
@@ -701,12 +930,7 @@
         var sucesso = await _apiService.AtualizarProduto(produto.Id, produto);
         if (sucesso)
         {
-            // Recarregar a lista para refletir a mudança
-            var (todosProdutos, _) = await _apiService.GetTodosProdutos();
-            // ✅ Filtrar apenas produtos disponíveis
-            filteredProdutos = (todosProdutos ?? new List<Produto>()).Where(p => p.Disponivel).ToList();
-            allProdutos = filteredProdutos.ToList();
-            AplicarOrdenacao();
+            await RecarregarProdutos();
             
             var statusTexto = novoStatus ? "disponível" : "indisponível";
             await JS.InvokeVoidAsync("alert", $"Produto '{produto.Nome}' marcado como {statusTexto}.");

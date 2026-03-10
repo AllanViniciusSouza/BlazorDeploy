@@ -26,6 +26,7 @@ else
     <Accordion>
         @foreach (var comanda in ComandasFiltradas)
         {
+            var temItens = comanda.Itens?.Any() == true;
             <div class="mb-4 p-3 border rounded shadow-sm"
                  style="background-color: @(comanda.DataAbertura.AddDays(7) < DateTime.Now
                                 ? "#dc3545"
@@ -36,15 +37,31 @@ else
                     <AccordionHeader @onclick="() => CarregarItens(comanda)">
                         <div class="w-100">
                             <div class="w-100 d-flex justify-content-between align-items-center">
-                                <div class="fw-bold fs-5">Comanda <span class="text-decoration-underline">@comanda.Nome</span></div>
-                                <div class="text-muted">@comanda.DataAbertura.ToString("dd/MM/yyyy HH:mm")</div>
+                                <div class="fw-bold fs-5">
+                                    Comanda <span class="text-decoration-underline">@comanda.Nome</span>
+                                    @if (!temItens)
+                                    {
+                                        <span class="badge bg-warning text-dark ms-2">SEM ITENS</span>
+                                    }
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="text-muted">@comanda.DataAbertura.ToString("dd/MM/yyyy HH:mm")</div>
+                                    @if (!temItens)
+                                    {
+                                        <button class="btn btn-danger btn-sm" 
+                                                @onclick="() => DeletarComandaVazia(comanda.Nome)" 
+                                                @onclick:stopPropagation="true"
+                                                title="Excluir comanda vazia">
+                                            🗑️ Excluir
+                                        </button>
+                                    }
+                                </div>
                             </div>
                             <div class="fw-bold">Valor Total: R$ @comanda.ValorTotal</div>
-
                         </div>
                     </AccordionHeader>
 
-@if (comanda.Itens?.Any() == true)
+@if (temItens)
         {
                     <AccordionBody>
                         <div>
@@ -82,39 +99,66 @@ else
                                 }
                             </ul>
 
-                            <div class="mt-3">
-                                <label for="formaPagamento">Forma de Pagamento:</label>
-                                <select id="formaPagamento" class="form-select" @bind="comanda.FormaPagamento">
-                                    <option value="">Selecione uma forma de pagamento</option>
-                                    <option value="Dinheiro">Dinheiro</option>
-                                    <option value="Credito">Crédito</option>
-                                    <option value="Debito">Débito</option>
-                                    <option value="Pix">Pix</option>
-                                </select>
-                            </div>
+                            <div class="row g-2 mt-2">
+                                <div class="col-md-6">
+                                    <label for="formaPagamento" class="form-label small">Forma de Pagamento:</label>
+                                    <select id="formaPagamento" class="form-select form-select-sm" @bind="comanda.FormaPagamento">
+                                        <option value="">Selecione...</option>
+                                        <option value="Dinheiro">Dinheiro</option>
+                                        <option value="Credito">Crédito</option>
+                                        <option value="Debito">Débito</option>
+                                        <option value="Pix">Pix</option>
+                                    </select>
+                                </div>
 
-                            <div class="mt-3">
-                                <label>Valor Final da Comanda:</label>
-                                <input type="number" class="form-control" step="1.00" @bind="comanda.ValorTotal" />
+                                <div class="col-md-6">
+                                    <label class="form-label small">Valor Final:</label>
+                                    <input type="number" class="form-control form-control-sm" step="1.00" @bind="comanda.ValorTotal" />
+                                </div>
                             </div>
 
                             @if (comanda.FormaPagamento == "Dinheiro")
                             {
-                                <div class="mt-3">
-                                    <label>Valor Recebido:</label>
-                                    <input type="number" class="form-control" step="1.00" @bind="comanda.ValorRecebido" @oninput="(e) => CalcularTroco(comanda)" />
-                                </div>
-                                <div class="mt-2 fw-bold">
-                                    Troco: R$ @(comanda.ValorRecebido - comanda.ValorTotal > 0
-                        ? string.Format("{0:N2}", comanda.ValorRecebido - comanda.ValorTotal)
-                        : "0,00")
+                                <div class="row g-2 mt-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Valor Recebido:</label>
+                                        <input type="number" class="form-control form-control-sm" step="1.00" @bind="comanda.ValorRecebido" @oninput="(e) => CalcularTroco(comanda)" />
+                                    </div>
+                                    <div class="col-md-6 d-flex align-items-end">
+                                        <div class="fw-bold small">
+                                            Troco: R$ @(comanda.ValorRecebido - comanda.ValorTotal > 0
+                                ? string.Format("{0:N2}", comanda.ValorRecebido - comanda.ValorTotal)
+                                : "0,00")
+                                        </div>
+                                    </div>
                                 </div>
                             }
 
-                            <button class="btn btn-success w-100 mt-3" @onclick="() => FinalizarComanda(comanda)">Finalizar Comanda</button>
-                            <button class="btn btn-danger w-100 mt-3" @onclick="() => DeletarComanda(comanda.Nome)">Excluir Comanda</button>
+                            <div class="d-flex gap-2 mt-3 flex-wrap">
+                                <button class="btn btn-primary btn-sm flex-fill" @onclick="() => AdicionarItensNaComanda(comanda)" title="Adicionar itens à comanda">
+                                    ➕ Adicionar
+                                </button>
+                                <button class="btn btn-success btn-sm flex-fill" @onclick="() => FinalizarComanda(comanda)" title="Finalizar comanda">
+                                    ✅ Finalizar
+                                </button>
+                                <button class="btn btn-danger btn-sm flex-fill" @onclick="() => DeletarComanda(comanda.Nome)" title="Excluir comanda">
+                                    🗑️ Excluir
+                                </button>
+                            </div>
                         </div>
                     </AccordionBody>
+                    }
+                    else
+                    {
+                        <AccordionBody>
+                            <div class="alert alert-warning text-center">
+                                <strong>⚠️ Esta comanda não possui itens!</strong>
+                                <p class="mb-2 mt-2">Comandas vazias podem ser excluídas clicando no botão acima ou aqui:</p>
+                                <button class="btn btn-danger" @onclick="() => DeletarComandaVazia(comanda.Nome)">
+                                    🗑️ Excluir Comanda Vazia
+                                </button>
+                            </div>
+                        </AccordionBody>
                     }
                 </AccordionItem>
             </div>
@@ -167,25 +211,72 @@ else
     private async Task DeletarComanda(string nome)
     {
         bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja apagar a comanda?");
-        if (confirmacao)
+        if (!confirmacao) return;
+        
+        try
         {
+            await JS.InvokeVoidAsync("console.log", $"Tentando excluir comanda com itens: {nome}");
+            
+            // Devolver itens ao estoque
             var itensNaComanda = await GetItensComanda(nome);
-            if (itensNaComanda != null)
+            if (itensNaComanda != null && itensNaComanda.Any())
             {
                 foreach (var item in itensNaComanda)
                 {
                     await EntradaNoEstoque(item);
                 }
             }
+            
+            // Excluir a comanda
             bool sucesso = await _apiService.DeletarComanda(nome);
+            
             if (sucesso)
             {
                 ComandasAbertas.RemoveAll(c => c.Nome == nome);
+                await ShowAlert($"Comanda '{nome}' excluída com sucesso!");
+                StateHasChanged();
             }
             else
             {
-                await ShowAlert("Erro ao excluir a comanda.");
+                await JS.InvokeVoidAsync("console.error", $"Falha ao excluir comanda '{nome}' - API retornou false");
+                await ShowAlert($"Erro ao excluir a comanda '{nome}'.\n\nOs itens foram devolvidos ao estoque, mas a comanda não foi removida do banco de dados.");
             }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Exception ao excluir comanda: {ex.Message}");
+            await ShowAlert($"Erro ao excluir a comanda '{nome}':\n\n{ex.Message}");
+        }
+    }
+
+    private async Task DeletarComandaVazia(string nome)
+    {
+        bool confirmacao = await JS.InvokeAsync<bool>("confirm", $"Tem certeza que deseja excluir a comanda '{nome}' sem itens?");
+        if (!confirmacao) return;
+        
+        try
+        {
+            // Log no console do navegador
+            await JS.InvokeVoidAsync("console.log", $"Tentando excluir comanda vazia: {nome}");
+            
+            bool sucesso = await _apiService.DeletarComanda(nome);
+            
+            if (sucesso)
+            {
+                ComandasAbertas.RemoveAll(c => c.Nome == nome);
+                await ShowAlert($"Comanda '{nome}' excluída com sucesso!");
+                StateHasChanged();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.error", $"Falha ao excluir comanda '{nome}' - API retornou false");
+                await ShowAlert($"Erro ao excluir a comanda '{nome}'.\n\nVerifique se:\n- A comanda existe no banco de dados\n- Você tem permissão para excluir\n- O backend está rodando");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Exception ao excluir comanda: {ex.Message}");
+            await ShowAlert($"Erro ao excluir a comanda '{nome}':\n\n{ex.Message}");
         }
     }
 
@@ -364,6 +455,26 @@ else
     private async Task ShowAlert(string message)
     {
         await JS.InvokeVoidAsync("alert", message);
+    }
+
+    private async Task AdicionarItensNaComanda(Comanda comanda)
+    {
+        try
+        {
+            // Salvar dados individuais da comanda no sessionStorage
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaNome", comanda.Nome ?? string.Empty);
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaTelefone", comanda.Telefone ?? string.Empty);
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaEndereco", comanda.Endereco ?? string.Empty);
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaObservacoes", $"Comanda #{comanda.Nome} - Aberta em {comanda.DataAbertura:dd/MM/yyyy HH:mm}");
+
+            // Redirecionar para a página do Caixa
+            Navigation.NavigateTo("/caixa");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Erro ao adicionar itens na comanda: {ex.Message}");
+            await ShowAlert($"Erro ao redirecionar para o caixa: {ex.Message}");
+        }
     }
 }
 

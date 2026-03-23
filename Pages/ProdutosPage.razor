@@ -8,6 +8,21 @@
 
 <div id="produtos-barcode-scanner" style="display:none;"></div>
 
+@* Toast de feedback de cópia *@
+@if (showCopyToast)
+{
+    <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 9999; margin-top: 20px;">
+        <div class="toast show bg-success text-white" role="alert">
+            <div class="toast-body d-flex align-items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                    <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+                </svg>
+                <strong>Copiado!</strong>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div class="d-flex gap-2 flex-wrap">
         <button class="btn btn-sm @(mostrarZeradosPrimeiro ? "btn-warning" : "btn-outline-warning")" 
@@ -284,11 +299,21 @@
                         {
                             <div class="d-flex flex-column">
                                 <div>
-                                    <div class="fw-bold" style="white-space:normal; word-break:break-word; font-size:0.95rem;">
+                                    <div class="fw-bold" 
+                                         style="white-space:normal; word-break:break-word; font-size:0.95rem; cursor:pointer;" 
+                                         title="Clique para copiar o nome"
+                                         @onclick="async () => await CopiarParaClipboard(produto.Nome ?? string.Empty)"
+                                         @onclick:stopPropagation="true">
                                         @produto.Nome
                                         @if (!string.IsNullOrWhiteSpace(produto.Barcode))
                                         {
-                                            <span class="text-white-50" style="font-size:0.85rem; margin-left:6px;">- @produto.Barcode</span>
+                                            <span class="text-white-50" 
+                                                  style="font-size:0.85rem; margin-left:6px; cursor:pointer;" 
+                                                  title="Clique para copiar o código"
+                                                  @onclick="async () => await CopiarParaClipboard(produto.Barcode ?? string.Empty)"
+                                                  @onclick:stopPropagation="true">
+                                                - @produto.Barcode
+                                            </span>
                                         }
                                     </div>
                                 </div>
@@ -397,6 +422,7 @@ public async Task OnBarcodeScanned_Produtos(string code)
     private bool mostrarTodos = false;
     private bool mostrarApenasIndisponiveis = false;
     private TipoOrdenacao tipoOrdenacao = TipoOrdenacao.Alfabetica;
+    private bool showCopyToast = false;
     
     private string GetOrdenacaoTexto()
     {
@@ -1055,5 +1081,28 @@ public async Task OnBarcodeScanned_Produtos(string code)
     {
         var s = e?.Value?.ToString() ?? string.Empty;
         editPrecoGeladaInputs[produtoId] = s;
+    }
+
+    private async Task CopiarParaClipboard(string texto)
+    {
+        if (string.IsNullOrEmpty(texto)) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", texto);
+            
+            // Mostrar toast de sucesso
+            showCopyToast = true;
+            StateHasChanged();
+            
+            // Esconder após 1 segundo
+            await Task.Delay(1000);
+            showCopyToast = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Erro ao copiar: {ex.Message}");
+        }
     }
 }

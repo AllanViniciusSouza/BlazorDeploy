@@ -53,6 +53,10 @@
                 <label class="form-check-label" for="status_a_prazo">A Prazo</label>
             </div>
             <div class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="radio" name="statusFilter" id="status_cobrar_hoje" value="Cobrar Hoje" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Cobrar Hoje", StringComparison.OrdinalIgnoreCase))" />
+                <label class="form-check-label" for="status_cobrar_hoje">Cobrar Hoje</label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="radio" name="statusFilter" id="status_atrasados" value="Atrasados" @onchange="@(e => SetStatusFilter(e.Value?.ToString()))" checked="@(string.Equals(statusFilter, "Atrasados", StringComparison.OrdinalIgnoreCase))" />
                 <label class="form-check-label" for="status_atrasados">Atrasados</label>
             </div>
@@ -130,26 +134,23 @@
     }
 </div>
 
-@* Search by client name - only visible when "A Prazo" filter is active *@
-@if (string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase))
-{
-    <div class="mb-3">
-        <div class="card shadow-sm p-3">
-            <label class="form-label fw-bold mb-2">Pesquisar Cliente</label>
-            <input type="text" 
-                   class="form-control" 
-                   placeholder="Digite o nome do cliente..." 
-                   value="@searchClienteNome"
-                   @oninput="OnClienteSearchInput" />
-            @if (!string.IsNullOrWhiteSpace(searchClienteNome))
-            {
-                <small class="text-muted mt-1">
-                    Mostrando @pedidosExibidosFiltradosPorNome.Count() de @todosAPrazo.Count pedidos
-                </small>
-            }
-        </div>
+@* Search by client name - visible in all filters *@
+<div class="mb-3">
+    <div class="card shadow-sm p-3">
+        <label class="form-label fw-bold mb-2">Pesquisar Cliente</label>
+        <input type="text" 
+               class="form-control" 
+               placeholder="Digite o nome do cliente..." 
+               value="@searchClienteNome"
+               @oninput="OnClienteSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchClienteNome))
+        {
+            <small class="text-muted mt-1">
+                Mostrando @pedidosExibidosFiltradosPorNome.Count() pedido(s)
+            </small>
+        }
     </div>
-}
+</div>
 
 @if (pedidosHoje == null || !pedidosHoje.Any())
 {
@@ -468,16 +469,37 @@ else
 {
     <div>
         @* Build groups in requested order and render separators *@
-        @{
-            var displayed = pedidosExibidosFiltradosPorNome.Where(p => !(string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) && dataSelecionada.Date != DateTime.Today)).ToList();
+          @{
+              var displayed = pedidosExibidosFiltradosPorNome.Where(p => !(string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) && dataSelecionada.Date != DateTime.Today)).ToList();
 
-            var emEntrega = displayed.Where(p => string.Equals(EffectiveStatus(p), "Em entrega", StringComparison.OrdinalIgnoreCase)).ToList();
-            var retirada = displayed.Where(p => string.Equals(EffectiveStatus(p), "Retirada", StringComparison.OrdinalIgnoreCase)).ToList();
-            var aPrazo = displayed.Where(p => string.Equals(EffectiveStatus(p), "A Prazo", StringComparison.OrdinalIgnoreCase)).ToList();
-            var finalizado = displayed.Where(p => string.Equals(EffectiveStatus(p), "Finalizado", StringComparison.OrdinalIgnoreCase)).ToList();
-            // any others (not in the four groups)
-            var others = displayed.Except(emEntrega).Except(retirada).Except(aPrazo).Except(finalizado).ToList();
-        }
+              // ✅ Se filtro específico está ativo, mostrar apenas essa seção
+              var isFiltroEspecifico = !string.IsNullOrEmpty(statusFilter);
+              
+              var emEntrega = (!isFiltroEspecifico || string.Equals(statusFilter, "Em entrega", StringComparison.OrdinalIgnoreCase)) 
+                  ? displayed.Where(p => string.Equals(EffectiveStatus(p), "Em entrega", StringComparison.OrdinalIgnoreCase)).ToList() 
+                  : new List<Pedido>();
+              
+              var retirada = (!isFiltroEspecifico || string.Equals(statusFilter, "Retirada", StringComparison.OrdinalIgnoreCase)) 
+                  ? displayed.Where(p => string.Equals(EffectiveStatus(p), "Retirada", StringComparison.OrdinalIgnoreCase)).ToList() 
+                  : new List<Pedido>();
+              
+              // ✅ Não mostrar seção "A Prazo" quando filtro "Cobrar Hoje" está ativo
+              var aPrazo = (!isFiltroEspecifico || string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase)) 
+                  ? displayed.Where(p => string.Equals(EffectiveStatus(p), "A Prazo", StringComparison.OrdinalIgnoreCase)).ToList() 
+                  : new List<Pedido>();
+              
+              // ✅ Mostrar seção "Cobrar Hoje" APENAS quando o filtro está ativo
+              var cobrarHoje = string.Equals(statusFilter, "Cobrar Hoje", StringComparison.OrdinalIgnoreCase) 
+                  ? displayed.ToList() 
+                  : new List<Pedido>();
+              
+              var finalizado = (!isFiltroEspecifico || string.Equals(statusFilter, "Finalizado", StringComparison.OrdinalIgnoreCase)) 
+                  ? displayed.Where(p => string.Equals(EffectiveStatus(p), "Finalizado", StringComparison.OrdinalIgnoreCase)).ToList() 
+                  : new List<Pedido>();
+              
+              // any others (not in the groups)
+              var others = displayed.Except(emEntrega).Except(retirada).Except(aPrazo).Except(cobrarHoje).Except(finalizado).ToList();
+          }
 
         @if (emEntrega.Any())
         {
@@ -682,6 +704,89 @@ else
                                 @if (comanda.DataPagamentoPrazo.HasValue)
                                 {
                                     <p class="card-text small">Data Pagamento: @comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy")</p>
+                                }
+                                @if (!string.IsNullOrEmpty(comanda.Observacoes))
+                                {
+                                    <p class="card-text small">Obs: @comanda.Observacoes</p>
+                                }
+                                <div class="mt-3 d-flex gap-2">
+                                    @if (!string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ImprimirPedido(comanda.Id)">Imprimir</button>
+                                    }
+                                    @{
+                                        var isCancelled = string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase);
+                                        var isFinalizado = string.Equals(comanda.Status, "Finalizado", StringComparison.OrdinalIgnoreCase);
+                                        var hasAPrazoBtn = string.Equals(comanda.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                                                       || string.Equals(comanda.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase);
+                                        var isRetiradaOrEntregaBtn = string.Equals(comanda.Status, "Retirada", StringComparison.OrdinalIgnoreCase)
+                                                                 || string.Equals(comanda.Status, "Em entrega", StringComparison.OrdinalIgnoreCase);
+
+                                        var showFinalize = !isCancelled && ((isFinalizado && hasAPrazoBtn) || (!isFinalizado && (hasAPrazoBtn || isRetiradaOrEntregaBtn)));
+                                    }
+                                    @if (showFinalize)
+                                    {
+                                        <button class="btn btn-sm btn-success" @onclick:stopPropagation="true" @onclick="() => OpenFinalizeModal(comanda.Id)">Finalizar Pedido</button>
+                                    }
+                                    @if (!string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <button class="btn btn-sm btn-danger ms-auto" @onclick:stopPropagation="true" @onclick="() => ConfirmarCancelar(comanda.Id)">Cancelar</button>
+                                    }
+                                </div>
+                            </div>
+                             </div>
+                    </div>
+                }
+            </div>
+            <hr />
+        }
+
+        @if (cobrarHoje.Any())
+        {
+            <h5 class="mt-3 text-warning">💰 Cobrar Hoje</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                @foreach (var comanda in cobrarHoje)
+                {
+                    <div class="col">
+                        <div class="card pedido-card bg-dark text-white @GetBorderClass(comanda)" style="cursor:pointer;" @onclick="() => ShowPedidoModal(comanda.Id)">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h5 class="card-title mb-1">
+                                            @{
+                                                var displayName = (!string.IsNullOrWhiteSpace(comanda.ClienteNome))
+                                                    ? comanda.ClienteNome
+                                                    : (string.Equals(comanda.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) ? "Avulso" : comanda.ClienteNome);
+
+                                                var hasAPrazo = string.Equals(comanda.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                                                               || string.Equals(comanda.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase);
+                                                var statusText = (string.Equals(comanda.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) && hasAPrazo)
+                                                    ? "A prazo"
+                                                    : (comanda.Status ?? "");
+                                            }
+                                            @displayName
+                                            <span class="badge @GetStatusBadgeClass(comanda) me-2">@statusText</span>
+                                        </h5>
+                                        <div class="text-white-50 small">@comanda.VendedorNome</div>
+                                    </div>
+                                <div class="text-end">
+                                        <div class="fs-6 text-success">R$ @comanda.ValorTotal.ToString("F2")</div>
+                                        <div class="text-white-50 small">@(comanda.DataPedido?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
+                                    </div>
+                                </div>
+
+                                <p class="card-text mt-2 mb-1">Pagamento: <strong>@comanda.FormaPagamento</strong> (@(comanda.ValorPago1?.ToString("F2") ?? "0.00"))</p>
+                                @if (!string.IsNullOrEmpty(comanda.FormaPagamento2))
+                                {
+                                    <p class="card-text small">Pagamento 2: @comanda.FormaPagamento2 (@(comanda.ValorPago2?.ToString("F2") ?? "0.00"))</p>
+                                }
+                                @if (comanda.DataPagamentoPrazo.HasValue)
+                                {
+                                    <p class="card-text small text-warning fw-bold">📅 Vence HOJE: @comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy")</p>
+                                }
+                                @if (comanda.DataPagamentoPrazo2.HasValue && comanda.DataPagamentoPrazo2.Value.Date == DateTime.Today)
+                                {
+                                    <p class="card-text small text-warning fw-bold">📅 Vence HOJE (2): @comanda.DataPagamentoPrazo2.Value.ToString("dd/MM/yyyy")</p>
                                 }
                                 @if (!string.IsNullOrEmpty(comanda.Observacoes))
                                 {
@@ -1094,6 +1199,8 @@ else
     private List<Pedido> todosNaoFinalizados = new();
     // TODOS os pedidos A Prazo (para o filtro "A Prazo")
     private List<Pedido> todosAPrazo = new();
+    // Pedidos A Prazo com data de pagamento HOJE (para o filtro "Cobrar Hoje")
+    private List<Pedido> pedidosCobrarHoje = new();
     private List<Pedido> pedidosHoje = new();
 
     private IEnumerable<Pedido> pedidosExibidos
@@ -1103,23 +1210,24 @@ else
             // ✅ Filtro "Atrasados": mostra TODOS os pedidos não finalizados de TODAS as datas
             if (string.Equals(statusFilter, "Atrasados", StringComparison.OrdinalIgnoreCase))
             {
-                // Retorna TODOS os pedidos não finalizados (Em entrega, A prazo, Retirada)
-                // inclusive do passado
                 return todosNaoFinalizados;
             }
             
             // ✅ Filtro "A Prazo": mostra TODOS os pedidos A Prazo de TODAS as datas
             if (string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase))
             {
-                // Retorna TODOS os pedidos A Prazo (finalizados ou não)
-                // inclusive do passado
                 return todosAPrazo;
+            }
+            
+            // ✅ Filtro "Cobrar Hoje": mostra pedidos A Prazo com data de pagamento HOJE
+            if (string.Equals(statusFilter, "Cobrar Hoje", StringComparison.OrdinalIgnoreCase))
+            {
+                return pedidosCobrarHoje;
             }
             
             // ✅ MOSTRAR APENAS pedidos criados na data selecionada (pedidosPorData)
             if (string.IsNullOrEmpty(statusFilter))
             {
-                // Retorna apenas os pedidos da data selecionada
                 return pedidosPorData;
             }
 
@@ -1131,16 +1239,15 @@ else
         }
     }
 
-    // ✅ Lista filtrada por nome de cliente (apenas quando filtro A Prazo está ativo)
+    // ✅ Lista filtrada por nome de cliente (funciona em qualquer filtro)
     private IEnumerable<Pedido> pedidosExibidosFiltradosPorNome
     {
         get
         {
             var basePedidos = pedidosExibidos;
             
-            // Se o filtro "A Prazo" está ativo E há um termo de busca
-            if (string.Equals(statusFilter, "A Prazo", StringComparison.OrdinalIgnoreCase) 
-                && !string.IsNullOrWhiteSpace(searchClienteNome))
+            // Se há um termo de busca, filtrar por nome de cliente
+            if (!string.IsNullOrWhiteSpace(searchClienteNome))
             {
                 var searchTerm = searchClienteNome.Trim();
                 return basePedidos.Where(p => 
@@ -1480,11 +1587,26 @@ else
                     (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
                 ).ToList();
+                
+                // ✅ Carregar pedidos A Prazo com data de pagamento HOJE para o filtro "Cobrar Hoje"
+                var hoje = DateTime.Today;
+                pedidosCobrarHoje = todos.Where(p => 
+                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                    (
+                        (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
+                         p.DataPagamentoPrazo.HasValue && 
+                         p.DataPagamentoPrazo.Value.Date == hoje) ||
+                        (string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
+                         p.DataPagamentoPrazo2.HasValue && 
+                         p.DataPagamentoPrazo2.Value.Date == hoje)
+                    )
+                ).ToList();
             }
             else
             {
                 todosNaoFinalizados = new List<Pedido>();
                 todosAPrazo = new List<Pedido>();
+                pedidosCobrarHoje = new List<Pedido>();
             }
 
             // pedidosHoje usa apenas pedidosPorData (pedidos da data selecionada)
@@ -1534,6 +1656,20 @@ else
                     !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
                     (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
+                
+                // ✅ Recarregar pedidos A Prazo com data de pagamento HOJE para o filtro "Cobrar Hoje"
+                var hoje = DateTime.Today;
+                pedidosCobrarHoje = todos.Where(p => 
+                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                    (
+                        (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
+                         p.DataPagamentoPrazo.HasValue && 
+                         p.DataPagamentoPrazo.Value.Date == hoje) ||
+                        (string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
+                         p.DataPagamentoPrazo2.HasValue && 
+                         p.DataPagamentoPrazo2.Value.Date == hoje)
+                    )
                 ).ToList();
             }
         }

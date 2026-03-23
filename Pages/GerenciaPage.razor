@@ -1,0 +1,608 @@
+@page "/gerencia"
+@inject ApiService _apiService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using System.Globalization
+
+<PageTitle>Gerência - Estatísticas</PageTitle>
+
+<style>
+    .stat-card {
+        border-left: 4px solid;
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold">?? Painel de Gerência</h2>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <button class="btn btn-outline-secondary" @onclick="RefreshData" disabled="@isLoading">
+                <i class="bi bi-arrow-clockwise"></i> Atualizar
+            </button>
+            <select class="form-select w-auto" @bind="periodoSelecionado" @bind:after="OnPeriodoChanged">
+                <option value="hoje">Hoje</option>
+                <option value="semana">Esta Semana</option>
+                <option value="mes">Este Mês</option>
+                <option value="ano">Este Ano</option>
+                <option value="personalizado">Período Personalizado</option>
+            </select>
+            
+            @if (periodoSelecionado == "personalizado")
+            {
+                <div class="d-flex gap-2 align-items-center">
+                    <input type="date" class="form-control w-auto" @bind="dataInicioPersonalizada" />
+                    <span>até</span>
+                    <input type="date" class="form-control w-auto" @bind="dataFimPersonalizada" />
+                    <button class="btn btn-primary" @onclick="CarregarDados">Buscar</button>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Carregando...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* Resumo Financeiro *@
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card border-success">
+                    <div class="card-body">
+                        <div class="stat-label">Faturamento Total</div>
+                        <div class="stat-value text-success">R$ @faturamentoTotal.ToString("N2")</div>
+                        <small class="text-muted">@GetPeriodoTexto()</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-primary">
+                    <div class="card-body">
+                        <div class="stat-label">Pedidos Realizados</div>
+                        <div class="stat-value text-primary">@totalPedidos</div>
+                        <small class="text-muted">Total de vendas</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-warning">
+                    <div class="card-body">
+                        <div class="stat-label">Ticket Médio</div>
+                        <div class="stat-value text-warning">R$ @ticketMedio.ToString("N2")</div>
+                        <small class="text-muted">Por pedido</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-danger">
+                    <div class="card-body">
+                        <div class="stat-label">A Prazo Pendente</div>
+                        <div class="stat-value text-danger">R$ @totalAPrazoPendente.ToString("N2")</div>
+                        <small class="text-muted">A receber</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Formas de Pagamento *@
+        <div class="row g-3 mb-4">
+            <div class="col-lg-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="card-title mb-0">Formas de Pagamento</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <div class="p-3 bg-light rounded">
+                                    <div class="small text-muted">Dinheiro</div>
+                                    <div class="fs-5 fw-bold">R$ @totalDinheiro.ToString("N2")</div>
+                                    <div class="small text-success">@(faturamentoTotal > 0 ? ((totalDinheiro/faturamentoTotal)*100).ToString("N1") : "0")%</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 bg-light rounded">
+                                    <div class="small text-muted">PIX</div>
+                                    <div class="fs-5 fw-bold">R$ @totalPix.ToString("N2")</div>
+                                    <div class="small text-success">@(faturamentoTotal > 0 ? ((totalPix/faturamentoTotal)*100).ToString("N1") : "0")%</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 bg-light rounded">
+                                    <div class="small text-muted">Crédito</div>
+                                    <div class="fs-5 fw-bold">R$ @totalCredito.ToString("N2")</div>
+                                    <div class="small text-success">@(faturamentoTotal > 0 ? ((totalCredito/faturamentoTotal)*100).ToString("N1") : "0")%</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 bg-light rounded">
+                                    <div class="small text-muted">Débito</div>
+                                    <div class="fs-5 fw-bold">R$ @totalDebito.ToString("N2")</div>
+                                    <div class="small text-success">@(faturamentoTotal > 0 ? ((totalDebito/faturamentoTotal)*100).ToString("N1") : "0")%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* Top Vendedores *@
+            <div class="col-lg-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="card-title mb-0">Top Vendedores</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (topVendedores != null && topVendedores.Any())
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var vendedor in topVendedores.Take(5))
+                                {
+                                    <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                        <div>
+                                            <div class="fw-bold">@vendedor.Nome</div>
+                                            <small class="text-muted">@vendedor.TotalPedidos pedidos</small>
+                                        </div>
+                                        <div class="text-end">
+                                            <div class="fw-bold text-success">R$ @vendedor.TotalVendido.ToString("N2")</div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">Nenhum dado disponível</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Produtos Mais Vendidos *@
+        <div class="row g-3 mb-4">
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="card-title mb-0">Produtos Mais Vendidos</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (produtosMaisVendidos != null && produtosMaisVendidos.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Produto</th>
+                                            <th class="text-end">Quantidade</th>
+                                            <th class="text-end">Faturamento</th>
+                                            <th class="text-end">% Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var produto in produtosMaisVendidos.Take(10))
+                                        {
+                                            <tr>
+                                                <td>@produto.Nome</td>
+                                                <td class="text-end">@produto.QuantidadeVendida un.</td>
+                                                <td class="text-end fw-bold">R$ @produto.TotalFaturado.ToString("N2")</td>
+                                                <td class="text-end">
+                                                    <span class="badge bg-primary">@(((produto.TotalFaturado/faturamentoTotal)*100).ToString("N1"))%</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">Nenhum produto vendido no período</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Estoque Baixo *@
+            <div class="col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="card-title mb-0">?? Estoque Baixo</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (produtosEstoqueBaixo != null && produtosEstoqueBaixo.Any())
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var produto in produtosEstoqueBaixo.Take(8))
+                                {
+                                    <div class="list-group-item px-0">
+                                        <div class="d-flex justify-content-between">
+                                            <small class="fw-bold">@produto.Nome</small>
+                                            <span class="badge bg-danger">@produto.EmEstoque un.</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">? Estoque sob controle</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Comandas em Aberto *@
+        <div class="row g-3 mb-4">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">?? Comandas em Aberto</h5>
+                        <span class="badge bg-info">@(comandasAbertas?.Count ?? 0) comandas</span>
+                    </div>
+                    <div class="card-body">
+                        @if (comandasAbertas != null && comandasAbertas.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Cliente</th>
+                                            <th>Data Abertura</th>
+                                            <th class="text-end">Valor</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var comanda in comandasAbertas.Take(10))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">@comanda.Nome</td>
+                                                <td>@comanda.DataAbertura.ToString("dd/MM/yyyy HH:mm")</td>
+                                                <td class="text-end">R$ @comanda.ValorTotal.ToString("N2")</td>
+                                                <td>
+                                                    <span class="badge bg-@GetStatusBadgeColor(comanda.Status)">@comanda.Status</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">Nenhuma comanda em aberto</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+private bool isLoading = true;
+private string periodoSelecionado = "hoje";
+private DateTime dataInicioPersonalizada = DateTime.Today;
+private DateTime dataFimPersonalizada = DateTime.Today;
+
+// Estatísticas financeiras
+private decimal faturamentoTotal = 0;
+private int totalPedidos = 0;
+private decimal ticketMedio = 0;
+private decimal totalAPrazoPendente = 0;
+
+// Formas de pagamento
+private decimal totalDinheiro = 0;
+private decimal totalPix = 0;
+private decimal totalCredito = 0;
+private decimal totalDebito = 0;
+
+// Dados
+private List<VendedorEstatistica>? topVendedores;
+private List<ProdutoEstatistica>? produtosMaisVendidos;
+private List<Produto>? produtosEstoqueBaixo;
+private List<Comanda>? comandasAbertas;
+
+protected override async Task OnInitializedAsync()
+{
+    var email = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+    if (string.IsNullOrEmpty(email))
+    {
+        Navigation.NavigateTo("login");
+        return;
+    }
+
+    await CarregarDados();
+}
+
+private Task OnPeriodoChanged()
+{
+    // Quando mudar de período, se for personalizado, não carregar automaticamente
+    // (espera o usuário escolher as datas e clicar em "Buscar")
+    if (periodoSelecionado == "personalizado")
+    {
+        // ? Resetar ambas as datas para hoje quando selecionar período personalizado
+        dataInicioPersonalizada = DateTime.Today;
+        dataFimPersonalizada = DateTime.Today;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+    
+    return CarregarDados();
+}
+
+    private async Task CarregarDados()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var (dataInicio, dataFim) = GetPeriodoDatas();
+
+            // ? Carregar pedidos usando múltiplas chamadas ao endpoint existente (api/pedidos/data/{data})
+            var todosPedidos = new List<Pedido>();
+            
+            // Para períodos longos (mês/ano/personalizado), usar GetAllPedidos e filtrar localmente
+            if (periodoSelecionado == "mes" || periodoSelecionado == "ano" || periodoSelecionado == "personalizado")
+            {
+                var (pedidos, errPedidos) = await _apiService.GetAllPedidos();
+                if (pedidos != null)
+                {
+                    todosPedidos = pedidos
+                        .Where(p => p.DataPedido.HasValue && 
+                                   p.DataPedido.Value >= dataInicio && 
+                                   p.DataPedido.Value <= dataFim)
+                        .ToList();
+                }
+            }
+            else
+            {
+                // Para hoje e semana, buscar dia por dia
+                var diasParaBuscar = new List<DateTime>();
+                for (var data = dataInicio.Date; data <= dataFim.Date; data = data.AddDays(1))
+                {
+                    diasParaBuscar.Add(data);
+                }
+
+                foreach (var dia in diasParaBuscar)
+                {
+                    var (pedidosDia, err) = await _apiService.GetPedidosPorData(dia);
+                    if (pedidosDia != null)
+                    {
+                        todosPedidos.AddRange(pedidosDia);
+                    }
+                }
+            }
+
+            if (todosPedidos.Any())
+            {
+                var pedidosValidos = todosPedidos.Where(p => !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                // ? Total a prazo pendente (calculado PRIMEIRO para usar na exclusão)
+                totalAPrazoPendente = pedidosValidos
+                    .Where(p => string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.ValorTotal);
+
+                // ? Calcular faturamento total EXCLUINDO pedidos A Prazo
+                faturamentoTotal = pedidosValidos
+                    .Where(p => string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase)
+                             && !string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
+                             && !string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.ValorTotal);
+
+                totalPedidos = pedidosValidos.Count;
+                ticketMedio = totalPedidos > 0 ? faturamentoTotal / totalPedidos : 0;
+
+                // ? Formas de pagamento (EXCLUIR valores de FormaPagamento="A Prazo")
+                totalDinheiro = pedidosValidos
+                    .Where(p => string.Equals(p.FormaPagamento, "Dinheiro", StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.ValorPago1 ?? p.ValorTotal);
+                
+                totalPix = pedidosValidos
+                    .Where(p => string.Equals(p.FormaPagamento, "Pix", StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.ValorPago1 ?? p.ValorTotal);
+                
+                totalCredito = pedidosValidos
+                    .Where(p => string.Equals(p.FormaPagamento, "Credito", StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.ValorPago1 ?? p.ValorTotal);
+                
+                totalDebito = pedidosValidos
+                    .Where(p => string.Equals(p.FormaPagamento, "Debito", StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.ValorPago1 ?? p.ValorTotal);
+
+                // Top Vendedores
+                topVendedores = pedidosValidos
+                    .Where(p => !string.IsNullOrEmpty(p.VendedorNome))
+                    .GroupBy(p => p.VendedorNome)
+                    .Select(g => new VendedorEstatistica
+                    {
+                        Nome = g.Key ?? "Sem vendedor",
+                        TotalPedidos = g.Count(),
+                        TotalVendido = g.Sum(p => p.ValorTotal)
+                    })
+                    .OrderByDescending(v => v.TotalVendido)
+                    .ToList();
+
+                // Produtos mais vendidos (precisa buscar detalhes dos pedidos)
+                await CarregarProdutosMaisVendidos(pedidosValidos);
+            }
+            else
+            {
+                // Zerar estatísticas se não houver pedidos
+                faturamentoTotal = 0;
+                totalPedidos = 0;
+                ticketMedio = 0;
+                totalAPrazoPendente = 0;
+                totalDinheiro = 0;
+                totalPix = 0;
+                totalCredito = 0;
+                totalDebito = 0;
+                topVendedores = new List<VendedorEstatistica>();
+                produtosMaisVendidos = new List<ProdutoEstatistica>();
+            }
+
+            // Carregar produtos com estoque baixo
+            var (produtos, errProdutos) = await _apiService.GetTodosProdutos();
+            if (produtos != null)
+            {
+                // ? Usar EmEstoque ao invés de QuantidadeEstoque
+                produtosEstoqueBaixo = produtos
+                    .Where(p => p.EmEstoque <= 10)
+                    .OrderBy(p => p.EmEstoque)
+                    .ToList();
+            }
+
+            // Carregar comandas abertas
+            var (comandas, errComandas) = await _apiService.GetComandas();
+            if (comandas != null)
+            {
+                comandasAbertas = comandas
+                    .Where(c => string.Equals(c.Status, "Aberta", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(c => c.DataAbertura)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro ao carregar dados: {ex.Message}");
+            await JS.InvokeVoidAsync("console.error", $"Erro ao carregar dados: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CarregarProdutosMaisVendidos(List<Pedido> pedidos)
+    {
+        try
+        {
+            var produtosTemp = new Dictionary<string, ProdutoEstatistica>();
+
+            foreach (var pedido in pedidos)
+            {
+                var (detalhes, err) = await _apiService.GetPedidoDetalhes(pedido.Id);
+                if (detalhes != null)
+                {
+                    foreach (var item in detalhes)
+                    {
+                        // ? Usar ProdutoNome como chave já que ProdutoId não está disponível
+                        var chave = item.ProdutoNome ?? "Produto Desconhecido";
+                        
+                        if (!produtosTemp.ContainsKey(chave))
+                        {
+                            produtosTemp[chave] = new ProdutoEstatistica
+                            {
+                                Id = item.Id, // Usar ID do detalhe como fallback
+                                Nome = chave,
+                                QuantidadeVendida = 0,
+                                TotalFaturado = 0
+                            };
+                        }
+
+                        produtosTemp[chave].QuantidadeVendida += item.Quantidade;
+                        produtosTemp[chave].TotalFaturado += item.SubTotal;
+                    }
+                }
+            }
+
+            produtosMaisVendidos = produtosTemp.Values
+                .OrderByDescending(p => p.TotalFaturado)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro ao carregar produtos mais vendidos: {ex.Message}");
+            produtosMaisVendidos = new List<ProdutoEstatistica>();
+        }
+    }
+
+    private (DateTime dataInicio, DateTime dataFim) GetPeriodoDatas()
+    {
+        var agora = DateTime.Now;
+        return periodoSelecionado switch
+        {
+            "hoje" => (agora.Date, agora.Date.AddDays(1).AddSeconds(-1)),
+            "semana" => (agora.Date.AddDays(-(int)agora.DayOfWeek), agora.Date.AddDays(7 - (int)agora.DayOfWeek).AddSeconds(-1)),
+            "mes" => (new DateTime(agora.Year, agora.Month, 1), new DateTime(agora.Year, agora.Month, DateTime.DaysInMonth(agora.Year, agora.Month)).AddDays(1).AddSeconds(-1)),
+            "ano" => (new DateTime(agora.Year, 1, 1), new DateTime(agora.Year, 12, 31).AddDays(1).AddSeconds(-1)),
+            "personalizado" => (dataInicioPersonalizada.Date, dataFimPersonalizada.Date.AddDays(1).AddSeconds(-1)),
+            _ => (agora.Date, agora.Date.AddDays(1).AddSeconds(-1))
+        };
+    }
+
+    private string GetPeriodoTexto()
+    {
+        return periodoSelecionado switch
+        {
+            "hoje" => "Hoje",
+            "semana" => "Esta Semana",
+            "mes" => "Este Mês",
+            "ano" => "Este Ano",
+            "personalizado" => $"{dataInicioPersonalizada:dd/MM/yyyy} até {dataFimPersonalizada:dd/MM/yyyy}",
+            _ => ""
+        };
+    }
+
+    private string GetStatusBadgeColor(string? status)
+    {
+        return status?.ToLower() switch
+        {
+            "aberta" => "warning",
+            "aguardando impressao" => "info",
+            "finalizada" => "success",
+            _ => "secondary"
+        };
+    }
+
+    private async Task RefreshData()
+    {
+        await CarregarDados();
+    }
+
+    // Classes auxiliares
+    private class VendedorEstatistica
+    {
+        public string Nome { get; set; } = string.Empty;
+        public int TotalPedidos { get; set; }
+        public decimal TotalVendido { get; set; }
+    }
+
+    private class ProdutoEstatistica
+    {
+        public int Id { get; set; }
+        public string Nome { get; set; } = string.Empty;
+        public int QuantidadeVendida { get; set; }
+        public decimal TotalFaturado { get; set; }
+    }
+}

@@ -1,0 +1,438 @@
+@page "/fardos"
+@inject ApiService _apiService
+@inject AuthService AuthService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@using System.Globalization
+
+<PageTitle>Gerenciar Fardos</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold">?? Gerenciar Fardos</h2>
+        <button class="btn btn-success" @onclick="MostrarFormulario">
+            <i class="bi bi-plus-lg"></i> Novo Fardo
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensagemErro))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @mensagemErro
+            <button type="button" class="btn-close" @onclick="() => mensagemErro = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(mensagemSucesso))
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @mensagemSucesso
+            <button type="button" class="btn-close" @onclick="() => mensagemSucesso = string.Empty"></button>
+        </div>
+    }
+
+    @if (exibirFormulario)
+    {
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">@(fardoEditando?.Id > 0 ? "Editar" : "Cadastrar") Relação Fardo ? Unidade</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    @* Produto Fardo *@
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">?? Produto Fardo (Embalagem)</label>
+                        <input class="form-control mb-2" 
+                               value="@searchTermFardo" 
+                               @oninput="OnSearchFardoInput" 
+                               placeholder="Pesquisar fardo por nome ou código" />
+                        
+                        @if (produtosFardoFiltrados.Any() && !string.IsNullOrWhiteSpace(searchTermFardo) && produtoFardoSelecionado == null)
+                        {
+                            <div class="list-group mb-2" style="max-height:200px; overflow:auto;">
+                                @foreach (var p in produtosFardoFiltrados.Take(10))
+                                {
+                                    <button class="list-group-item list-group-item-action" @onclick="() => SelecionarProdutoFardo(p)">
+                                        <div class="d-flex justify-content-between">
+                                            <div><strong>@p.Nome</strong></div>
+                                            <small class="text-muted">@(p.Barcode ?? "-")</small>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
+
+                        @if (produtoFardoSelecionado != null)
+                        {
+                            <div class="card bg-light mb-2">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fw-bold">@produtoFardoSelecionado.Nome</div>
+                                            <small class="text-muted">Código: @(produtoFardoSelecionado.Barcode ?? "Sem código")</small>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => produtoFardoSelecionado = null">?</button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @* Produto Unidade *@
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">?? Produto Unidade (Individual)</label>
+                        <input class="form-control mb-2" 
+                               value="@searchTermUnidade" 
+                               @oninput="OnSearchUnidadeInput" 
+                               placeholder="Pesquisar unidade por nome ou código" />
+                        
+                        @if (produtosUnidadeFiltrados.Any() && !string.IsNullOrWhiteSpace(searchTermUnidade) && produtoUnidadeSelecionado == null)
+                        {
+                            <div class="list-group mb-2" style="max-height:200px; overflow:auto;">
+                                @foreach (var p in produtosUnidadeFiltrados.Take(10))
+                                {
+                                    <button class="list-group-item list-group-item-action" @onclick="() => SelecionarProdutoUnidade(p)">
+                                        <div class="d-flex justify-content-between">
+                                            <div><strong>@p.Nome</strong></div>
+                                            <small class="text-muted">@(p.Barcode ?? "-")</small>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
+
+                        @if (produtoUnidadeSelecionado != null)
+                        {
+                            <div class="card bg-light mb-2">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fw-bold">@produtoUnidadeSelecionado.Nome</div>
+                                            <small class="text-muted">Código: @(produtoUnidadeSelecionado.Barcode ?? "Sem código")</small>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => produtoUnidadeSelecionado = null">?</button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @* Quantidade por Fardo *@
+                    <div class="col-md-12">
+                        <label class="form-label fw-bold">?? Quantas unidades vêm em 1 fardo?</label>
+                        <input type="number" 
+                               class="form-control" 
+                               @bind="quantidadePorFardo" 
+                               placeholder="Ex: 24, 12, 6..." 
+                               min="1" />
+                        <small class="text-muted">Exemplo: Se o fardo contém 24 latinhas, digite 24</small>
+                    </div>
+
+                    @* Descrição *@
+                    <div class="col-md-12">
+                        <label class="form-label fw-bold">?? Descrição (opcional)</label>
+                        <input type="text" 
+                               class="form-control" 
+                               @bind="descricaoFardo" 
+                               placeholder="Ex: Fardo Brahma 350ml c/ 24 unidades" />
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-primary" @onclick="SalvarFardo" disabled="@(!PodeInserir())">
+                        <i class="bi bi-check-lg"></i> Salvar
+                    </button>
+                    <button class="btn btn-secondary" @onclick="CancelarFormulario">
+                        <i class="bi bi-x-lg"></i> Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Lista de Fardos Cadastrados *@
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <h5 class="card-title mb-0">Fardos Cadastrados</h5>
+        </div>
+        <div class="card-body">
+            @if (fardos == null)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+            }
+            else if (!fardos.Any())
+            {
+                <p class="text-muted mb-0">Nenhum fardo cadastrado ainda.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Fardo (Embalagem)</th>
+                                <th>Código Fardo</th>
+                                <th>Unidade Individual</th>
+                                <th>Código Unidade</th>
+                                <th class="text-center">Qtd/Fardo</th>
+                                <th>Descrição</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var fardo in fardos)
+                            {
+                                var prodFardo = produtos.FirstOrDefault(p => p.Id == fardo.ProdutoFardoId);
+                                var prodUnidade = produtos.FirstOrDefault(p => p.Id == fardo.ProdutoUnidadeId);
+                                
+                                <tr>
+                                    <td>
+                                        <strong>@(prodFardo?.Nome ?? $"ID {fardo.ProdutoFardoId}")</strong>
+                                    </td>
+                                    <td>
+                                        <code class="small">@(fardo.BarcodeFardo ?? "-")</code>
+                                    </td>
+                                    <td>
+                                        <strong>@(prodUnidade?.Nome ?? $"ID {fardo.ProdutoUnidadeId}")</strong>
+                                    </td>
+                                    <td>
+                                        <code class="small">@(fardo.BarcodeUnidade ?? "-")</code>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary fs-6">@fardo.QuantidadePorFardo un.</span>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">@(fardo.Descricao ?? "-")</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-@(fardo.Ativo ? "success" : "secondary")">
+                                            @(fardo.Ativo ? "Ativo" : "Inativo")
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-warning" @onclick="() => EditarFardo(fardo)">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @onclick="() => DeletarFardo(fardo.Id)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ProdutoFardo> fardos = new();
+    private List<Produto> produtos = new();
+    private List<Produto> produtosFardoFiltrados = new();
+    private List<Produto> produtosUnidadeFiltrados = new();
+    
+    private bool exibirFormulario = false;
+    private ProdutoFardo? fardoEditando = null;
+    
+    private string searchTermFardo = string.Empty;
+    private string searchTermUnidade = string.Empty;
+    private Produto? produtoFardoSelecionado = null;
+    private Produto? produtoUnidadeSelecionado = null;
+    private int quantidadePorFardo = 0;
+    private string descricaoFardo = string.Empty;
+    
+    private string mensagemErro = string.Empty;
+    private string mensagemSucesso = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var email = await JS.InvokeAsync<string>("sessionStorage.getItem", "Email");
+        if (string.IsNullOrEmpty(email))
+        {
+            Navigation.NavigateTo("login");
+            return;
+        }
+
+        await CarregarDados();
+    }
+
+    private async Task CarregarDados()
+    {
+        // Carregar todos os produtos
+        var (prods, errProds) = await _apiService.GetTodosProdutos();
+        produtos = prods ?? new List<Produto>();
+
+        // Carregar fardos cadastrados (você precisará criar esse endpoint na API)
+        // Por enquanto, vamos simular com uma lista vazia
+        // var (fards, errFards) = await _apiService.GetFardos();
+        // fardos = fards ?? new List<ProdutoFardo>();
+        fardos = new List<ProdutoFardo>(); // ?? TEMPORÁRIO - criar endpoint depois
+    }
+
+    private void MostrarFormulario()
+    {
+        exibirFormulario = true;
+        fardoEditando = new ProdutoFardo();
+        LimparFormulario();
+    }
+
+    private void EditarFardo(ProdutoFardo fardo)
+    {
+        fardoEditando = fardo;
+        exibirFormulario = true;
+        
+        // Pré-selecionar os produtos
+        produtoFardoSelecionado = produtos.FirstOrDefault(p => p.Id == fardo.ProdutoFardoId);
+        produtoUnidadeSelecionado = produtos.FirstOrDefault(p => p.Id == fardo.ProdutoUnidadeId);
+        quantidadePorFardo = fardo.QuantidadePorFardo;
+        descricaoFardo = fardo.Descricao ?? string.Empty;
+        
+        if (produtoFardoSelecionado != null)
+            searchTermFardo = produtoFardoSelecionado.Nome;
+        if (produtoUnidadeSelecionado != null)
+            searchTermUnidade = produtoUnidadeSelecionado.Nome;
+    }
+
+    private void CancelarFormulario()
+    {
+        exibirFormulario = false;
+        LimparFormulario();
+    }
+
+    private void LimparFormulario()
+    {
+        fardoEditando = null;
+        produtoFardoSelecionado = null;
+        produtoUnidadeSelecionado = null;
+        searchTermFardo = string.Empty;
+        searchTermUnidade = string.Empty;
+        quantidadePorFardo = 0;
+        descricaoFardo = string.Empty;
+        produtosFardoFiltrados.Clear();
+        produtosUnidadeFiltrados.Clear();
+    }
+
+    private void OnSearchFardoInput(ChangeEventArgs e)
+    {
+        searchTermFardo = e?.Value?.ToString() ?? string.Empty;
+        
+        if (string.IsNullOrWhiteSpace(searchTermFardo))
+        {
+            produtosFardoFiltrados.Clear();
+            return;
+        }
+
+        produtosFardoFiltrados = produtos
+            .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(searchTermFardo, StringComparison.OrdinalIgnoreCase))
+                     || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Contains(searchTermFardo, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private void OnSearchUnidadeInput(ChangeEventArgs e)
+    {
+        searchTermUnidade = e?.Value?.ToString() ?? string.Empty;
+        
+        if (string.IsNullOrWhiteSpace(searchTermUnidade))
+        {
+            produtosUnidadeFiltrados.Clear();
+            return;
+        }
+
+        produtosUnidadeFiltrados = produtos
+            .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(searchTermUnidade, StringComparison.OrdinalIgnoreCase))
+                     || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Contains(searchTermUnidade, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private void SelecionarProdutoFardo(Produto produto)
+    {
+        produtoFardoSelecionado = produto;
+        searchTermFardo = produto.Nome;
+        produtosFardoFiltrados.Clear();
+    }
+
+    private void SelecionarProdutoUnidade(Produto produto)
+    {
+        produtoUnidadeSelecionado = produto;
+        searchTermUnidade = produto.Nome;
+        produtosUnidadeFiltrados.Clear();
+    }
+
+    private bool PodeInserir()
+    {
+        return produtoFardoSelecionado != null 
+            && produtoUnidadeSelecionado != null 
+            && quantidadePorFardo > 0;
+    }
+
+    private async Task SalvarFardo()
+    {
+        if (!PodeInserir())
+        {
+            mensagemErro = "Preencha todos os campos obrigatórios.";
+            return;
+        }
+
+        try
+        {
+            var novoFardo = new ProdutoFardo
+            {
+                ProdutoFardoId = produtoFardoSelecionado!.Id,
+                BarcodeFardo = produtoFardoSelecionado.Barcode,
+                ProdutoUnidadeId = produtoUnidadeSelecionado!.Id,
+                BarcodeUnidade = produtoUnidadeSelecionado.Barcode,
+                QuantidadePorFardo = quantidadePorFardo,
+                Descricao = string.IsNullOrWhiteSpace(descricaoFardo) 
+                    ? $"{produtoFardoSelecionado.Nome} ? {quantidadePorFardo}x {produtoUnidadeSelecionado.Nome}"
+                    : descricaoFardo,
+                Ativo = true
+            };
+
+            // ?? TODO: Criar endpoint na API para salvar fardo
+            // var result = await _apiService.SalvarFardo(novoFardo);
+            
+            // TEMPORÁRIO: adicionar localmente
+            fardos.Add(novoFardo);
+            
+            mensagemSucesso = $"Fardo cadastrado: {novoFardo.Descricao}";
+            CancelarFormulario();
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao salvar fardo: {ex.Message}";
+        }
+    }
+
+    private async Task DeletarFardo(int id)
+    {
+        var confirmar = await JS.InvokeAsync<bool>("confirm", "Deseja realmente excluir este fardo?");
+        if (!confirmar) return;
+
+        try
+        {
+            // ?? TODO: Criar endpoint na API para deletar fardo
+            // var result = await _apiService.DeletarFardo(id);
+            
+            // TEMPORÁRIO: remover localmente
+            var fardo = fardos.FirstOrDefault(f => f.Id == id);
+            if (fardo != null)
+            {
+                fardos.Remove(fardo);
+                mensagemSucesso = "Fardo excluído com sucesso!";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao excluir fardo: {ex.Message}";
+        }
+    }
+}

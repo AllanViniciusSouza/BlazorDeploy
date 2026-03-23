@@ -8,6 +8,21 @@
 @inject NavigationManager Navigation
 @* query parsing will be done manually in OnInitializedAsync *@
 
+@* Toast de feedback de cópia *@
+@if (showCopyToast)
+{
+    <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 9999; margin-top: 20px;">
+        <div class="toast show bg-success text-white" role="alert">
+            <div class="toast-body d-flex align-items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                    <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+                </svg>
+                <strong>Copiado!</strong>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="row g-3">
     <div class="col-md-6">
         <div class="card p-3 mb-3 shadow-sm bg-dark text-white">
@@ -137,29 +152,147 @@
     {
         <div class="modal-backdrop fade show"></div>
         <div class="modal d-block">
-            <div class="modal-dialog modal-lg mt-4">
+            <div class="modal-dialog modal-xl mt-4">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Itens da Nota: @selectedInvoiceNumber</h5>
+                        <h5 class="modal-title">Processar Nota Fiscal: @selectedInvoiceNumber</h5>
                         <button type="button" class="btn-close" @onclick="CloseInvoiceModal"></button>
                     </div>
-                    <div class="modal-body">
-                        <div class="row row-cols-1 row-cols-md-3 g-3">
-                            @foreach (var it in selectedItems)
-                            {
-                                <div class="col">
-                                    <div class="card p-2">
-                                        <div><strong>@(it.ProdutoNome ?? it.Nome ?? "-")</strong></div>
-                                        <div>Barcode: @(it.Barcode ?? "-")</div>
-                                        <div>Qtd: @it.Quantidade</div>
-                                        <div>Preço Custo: R$ @it.PrecoCusto.ToString("0.00")</div>
-                                    </div>
-                                </div>
-                            }
+                    <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="min-width: 200px;">Descrição</th>
+                                        <th style="min-width: 120px;">Barcode</th>
+                                        <th style="width: 80px;">Qtd</th>
+                                        <th style="width: 100px;">Preço Custo</th>
+                                        <th style="width: 100px;">É Fardo?</th>
+                                        <th style="min-width: 250px;">Produto Unitário</th>
+                                        <th style="width: 100px;">Qtd/Fardo</th>
+                                        <th style="width: 120px;">Custo Unitário</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in processedInvoiceItems)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <small>
+                                                    <strong style="cursor: pointer;" 
+                                                            title="Clique para copiar" 
+                                                            @onclick="async () => await CopiarParaClipboard(item.OriginalItem.ProdutoNome ?? item.OriginalItem.Nome ?? string.Empty)"
+                                                            @onclick:stopPropagation="true">
+                                                        @(item.OriginalItem.ProdutoNome ?? item.OriginalItem.Nome ?? "-")
+                                                    </strong>
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <small>
+                                                    <code style="cursor: pointer;" 
+                                                          title="Clique para copiar" 
+                                                          @onclick="async () => await CopiarParaClipboard(item.OriginalItem.Barcode ?? string.Empty)"
+                                                          @onclick:stopPropagation="true">
+                                                        @(item.OriginalItem.Barcode ?? "-")
+                                                    </code>
+                                                </small>
+                                            </td>
+                                            <td class="text-center">
+                                                <small>@item.OriginalItem.Quantidade</small>
+                                            </td>
+                                            <td class="text-end">
+                                                <small>R$ @item.OriginalItem.PrecoCusto.ToString("0.00")</small>
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="checkbox" class="form-check-input" @bind="item.IsFardo" @bind:after="() => OnFardoCheckChanged(item)" />
+                                            </td>
+                                            <td>
+                                                @if (item.IsFardo)
+                                                {
+                                                    <input class="form-control form-control-sm" 
+                                                           value="@item.SearchTerm" 
+                                                           @oninput="(e) => OnSearchProdutoUnitario(item, e)" 
+                                                           placeholder="Digite nome ou código..." />
+                                                    
+                                                    @if (item.ProdutosFiltrados.Any() && !string.IsNullOrWhiteSpace(item.SearchTerm) && item.ProdutoUnitario == null)
+                                                    {
+                                                        <div class="list-group mt-1" style="max-height: 150px; overflow-y: auto; position: absolute; z-index: 1000; width: 240px;">
+                                                            @foreach (var p in item.ProdutosFiltrados.Take(5))
+                                                            {
+                                                                <button class="list-group-item list-group-item-action list-group-item-sm py-1" 
+                                                                        style="font-size: 0.85rem;"
+                                                                        @onclick="() => SelecionarProdutoUnitario(item, p)">
+                                                                    <div><strong>@p.Nome</strong></div>
+                                                                    <small class="text-muted">@(p.Barcode ?? "-")</small>
+                                                                </button>
+                                                            }
+                                                        </div>
+                                                    }
+
+                                                    @if (item.ProdutoUnitario != null)
+                                                    {
+                                                        <div class="mt-1 p-1 bg-light rounded d-flex justify-content-between align-items-center">
+                                                            <small><strong>@item.ProdutoUnitario.Nome</strong></small>
+                                                            <button class="btn btn-sm btn-outline-danger py-0" 
+                                                                    style="font-size: 0.7rem;"
+                                                                    @onclick="() => LimparProdutoUnitario(item)">✕</button>
+                                                        </div>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <small class="text-muted">-</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (item.IsFardo)
+                                                {
+                                                    <input type="number" 
+                                                           class="form-control form-control-sm" 
+                                                           @bind="item.QuantidadePorFardo"
+                                                           @bind:after="() => CalcularCustoUnitario(item)"
+                                                           min="1" 
+                                                           placeholder="Ex: 24" />
+                                                }
+                                                else
+                                                {
+                                                    <small class="text-muted">-</small>
+                                                }
+                                            </td>
+                                            <td class="text-end">
+                                                @if (item.IsFardo && item.QuantidadePorFardo > 0)
+                                                {
+                                                    <small class="text-success fw-bold">
+                                                        R$ @item.CustoUnitario.ToString("0.00")
+                                                    </small>
+                                                }
+                                                else
+                                                {
+                                                    <small class="text-muted">-</small>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
                         </div>
+
+                        @if (!string.IsNullOrEmpty(processamentoMensagem))
+                        {
+                            <div class="alert alert-info mt-3">
+                                @((MarkupString)processamentoMensagem.Replace("\n", "<br />"))
+                            </div>
+                        }
                     </div>
                     <div class="modal-footer">
-                        <button class="btn btn-secondary" @onclick="CloseInvoiceModal">Fechar</button>
+                        <button class="btn btn-secondary" @onclick="CloseInvoiceModal">Cancelar</button>
+                        <button class="btn btn-success" @onclick="ProcessarEntradaEstoque" disabled="@isProcessingInvoice">
+                            @if (isProcessingInvoice)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Entrada no Estoque
+                        </button>
                     </div>
                 </div>
             </div>
@@ -170,25 +303,42 @@
 </div>
 
 @code {
-    private List<Produto> produtos = new();
-    private List<Produto> produtosFiltrados = new();
-    private MovimentacaoEstoque movimentacao = new();
-    private string produtoBusca = "";
-    private string searchTerm = string.Empty;
-    private Produto? produtoSelecionado;
-    private string mensagem = "";
-    private bool isLoading = true;
-    private bool isProcessing = false;
-    private IBrowserFile? selectedFile;
-    private bool hasSelectedFile = false;
-    private bool isUploading = false;
-    private List<NotaEntradaDto>? latestNotas;
-    private List<NotaEntradaItemDto>? selectedItems;
-    private string? selectedInvoiceNumber;
-    private bool showInvoiceModal = false;
-    private string quantidadeInput = string.Empty;
-    private DotNetObjectReference<object>? _dotNetRefInventario;
-    private TipoMovimentacao? _selectedTipo = null;
+private class ProcessedInvoiceItem
+{
+    public NotaEntradaItemDto OriginalItem { get; set; } = new();
+    public bool IsFardo { get; set; } = false;
+    public Produto? ProdutoUnitario { get; set; } = null;
+    public int QuantidadePorFardo { get; set; } = 1;
+    public decimal CustoUnitario { get; set; } = 0;
+    public string SearchTerm { get; set; } = string.Empty;
+    public List<Produto> ProdutosFiltrados { get; set; } = new();
+}
+
+private List<Produto> produtos = new();
+private List<Produto> produtosFiltrados = new();
+private MovimentacaoEstoque movimentacao = new();
+private string produtoBusca = "";
+private string searchTerm = string.Empty;
+private Produto? produtoSelecionado;
+private string mensagem = "";
+private bool isLoading = true;
+private bool isProcessing = false;
+private IBrowserFile? selectedFile;
+private bool hasSelectedFile = false;
+private bool isUploading = false;
+private List<NotaEntradaDto>? latestNotas;
+private List<NotaEntradaItemDto>? selectedItems;
+private string? selectedInvoiceNumber;
+private bool showInvoiceModal = false;
+private string quantidadeInput = string.Empty;
+private DotNetObjectReference<object>? _dotNetRefInventario;
+private TipoMovimentacao? _selectedTipo = null;
+private string? xmlProcessingError = null;
+private List<ProdutoFardo> fardos = new();
+private List<ProcessedInvoiceItem> processedInvoiceItems = new();
+private bool isProcessingInvoice = false;
+private string processamentoMensagem = string.Empty;
+private bool showCopyToast = false;
     private TipoMovimentacao? selectedTipo
     {
         get => _selectedTipo;
@@ -383,6 +533,19 @@
     private async Task OpenInvoiceModal(string id, string number)
     {
         await LoadInvoiceItems(id, number);
+        
+        // Inicializar items processados
+        processedInvoiceItems = selectedItems?.Select(item => new ProcessedInvoiceItem
+        {
+            OriginalItem = item,
+            IsFardo = false,
+            QuantidadePorFardo = 1,
+            CustoUnitario = item.PrecoCusto,
+            SearchTerm = string.Empty,
+            ProdutosFiltrados = new List<Produto>()
+        }).ToList() ?? new List<ProcessedInvoiceItem>();
+
+        processamentoMensagem = string.Empty;
         showInvoiceModal = true;
         StateHasChanged();
     }
@@ -481,6 +644,202 @@
         else
         {
             mensagem = "Erro ao registrar movimentação.";
+        }
+    }
+
+    private void OnFardoCheckChanged(ProcessedInvoiceItem item)
+    {
+        if (!item.IsFardo)
+        {
+            item.ProdutoUnitario = null;
+            item.SearchTerm = string.Empty;
+            item.ProdutosFiltrados.Clear();
+            item.QuantidadePorFardo = 1;
+            item.CustoUnitario = item.OriginalItem.PrecoCusto;
+        }
+        StateHasChanged();
+    }
+
+    private void OnSearchProdutoUnitario(ProcessedInvoiceItem item, ChangeEventArgs e)
+    {
+        item.SearchTerm = e?.Value?.ToString() ?? string.Empty;
+        
+        if (string.IsNullOrWhiteSpace(item.SearchTerm))
+        {
+            item.ProdutosFiltrados.Clear();
+            StateHasChanged();
+            return;
+        }
+
+        item.ProdutosFiltrados = produtos
+            .Where(p => (!string.IsNullOrEmpty(p.Nome) && p.Nome.Contains(item.SearchTerm, StringComparison.OrdinalIgnoreCase))
+                     || (!string.IsNullOrEmpty(p.Barcode) && p.Barcode.Contains(item.SearchTerm, StringComparison.OrdinalIgnoreCase)))
+            .Take(5)
+            .ToList();
+        
+        StateHasChanged();
+    }
+
+    private void SelecionarProdutoUnitario(ProcessedInvoiceItem item, Produto produto)
+    {
+        item.ProdutoUnitario = produto;
+        item.SearchTerm = produto.Nome ?? string.Empty;
+        item.ProdutosFiltrados.Clear();
+        CalcularCustoUnitario(item);
+        StateHasChanged();
+    }
+
+    private void LimparProdutoUnitario(ProcessedInvoiceItem item)
+    {
+        item.ProdutoUnitario = null;
+        item.SearchTerm = string.Empty;
+        item.ProdutosFiltrados.Clear();
+        StateHasChanged();
+    }
+
+    private void CalcularCustoUnitario(ProcessedInvoiceItem item)
+    {
+        if (item.IsFardo && item.QuantidadePorFardo > 0)
+        {
+            var quantidadeTotal = item.OriginalItem.Quantidade * item.QuantidadePorFardo;
+            var custoTotal = item.OriginalItem.PrecoCusto * item.OriginalItem.Quantidade;
+            item.CustoUnitario = quantidadeTotal > 0 ? custoTotal / quantidadeTotal : 0;
+        }
+        else
+        {
+            item.CustoUnitario = item.OriginalItem.PrecoCusto;
+        }
+    }
+
+    private async Task ProcessarEntradaEstoque()
+    {
+        isProcessingInvoice = true;
+        processamentoMensagem = string.Empty;
+        var sucessos = new List<string>();
+        var erros = new List<string>();
+
+        foreach (var item in processedInvoiceItems)
+        {
+            try
+            {
+                if (item.IsFardo)
+                {
+                    if (item.ProdutoUnitario == null)
+                    {
+                        erros.Add($"❌ {item.OriginalItem.ProdutoNome ?? item.OriginalItem.Nome}: Selecione o produto unitário");
+                        continue;
+                    }
+
+                    if (item.QuantidadePorFardo <= 0)
+                    {
+                        erros.Add($"❌ {item.OriginalItem.ProdutoNome ?? item.OriginalItem.Nome}: Informe a quantidade por fardo");
+                        continue;
+                    }
+
+                    var quantidadeTotalUnidades = item.OriginalItem.Quantidade * item.QuantidadePorFardo;
+
+                    var movimentacao = new MovimentacaoEstoque
+                    {
+                        ProdutoId = item.ProdutoUnitario.Id,
+                        Quantidade = (int)quantidadeTotalUnidades,
+                        Tipo = TipoMovimentacao.Compra,
+                        PrecoCusto = item.CustoUnitario,
+                        DataMovimentacao = DateTime.Now,
+                        Observacao = $"NF: {selectedInvoiceNumber} - {item.OriginalItem.ProdutoNome ?? item.OriginalItem.Nome}"
+                    };
+
+                    var result = await _apiService.MovimentarEstoqueAsync(movimentacao);
+
+                    if (result.Data)
+                    {
+                        sucessos.Add($"✅ {item.ProdutoUnitario.Nome}: +{quantidadeTotalUnidades} unidades (R$ {item.CustoUnitario:0.00}/un)");
+                    }
+                    else
+                    {
+                        erros.Add($"❌ {item.ProdutoUnitario.Nome}: Erro ao registrar entrada");
+                    }
+                }
+                else
+                {
+                    var produtoEncontrado = produtos.FirstOrDefault(p => 
+                        !string.IsNullOrEmpty(p.Barcode) && 
+                        !string.IsNullOrEmpty(item.OriginalItem.Barcode) &&
+                        p.Barcode.Equals(item.OriginalItem.Barcode, StringComparison.OrdinalIgnoreCase));
+
+                    if (produtoEncontrado == null)
+                    {
+                        erros.Add($"⚠️ {item.OriginalItem.ProdutoNome ?? item.OriginalItem.Nome}: Produto não encontrado (Barcode: {item.OriginalItem.Barcode ?? "N/A"})");
+                        continue;
+                    }
+
+                    var movimentacao = new MovimentacaoEstoque
+                    {
+                        ProdutoId = produtoEncontrado.Id,
+                        Quantidade = (int)item.OriginalItem.Quantidade,
+                        Tipo = TipoMovimentacao.Compra,
+                        PrecoCusto = item.OriginalItem.PrecoCusto,
+                        DataMovimentacao = DateTime.Now,
+                        Observacao = $"NF: {selectedInvoiceNumber}"
+                    };
+
+                    var result = await _apiService.MovimentarEstoqueAsync(movimentacao);
+
+                    if (result.Data)
+                    {
+                        sucessos.Add($"✅ {produtoEncontrado.Nome}: +{item.OriginalItem.Quantidade} unidades");
+                    }
+                    else
+                    {
+                        erros.Add($"❌ {produtoEncontrado.Nome}: Erro ao registrar entrada");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                erros.Add($"❌ Erro: {ex.Message}");
+            }
+        }
+
+        var mensagemFinal = "";
+        if (sucessos.Any())
+        {
+            mensagemFinal += string.Join("\n", sucessos);
+        }
+        if (erros.Any())
+        {
+            mensagemFinal += (mensagemFinal.Length > 0 ? "\n\n" : "") + string.Join("\n", erros);
+        }
+
+        processamentoMensagem = mensagemFinal;
+        isProcessingInvoice = false;
+        
+        if (!erros.Any() && sucessos.Any())
+        {
+            await Task.Delay(3000);
+            CloseInvoiceModal();
+        }
+    }
+
+    private async Task CopiarParaClipboard(string texto)
+    {
+        if (string.IsNullOrEmpty(texto)) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", texto);
+            
+            // Mostrar toast de sucesso
+            showCopyToast = true;
+            StateHasChanged();
+            
+            // Esconder após 1 segundo
+            await Task.Delay(1000);
+            showCopyToast = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Erro ao copiar: {ex.Message}");
         }
     }
 }

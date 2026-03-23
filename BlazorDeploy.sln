@@ -4,6 +4,8 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlazorDeploy", "BlazorDeploy.csproj", "{C4FDBC66-95FD-CE3F-EDF5-6C945C961AF4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiECommerce", "..\ApiECommerce\ApiECommerce\ApiECommerce.csproj", "{95B435B5-76B7-FE3D-E27B-8F7BA5C5E8ED}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +16,10 @@ Global
 		{C4FDBC66-95FD-CE3F-EDF5-6C945C961AF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C4FDBC66-95FD-CE3F-EDF5-6C945C961AF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C4FDBC66-95FD-CE3F-EDF5-6C945C961AF4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{95B435B5-76B7-FE3D-E27B-8F7BA5C5E8ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{95B435B5-76B7-FE3D-E27B-8F7BA5C5E8ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{95B435B5-76B7-FE3D-E27B-8F7BA5C5E8ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{95B435B5-76B7-FE3D-E27B-8F7BA5C5E8ED}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

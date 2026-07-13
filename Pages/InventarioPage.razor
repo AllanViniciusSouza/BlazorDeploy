@@ -752,6 +752,14 @@ private bool showCopyToast = false;
 
                     if (result.Data)
                     {
+                        // ✅ Atualizar o preço de custo do produto unitário com o custo calculado
+                        var produtoParaAtualizar = produtos.FirstOrDefault(p => p.Id == item.ProdutoUnitario.Id);
+                        if (produtoParaAtualizar != null)
+                        {
+                            produtoParaAtualizar.PrecoCusto = item.CustoUnitario;
+                            await _apiService.AtualizarProduto(produtoParaAtualizar.Id, produtoParaAtualizar);
+                        }
+                        
                         sucessos.Add($"✅ {item.ProdutoUnitario.Nome}: +{quantidadeTotalUnidades} unidades (R$ {item.CustoUnitario:0.00}/un)");
                     }
                     else
@@ -786,6 +794,10 @@ private bool showCopyToast = false;
 
                     if (result.Data)
                     {
+                        // ✅ Atualizar o preço de custo do produto com o preço da nota
+                        produtoEncontrado.PrecoCusto = item.OriginalItem.PrecoCusto;
+                        await _apiService.AtualizarProduto(produtoEncontrado.Id, produtoEncontrado);
+                        
                         sucessos.Add($"✅ {produtoEncontrado.Nome}: +{item.OriginalItem.Quantidade} unidades");
                     }
                     else

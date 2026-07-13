@@ -135,7 +135,7 @@ else
                             }
 
                             <div class="d-flex gap-2 mt-3 flex-wrap">
-                                <button class="btn btn-primary btn-sm flex-fill" @onclick="() => AdicionarItensNaComanda(comanda)" title="Adicionar itens à comanda">
+                                <button class="btn btn-primary btn-sm flex-fill" @onclick="() => AdicionarItensNaComanda(comanda)" title="Abrir o caixa com esta comanda">
                                     ➕ Adicionar
                                 </button>
                                 <button class="btn btn-success btn-sm flex-fill" @onclick="() => FinalizarComanda(comanda)" title="Finalizar comanda">
@@ -331,7 +331,7 @@ else
         if (itemComanda.Quantidade == 1) return;
 
         itemComanda.Quantidade--;
-        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "diminuir", nome);
+        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.Id, "diminuir", nome, itemComanda.PrecoUnitario, itemComanda.ProdutoId);
         await AtualizaPrecoTotal(nome);
         await EntradaNoEstoque(itemComanda);
         await Task.Delay(100);
@@ -341,7 +341,7 @@ else
     private async Task Incrementar(ItemComanda itemComanda, string nome)
     {
         itemComanda.Quantidade++;
-        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.ProdutoId, "aumentar", nome);
+        await _apiService.AtualizaQuantidadeItemComanda(itemComanda.Id, "aumentar", nome, itemComanda.PrecoUnitario, itemComanda.ProdutoId);
         await AtualizaPrecoTotal(nome);
         await SaidaDoEstoque(itemComanda);
         await Task.Delay(100);
@@ -353,7 +353,7 @@ else
         bool confirmacao = await JS.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este item da comanda?");
         if (confirmacao)
         {
-            var sucesso = await _apiService.AtualizaQuantidadeItemComanda(item.ProdutoId, "deletar", nome);
+            var sucesso = await _apiService.AtualizaQuantidadeItemComanda(item.Id, "deletar", nome, item.PrecoUnitario, item.ProdutoId);
             if (sucesso.Data)
             {
                 var comanda = ComandasAbertas.FirstOrDefault(c => c.Nome == nome);
@@ -462,13 +462,15 @@ else
         try
         {
             // Salvar dados individuais da comanda no sessionStorage
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaId", comanda.Id.ToString());
             await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaNome", comanda.Nome ?? string.Empty);
             await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaTelefone", comanda.Telefone ?? string.Empty);
             await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaEndereco", comanda.Endereco ?? string.Empty);
             await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaObservacoes", $"Comanda #{comanda.Nome} - Aberta em {comanda.DataAbertura:dd/MM/yyyy HH:mm}");
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "comandaModoAdicionar", "1");
 
             // Redirecionar para a página do Caixa
-            Navigation.NavigateTo("/caixa");
+            Navigation.NavigateTo("caixa");
         }
         catch (Exception ex)
         {

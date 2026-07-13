@@ -484,12 +484,22 @@ public class ApiService
         }
     }
 
-    public async Task<(bool Data, string? ErroMessage)> AtualizaQuantidadeItemComanda(int produtoId, string acao, string nome)
+    public async Task<(bool Data, string? ErroMessage)> AtualizaQuantidadeItemComanda(int itemId, string acao, string nome, decimal? precoUnitario = null, int? produtoId = null)
     {
         try
         {
             var content = new StringContent(string.Empty, Encoding.UTF8, "application/json");
-            var response = await PutRequest($"api/ItensComanda?produtoId={produtoId}&acao={acao}&nome={nome}", content);
+            var endpoint = $"api/ItensComanda?acao={Uri.EscapeDataString(acao)}&nome={Uri.EscapeDataString(nome)}&itemId={itemId}";
+            if (produtoId.HasValue)
+            {
+                endpoint += $"&produtoId={produtoId.Value}";
+            }
+            if (precoUnitario.HasValue)
+            {
+                endpoint += $"&precoUnitario={precoUnitario.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            }
+
+            var response = await PutRequest(endpoint, content);
             if (response.IsSuccessStatusCode)
             {
                 return (true, null);
@@ -1034,7 +1044,7 @@ public class ApiService
 
     public async Task<(List<ItemComanda>? ComandaItems, string? ErrorMessage)> GetItensComanda(string nome)
     {
-        string endpoint = $"api/ItensComanda/{nome}";
+        string endpoint = $"api/ItensComanda/{Uri.EscapeDataString(nome)}";
         return await GetAsync<List<ItemComanda>>(endpoint);
     }
 
@@ -1120,7 +1130,7 @@ public class ApiService
             var json = JsonSerializer.Serialize(comanda, _serializerOptions);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await PutRequest($"api/comandas/{comanda.Nome}", content);
+            var response = await PutRequest($"api/comandas/{Uri.EscapeDataString(comanda.Nome)}", content);
 
             if (!response.IsSuccessStatusCode)
             {

@@ -11,4 +11,5 @@ public class ItemComandaDTO
     public string NomeProduto { get; set; }
     public int Quantidade { get; set; }
     public decimal PrecoUnitario { get; set; }
+    public int? ComandaId { get; set; }
 }

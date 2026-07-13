@@ -772,6 +772,36 @@
                             <div class="col-12">
                                 <input type="text" class="form-control form-control-sm" @bind="activeCart.ClienteNome" @oninput="BuscarSugestoesComanda" placeholder="Nome" style="font-size:0.85rem;" />
                             </div>
+                            @if (sugestoesComanda.Any())
+                            {
+                                <div class="col-12">
+                                    <div class="border rounded bg-white p-2 shadow-sm">
+                                        <div class="small text-muted mb-1">Comandas abertas</div>
+                                        <div class="d-flex flex-column gap-1">
+                                            @foreach (var comanda in sugestoesComanda)
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-outline-dark btn-sm text-start"
+                                                        @onclick="() => SelecionarSugestaoComanda(comanda)">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <span>@comanda.Nome</span>
+                                                        <small class="text-muted">#@comanda.Id</small>
+                                                    </div>
+                                                    <small class="text-muted">Aberta em @comanda.DataAbertura.ToString("dd/MM/yyyy HH:mm")</small>
+                                                </button>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            @if (comandaOrigemId.HasValue)
+                            {
+                                <div class="col-12">
+                                    <div class="alert alert-info py-2 mb-0">
+                                        Adicionando na comanda <strong>#@comandaOrigemId</strong> de <strong>@comandaOrigemNome</strong>
+                                    </div>
+                                </div>
+                            }
                             @if (string.Equals(formaPagamentoSelecionada, "A Prazo", StringComparison.OrdinalIgnoreCase) || (UsarPagamento2 && string.Equals(formaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase)))
                             {
                                 <div class="col-md-6">
@@ -789,7 +819,9 @@
 
                     @* Botão Criar Comanda - logo abaixo dos inputs do cliente *@
                     @{
-                        var effectiveCliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+                        var effectiveCliente = !string.IsNullOrWhiteSpace(comandaOrigemNome)
+                            ? comandaOrigemNome
+                            : (!string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome);
                         bool canShowCriarComanda = activeCart.Items.Any()
                             && !isProcessing
                             && !string.IsNullOrWhiteSpace(effectiveCliente);
@@ -797,7 +829,7 @@
                     @if (canShowCriarComanda)
                     {
                         <button class="btn btn-warning btn-lg w-100" @onclick="CriarComandaDoCarrinho">
-                            <span>Criar Comanda</span>
+                            <span>@(adicionandoNaComandaExistente ? "Adicionar na comanda" : "Criar Comanda")</span>
                         </button>
                     }
                 </div>
@@ -1175,6 +1207,9 @@
     private List<ItemComanda> itensComanda = new();
     private int idcomanda;
     private bool isProcessing = false;
+    private bool adicionandoNaComandaExistente = false;
+    private int? comandaOrigemId = null;
+    private string? comandaOrigemNome = null;
     private string formaPagamentoSelecionada = string.Empty;
     private List<Comanda> todasComandasAbertas = new();
     private List<Comanda> sugestoesComanda = new();
@@ -1732,13 +1767,23 @@ private string? selectedTemperatura = null;
         try
         {
             // Ler dados individuais do sessionStorage
+            var comandaId = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaId");
             var clienteNome = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaNome");
             var telefone = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaTelefone");
             var endereco = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaEndereco");
             var obs = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaObservacoes");
+            var modoAdicionar = await JS.InvokeAsync<string>("sessionStorage.getItem", "comandaModoAdicionar");
 
             // Se não houver dados, retornar
             if (string.IsNullOrWhiteSpace(clienteNome)) return;
+
+            if (int.TryParse(comandaId, out var parsedComandaId))
+            {
+                comandaOrigemId = parsedComandaId;
+            }
+            comandaOrigemNome = clienteNome;
+            adicionandoNaComandaExistente = string.Equals(modoAdicionar, "1", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrWhiteSpace(comandaId);
 
             // Pré-preencher campos do carrinho ativo
             activeCart.ClienteNome = clienteNome;
@@ -1752,6 +1797,8 @@ private string? selectedTemperatura = null;
             await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaTelefone");
             await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaEndereco");
             await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaObservacoes");
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaModoAdicionar");
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "comandaId");
             
             // Log para debug
             await JS.InvokeVoidAsync("console.log", $"Dados da comanda restaurados: Cliente={activeCart.ClienteNome}, Tel={activeCart.EntryTelefone}");
@@ -2016,78 +2063,70 @@ private async Task ConfirmAddToCart()
     // always add to active cart
     var targetCart = activeCart.Items;
 
-    // consider product identity + temperatura when merging items
-    try { _ = JS.InvokeVoidAsync("console.log", $"ConfirmAddToCart -> active={activeCartIndex} selectedProductId={selectedProduct?.Id} qty={qty} temp={selectedTemperatura ?? "null"}"); } catch { }
-    var existing = targetCart.FirstOrDefault(c => c.Produto.Id == selectedProduct.Id && (c.Temperatura ?? string.Empty) == (selectedTemperatura ?? string.Empty));
+    // ✅ CORREÇÃO: Determinar preço baseado na temperatura selecionada antes de decidir se deve mesclar
+    var precoUnit = selectedProduct.Preco; // fallback padrão
+    
+    // ✅ Log para debug - valores ANTES de aplicar lógica
+    try { _ = JS.InvokeVoidAsync("console.log", $"ANTES -> Produto: {selectedProduct.Nome} | Preco: {selectedProduct.Preco} | PrecoQuente: {selectedProduct.PrecoQuente} | PrecoGelada: {selectedProduct.PrecoGelada} | Temp Selecionada: {selectedTemperatura ?? "null"}"); } catch { }
+    
+    // ✅ Aplicar preço baseado na temperatura SELECIONADA
+    if (string.IsNullOrEmpty(selectedTemperatura))
+    {
+        if (selectedProduct.PrecoGelada > 0)
+        {
+            precoUnit = selectedProduct.PrecoGelada;
+        }
+        else if (selectedProduct.Preco > 0)
+        {
+            precoUnit = selectedProduct.Preco;
+        }
+        else
+        {
+            if (selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
+            else if (selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
+            else if (selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
+        }
+    }
+    else if (selectedTemperatura == "Quente")
+    {
+        if (selectedProduct.PrecoQuente > 0)
+        {
+            precoUnit = selectedProduct.PrecoQuente;
+        }
+        else
+        {
+            precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
+        }
+    }
+    else if (selectedTemperatura == "Gelada")
+    {
+        if (selectedProduct.PrecoGelada > 0)
+        {
+            precoUnit = selectedProduct.PrecoGelada;
+        }
+        else
+        {
+            precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
+        }
+    }
+    else
+    {
+        precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
+    }
+    
+    if (precoUnit <= 0)
+    {
+        precoUnit = GetProdutoDisplayPrice(selectedProduct);
+    }
+    
+    // merge by product + unit price so hot/cold variants only merge when the value matches
+    try { _ = JS.InvokeVoidAsync("console.log", $"ConfirmAddToCart -> active={activeCartIndex} selectedProductId={selectedProduct?.Id} qty={qty} temp={selectedTemperatura ?? "null"} preco={precoUnit}"); } catch { }
+    var existing = targetCart.FirstOrDefault(c => c.Produto.Id == selectedProduct.Id && Math.Round(c.PrecoUnitario, 2) == Math.Round(precoUnit, 2));
 
     if (existing == null)
     {
-            // ✅ CORREÇÃO: Determinar preço baseado na temperatura selecionada
-            var precoUnit = selectedProduct.Preco; // fallback padrão
-            
-            // ✅ Log para debug - valores ANTES de aplicar lógica
-            try { _ = JS.InvokeVoidAsync("console.log", $"ANTES -> Produto: {selectedProduct.Nome} | Preco: {selectedProduct.Preco} | PrecoQuente: {selectedProduct.PrecoQuente} | PrecoGelada: {selectedProduct.PrecoGelada} | Temp Selecionada: {selectedTemperatura ?? "null"}"); } catch { }
-            
-            // ✅ Aplicar preço baseado na temperatura SELECIONADA (não mais tratar null como Quente)
-            if (string.IsNullOrEmpty(selectedTemperatura))
-            {
-                // NENHUMA temperatura selecionada -> usar preço GELADA (igual ao Gelada)
-                if (selectedProduct.PrecoGelada > 0)
-                {
-                    precoUnit = selectedProduct.PrecoGelada;
-                }
-                else if (selectedProduct.Preco > 0)
-                {
-                    precoUnit = selectedProduct.Preco;
-                }
-                else
-                {
-                    // Fallback: se PrecoGelada e Preco padrão forem 0, usar o primeiro preço disponível
-                    if (selectedProduct.PrecoQuente > 0) precoUnit = selectedProduct.PrecoQuente;
-                    else if (selectedProduct.PrecoRetirar > 0) precoUnit = selectedProduct.PrecoRetirar;
-                    else if (selectedProduct.PrecoEntrega > 0) precoUnit = selectedProduct.PrecoEntrega;
-                }
-            }
-            else if (selectedTemperatura == "Quente")
-            {
-                // QUENTE selecionada
-                if (selectedProduct.PrecoQuente > 0)
-                {
-                    precoUnit = selectedProduct.PrecoQuente;
-                }
-                else
-                {
-                    // Fallback: usar Preco padrão se PrecoQuente for 0
-                    precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
-                }
-            }
-            else if (selectedTemperatura == "Gelada")
-            {
-                // GELADA selecionada
-                if (selectedProduct.PrecoGelada > 0)
-                {
-                    precoUnit = selectedProduct.PrecoGelada;
-                }
-                else
-                {
-                    // Fallback: usar Preco padrão se PrecoGelada for 0
-                    precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
-                }
-            }
-            else
-            {
-                // Temperatura desconhecida - usar preço padrão
-                precoUnit = selectedProduct.Preco > 0 ? selectedProduct.Preco : GetProdutoDisplayPrice(selectedProduct);
-            }
-            
-            // ✅ Garantir que o preço nunca seja 0
-            if (precoUnit <= 0)
-            {
-                precoUnit = GetProdutoDisplayPrice(selectedProduct);
-            }
-            
-            // ✅ Log para debug - valores DEPOIS de aplicar lógica
-            try { _ = JS.InvokeVoidAsync("console.log", $"DEPOIS -> Preco Final Aplicado: {precoUnit} | Quantidade: {qty} | Total: {precoUnit * qty}"); } catch { }
+        // ✅ Garantir que o preço nunca seja 0
+        try { _ = JS.InvokeVoidAsync("console.log", $"DEPOIS -> Preco Final Aplicado: {precoUnit} | Quantidade: {qty} | Total: {precoUnit * qty}"); } catch { }
 
         // If current order status is delivery, apply surcharge to the price we add
         var cartItem = new CartItem
@@ -2466,11 +2505,15 @@ private void OnUsarPagamento2Changed()
 
     private async Task BuscarSugestoesComanda(ChangeEventArgs e)
     {
-        activeCart.ClienteNome = e.Value.ToString();
+        activeCart.ClienteNome = e.Value?.ToString() ?? string.Empty;
+        clienteNome = activeCart.ClienteNome;
 
-        if (string.IsNullOrWhiteSpace(clienteNome))
+        if (string.IsNullOrWhiteSpace(activeCart.ClienteNome))
         {
             sugestoesComanda.Clear();
+            comandaOrigemId = null;
+            comandaOrigemNome = null;
+            adicionandoNaComandaExistente = false;
             return;
         }
 
@@ -2485,11 +2528,29 @@ private void OnUsarPagamento2Changed()
             .Where(c => c.Nome.Contains(activeCart.ClienteNome, StringComparison.OrdinalIgnoreCase))
             .Take(5) // Limita sugestões
             .ToList();
+
+        if (comandaOrigemNome != null && !string.Equals(activeCart.ClienteNome, comandaOrigemNome, StringComparison.OrdinalIgnoreCase))
+        {
+            comandaOrigemId = null;
+            comandaOrigemNome = null;
+            adicionandoNaComandaExistente = false;
+        }
     }
 
-    private void SelecionarSugestaoComanda(string idSelecionado)
+    private void SelecionarSugestaoComanda(Comanda comandaSelecionada)
     {
-        activeCart.ClienteNome = idSelecionado;
+        if (comandaSelecionada == null) return;
+
+        comandaOrigemId = comandaSelecionada.Id;
+        comandaOrigemNome = comandaSelecionada.Nome;
+        adicionandoNaComandaExistente = true;
+
+        activeCart.ClienteNome = comandaSelecionada.Nome;
+        activeCart.EntryTelefone = comandaSelecionada.Telefone ?? string.Empty;
+        activeCart.EntryEndereco = comandaSelecionada.Endereco ?? string.Empty;
+        clienteNome = comandaSelecionada.Nome;
+        entryTelefone = activeCart.EntryTelefone;
+        entryEndereco = activeCart.EntryEndereco;
         sugestoesComanda.Clear();
     }
 
@@ -2947,7 +3008,9 @@ private void OnUsarPagamento2Changed()
             return;
 
         // Validações
-        var effectiveCliente = !string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome;
+        var effectiveCliente = !string.IsNullOrWhiteSpace(comandaOrigemNome)
+            ? comandaOrigemNome
+            : (!string.IsNullOrWhiteSpace(activeCart.ClienteNome) ? activeCart.ClienteNome : clienteNome);
         if (string.IsNullOrEmpty(effectiveCliente))
         {
             await ShowAlert("Por favor, informe o nome do cliente para criar a comanda.");
@@ -2964,8 +3027,21 @@ private void OnUsarPagamento2Changed()
 
         try
         {
-            // Verificar se já existe uma comanda com este nome
-            var (comandaExistente, erro) = await _apiService.GetComandaPorNome(effectiveCliente);
+            var targetNomeComanda = !string.IsNullOrWhiteSpace(comandaOrigemNome) ? comandaOrigemNome : effectiveCliente;
+
+            Comanda? comandaExistente = null;
+            if (comandaOrigemId.HasValue)
+            {
+                var (comandaPorId, _) = await _apiService.GetComandaPorId(comandaOrigemId.Value);
+                comandaExistente = comandaPorId;
+            }
+
+            if (comandaExistente == null)
+            {
+                // Verificar se já existe uma comanda com este nome
+                var (comandaPorNome, _) = await _apiService.GetComandaPorNome(targetNomeComanda);
+                comandaExistente = comandaPorNome;
+            }
 
             if (comandaExistente != null)
             {
@@ -2974,7 +3050,8 @@ private void OnUsarPagamento2Changed()
                 {
                     var itemComanda = new ItemComanda
                     {
-                        Nome = effectiveCliente,
+                        Nome = targetNomeComanda,
+                        ComandaId = comandaExistente.Id,
                         PrecoUnitario = cartItem.PrecoUnitario,
                         Quantidade = cartItem.Quantidade,
                         ProdutoId = cartItem.Produto.Id,
@@ -3008,14 +3085,20 @@ private void OnUsarPagamento2Changed()
                 }
 
                 // Atualizar valor total da comanda
-                var (itensComanda, _) = await _apiService.GetItensComanda(effectiveCliente);
+                var (itensComanda, _) = await _apiService.GetItensComanda(targetNomeComanda);
                 comandaExistente.ValorTotal = (itensComanda ?? new List<ItemComanda>()).Sum(p => p.Quantidade * p.PrecoUnitario);
                 await _apiService.AtualizarComanda(comandaExistente);
 
-                await ShowAlert($"Itens adicionados à comanda '{effectiveCliente}' com sucesso!");
+                await ShowAlert($"Itens adicionados à comanda '{targetNomeComanda}' com sucesso!");
             }
             else
             {
+                if (adicionandoNaComandaExistente)
+                {
+                    await ShowAlert($"A comanda '{targetNomeComanda}' não foi encontrada.");
+                    return;
+                }
+
                 // Criar nova comanda
                 var effectiveTelefone = !string.IsNullOrWhiteSpace(activeCart.EntryTelefone) ? activeCart.EntryTelefone : entryTelefone;
                 var effectiveEndereco = !string.IsNullOrWhiteSpace(activeCart.EntryEndereco) ? activeCart.EntryEndereco : entryEndereco;
@@ -3062,6 +3145,7 @@ private void OnUsarPagamento2Changed()
                     var itemComanda = new ItemComanda
                     {
                         Nome = effectiveCliente,
+                        ComandaId = responseComanda.Data,
                         PrecoUnitario = cartItem.PrecoUnitario,
                         Quantidade = cartItem.Quantidade,
                         ProdutoId = cartItem.Produto.Id,
@@ -3103,6 +3187,9 @@ private void OnUsarPagamento2Changed()
             activeCart.EntryTelefone = string.Empty;
             activeCart.EntryEndereco = string.Empty;
             activeCart.Observacoes = string.Empty;
+            adicionandoNaComandaExistente = false;
+            comandaOrigemId = null;
+            comandaOrigemNome = null;
             
             // Limpar variáveis locais
             clienteNome = string.Empty;
@@ -3132,6 +3219,7 @@ private void OnUsarPagamento2Changed()
             var itemComanda = new ItemComanda
             {
                 Nome = nome,
+                ComandaId = comandaOrigemId,
                 PrecoUnitario = produto.Preco,
                 Quantidade = 1,
                 ProdutoId = produto.Id,

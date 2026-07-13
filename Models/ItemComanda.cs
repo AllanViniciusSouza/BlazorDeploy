@@ -9,6 +9,7 @@ public class ItemComanda : INotifyPropertyChanged
     public int Id { get; set; }
     public string Nome { get; set; }
     public decimal PrecoUnitario { get; set; }
+    public int? ComandaId { get; set; }
     [JsonIgnore]
     public decimal ValorTotal => PrecoUnitario * Quantidade;
     [JsonIgnore]
@@ -26,7 +27,6 @@ public class ItemComanda : INotifyPropertyChanged
             }
         }
     }
-    public int? ComandaId { get; set; }
     public int ProdutoId { get; set; }
     public string NomeProduto { get; set; }
     [JsonIgnore]

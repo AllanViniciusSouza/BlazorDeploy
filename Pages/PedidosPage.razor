@@ -782,11 +782,11 @@ else
                                 }
                                 @if (comanda.DataPagamentoPrazo.HasValue)
                                 {
-                                    <p class="card-text small text-warning fw-bold">📅 Vence HOJE: @comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy")</p>
+                                    <p class="card-text small class="text-warning fw-bold">📅 Vence HOJE: @comanda.DataPagamentoPrazo.Value.ToString("dd/MM/yyyy")</p>
                                 }
                                 @if (comanda.DataPagamentoPrazo2.HasValue && comanda.DataPagamentoPrazo2.Value.Date == DateTime.Today)
                                 {
-                                    <p class="card-text small text-warning fw-bold">📅 Vence HOJE (2): @comanda.DataPagamentoPrazo2.Value.ToString("dd/MM/yyyy")</p>
+                                    <p class="card-text small class="text-warning fw-bold">📅 Vence HOJE (2): @comanda.DataPagamentoPrazo2.Value.ToString("dd/MM/yyyy")</p>
                                 }
                                 @if (!string.IsNullOrEmpty(comanda.Observacoes))
                                 {
@@ -1074,7 +1074,7 @@ else
         if (!string.IsNullOrEmpty(editFormaPagamento)) dto["FormaPagamento"] = editFormaPagamento;
         if (!string.IsNullOrEmpty(editFormaPagamento2)) dto["FormaPagamento2"] = editFormaPagamento2;
         if (editDataPagamentoPrazo.HasValue) dto["DataPagamentoPrazo"] = editDataPagamentoPrazo.Value;
-        if (editDataPagamentoPrazo2.HasValue) dto["DataPagamentoPrazo2"] = editDataPagamentoPrazo2.Value;
+        if (editDataPagamentoPrazo2.HasValue) dto["DataPagamentoPrazo"] = editDataPagamentoPrazo2.Value;
         
         // ✅ Incluir valores pagos quando editados (para pagamentos em Dinheiro)
         if (editValorPago1.HasValue) dto["ValorPago1"] = editValorPago1.Value;
@@ -1160,7 +1160,7 @@ else
                 if (!string.IsNullOrEmpty(pedido.FormaPagamento)) dto["FormaPagamento"] = pedido.FormaPagamento;
                 if (!string.IsNullOrEmpty(pedido.FormaPagamento2)) dto["FormaPagamento2"] = pedido.FormaPagamento2;
                 if (pedido.DataPagamentoPrazo.HasValue) dto["DataPagamentoPrazo"] = pedido.DataPagamentoPrazo;
-                if (pedido.DataPagamentoPrazo2.HasValue) dto["DataPagamentoPrazo2"] = pedido.DataPagamentoPrazo2;
+                if (pedido.DataPagamentoPrazo2.HasValue) dto["DataPagamentoPrazo"] = pedido.DataPagamentoPrazo2;
             }
 
             // Use existing helper which PUTs to api/pedidos/{id}/finalize
@@ -1459,8 +1459,9 @@ else
                 var (items, error) = await _apiService.GetPedidoDetalhes(pedidoId);
                 detalhes[pedidoId] = items ?? new List<PedidoDetalhe>();
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"Exceção ao buscar detalhes do pedido {pedidoId}: {ex.Message}");
                 detalhes[pedidoId] = new List<PedidoDetalhe>();
             }
         }
@@ -1569,15 +1570,15 @@ else
             }
 
             // Carregar TODOS os pedidos não finalizados para o filtro "Atrasados"
+            // Carregar pedidos A Prazo NÃO finalizados para o filtro "Atrasados"
             var (todos, errTodos) = await _apiService.GetAllPedidos();
             if (string.IsNullOrEmpty(errTodos) && todos != null)
             {
+                // ✅ Filtro "Atrasados": apenas pedidos A Prazo que ainda NÃO foram finalizados
                 todosNaoFinalizados = todos.Where(p => 
                     !string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
-                    (string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                    (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
                 ).ToList();
                 
@@ -1609,7 +1610,7 @@ else
                 pedidosCobrarHoje = new List<Pedido>();
             }
 
-            // pedidosHoje usa apenas pedidosPorData (pedidos da data selecionada)
+            // pedidosHoje sempre usa pedidosPorData (pedidos da data selecionada)
             pedidosHoje = pedidosPorData.ToList();
             
             // Computar resumo para hoje
@@ -1636,44 +1637,45 @@ else
         // Para a data selecionada, excluir cancelados
         pedidosPorData = (comandas ?? new List<Pedido>()).Where(p => !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase)).ToList();
 
-        // Recarregar TODOS os pedidos não finalizados para o filtro "Atrasados"
-        try
+        // Carregar pedidos A Prazo NÃO finalizados para o filtro "Atrasados"
+        var (todos, errTodos) = await _apiService.GetAllPedidos();
+        if (string.IsNullOrEmpty(errTodos) && todos != null)
         {
-            var (todos, errTodos) = await _apiService.GetAllPedidos();
-            if (string.IsNullOrEmpty(errTodos) && todos != null)
-            {
-                todosNaoFinalizados = todos.Where(p => 
-                    !string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
-                    (string.Equals(p.Status, "Em entrega", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(p.Status, "Retirada", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
-                ).ToList();
-                
-                // ✅ Recarregar TODOS os pedidos A Prazo (finalizados ou não) para o filtro "A Prazo"
-                todosAPrazo = todos.Where(p => 
-                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
-                    (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
-                ).ToList();
-                
-                // ✅ Recarregar pedidos A Prazo com data de pagamento HOJE para o filtro "Cobrar Hoje"
-                var hoje = DateTime.Today;
-                pedidosCobrarHoje = todos.Where(p => 
-                    !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
-                    (
-                        (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
-                         p.DataPagamentoPrazo.HasValue && 
-                         p.DataPagamentoPrazo.Value.Date == hoje) ||
-                        (string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
-                         p.DataPagamentoPrazo2.HasValue && 
-                         p.DataPagamentoPrazo2.Value.Date == hoje)
-                    )
-                ).ToList();
-            }
+            // ✅ Filtro "Atrasados": apenas pedidos A Prazo que ainda NÃO foram finalizados
+            todosNaoFinalizados = todos.Where(p => 
+                !string.Equals(p.Status, "Finalizado", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+            ).ToList();
+            
+            // ✅ Recarregar TODOS os pedidos A Prazo (finalizados ou não) para o filtro "A Prazo"
+            todosAPrazo = todos.Where(p => 
+                !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase))
+            ).ToList();
+            
+            // ✅ Recarregar pedidos A Prazo com data de pagamento HOJE para o filtro "Cobrar Hoje"
+            var hoje = DateTime.Today;
+            pedidosCobrarHoje = todos.Where(p => 
+                !string.Equals(p.Status, "Cancelado", StringComparison.OrdinalIgnoreCase) &&
+                (
+                    (string.Equals(p.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
+                     p.DataPagamentoPrazo.HasValue && 
+                     p.DataPagamentoPrazo.Value.Date == hoje) ||
+                    (string.Equals(p.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase) && 
+                     p.DataPagamentoPrazo2.HasValue && 
+                     p.DataPagamentoPrazo2.Value.Date == hoje)
+                )
+            ).ToList();
         }
-        catch { }
+        else
+        {
+            todosNaoFinalizados = new List<Pedido>();
+            todosAPrazo = new List<Pedido>();
+            pedidosCobrarHoje = new List<Pedido>();
+        }
 
         // pedidosHoje sempre usa pedidosPorData (pedidos da data selecionada)
         pedidosHoje = pedidosPorData.ToList();
@@ -1825,13 +1827,10 @@ else
                             var isCancelled = string.Equals(comanda.Status, "Cancelado", StringComparison.OrdinalIgnoreCase);
                             var isFinalizado = string.Equals(comanda.Status, "Finalizado", StringComparison.OrdinalIgnoreCase);
                             var hasAPrazoBtn = string.Equals(comanda.FormaPagamento, "A Prazo", StringComparison.OrdinalIgnoreCase)
-                                           || string.Equals(comanda.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase);
+                                                       || string.Equals(comanda.FormaPagamento2, "A Prazo", StringComparison.OrdinalIgnoreCase);
                             var isRetiradaOrEntregaBtn = string.Equals(comanda.Status, "Retirada", StringComparison.OrdinalIgnoreCase)
-                                                     || string.Equals(comanda.Status, "Em entrega", StringComparison.OrdinalIgnoreCase);
+                                                                 || string.Equals(comanda.Status, "Em entrega", StringComparison.OrdinalIgnoreCase);
 
-                            // Show finalize when not cancelled AND either:
-                            // - order is finalized but still has a payment 'A Prazo' (allow converting prazo after finalization)
-                            // - order is not finalized and is eligible (A Prazo OR Retirada OR Em entrega)
                             var showFinalize = !isCancelled && ((isFinalizado && hasAPrazoBtn) || (!isFinalizado && (hasAPrazoBtn || isRetiradaOrEntregaBtn)));
                         }
                         @if (showFinalize)
@@ -2007,10 +2006,7 @@ else
                     ComputeSummaryFromList(new List<Pedido>());
                 }
             }
-            catch
-            {
-                // ignore errors here but keep UI consistent
-            }
+            catch { }
 
             StateHasChanged();
         }
@@ -2023,4 +2019,4 @@ else
             CloseFinalizeModal(true);
         }
     }
-}
+}}
